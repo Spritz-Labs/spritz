@@ -459,7 +459,7 @@ export function BrowseChannelsModal({
                                                     }}
                                                     className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors"
                                                 >
-                                                    <div className="flex flex-row items-center gap-2 sm:gap-3 min-w-0">
+                                                    <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
                                                         {event.imageUrl ? (
                                                             <button
                                                                 type="button"
@@ -468,7 +468,7 @@ export function BrowseChannelsModal({
                                                                         event.imageUrl!
                                                                     )
                                                                 }
-                                                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none"
+                                                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none mt-0.5"
                                                             >
                                                                 <img
                                                                     src={`${event.imageUrl}?size=small`}
@@ -477,13 +477,13 @@ export function BrowseChannelsModal({
                                                                 />
                                                             </button>
                                                         ) : (
-                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0">
+                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0 mt-0.5">
                                                                 🎫
                                                             </div>
                                                         )}
-                                                        <div className="flex-1 min-w-0">
+                                                        <div className="flex-1 min-w-0 pr-2">
                                                             <p
-                                                                className="text-white font-medium truncate text-sm sm:text-base"
+                                                                className="text-white font-medium truncate text-sm sm:text-base leading-tight"
                                                                 title={
                                                                     event.eventName
                                                                 }
@@ -534,7 +534,7 @@ export function BrowseChannelsModal({
                                                                     event.channel!
                                                                         .id
                                                                 }
-                                                                className={`shrink-0 py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
+                                                                className={`shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
                                                                     event.channel!
                                                                         .is_member
                                                                         ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
@@ -566,7 +566,7 @@ export function BrowseChannelsModal({
                                                                     creatingPoapEventId ===
                                                                     event.eventId
                                                                 }
-                                                                className="shrink-0 py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
+                                                                className="shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
                                                             >
                                                                 {creatingPoapEventId ===
                                                                 event.eventId ? (
