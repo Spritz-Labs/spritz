@@ -380,7 +380,7 @@ export function ChannelChatModal({
     // Channel icon management
     const [canEditIcon, setCanEditIcon] = useState(false);
     const [channelIcon, setChannelIcon] = useState<string | null>(
-        channel.icon_url || null
+        channel.poap_image_url ?? channel.icon_url ?? null
     );
     const [isUploadingIcon, setIsUploadingIcon] = useState(false);
     const iconFileInputRef = useRef<HTMLInputElement>(null);

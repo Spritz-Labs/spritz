@@ -2,6 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const POAP_API_BASE = "https://api.poap.tech";
+
+function parsePoapDate(obj: unknown): number | null {
+    if (!obj || typeof obj !== "object") return null;
+    const o = obj as Record<string, unknown>;
+    const raw =
+        o.created_at ??
+        o.createdAt ??
+        o.claimed ??
+        o.claimed_at ??
+        o.claimedAt ??
+        o.created;
+    if (raw == null) return null;
+    if (typeof raw === "number" && !Number.isNaN(raw)) {
+        return raw > 1e12 ? raw : raw * 1000;
+    }
+    if (typeof raw === "string") {
+        const t = Date.parse(raw);
+        return Number.isNaN(t) ? null : t;
+    }
+    return null;
+}
+
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -59,7 +81,11 @@ export async function GET(request: NextRequest) {
     try {
         const seen = new Map<
             number,
-            { eventName: string; imageUrl: string | null }
+            {
+                eventName: string;
+                imageUrl: string | null;
+                createdAt: number | null;
+            }
         >();
 
         for (const addr of rawAddresses) {
@@ -109,9 +135,12 @@ export async function GET(request: NextRequest) {
                         : typeof event?.image_url === "string"
                         ? event.image_url
                         : null;
+                const createdAt =
+                    parsePoapDate(item) ?? parsePoapDate(event) ?? null;
                 seen.set(eventId, {
                     eventName: eventName || `Event ${eventId}`,
                     imageUrl,
+                    createdAt,
                 });
             }
         }
@@ -152,9 +181,12 @@ export async function GET(request: NextRequest) {
 
         const eventsList: PoapEventWithChannel[] = eventIds
             .sort((a, b) => {
-                const na = seen.get(a)!.eventName;
-                const nb = seen.get(b)!.eventName;
-                return na.localeCompare(nb);
+                const sa = seen.get(a)!;
+                const sb = seen.get(b)!;
+                const ta = sa.createdAt ?? 0;
+                const tb = sb.createdAt ?? 0;
+                if (ta !== tb) return tb - ta;
+                return b - a;
             })
             .map((eventId) => {
                 const { eventName, imageUrl } = seen.get(eventId)!;

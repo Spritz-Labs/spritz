@@ -52,7 +52,10 @@ export async function GET(request: NextRequest) {
                 .eq("poap_event_id", poapEventId)
                 .maybeSingle();
             if (error) {
-                console.error("[Channels API] Error fetching POAP channel:", error);
+                console.error(
+                    "[Channels API] Error fetching POAP channel:",
+                    error
+                );
                 return NextResponse.json(
                     { error: "Failed to fetch channel" },
                     { status: 500 }
@@ -69,9 +72,7 @@ export async function GET(request: NextRequest) {
                 isMember = !!membership;
             }
             return NextResponse.json({
-                channel: channel
-                    ? { ...channel, is_member: isMember }
-                    : null,
+                channel: channel ? { ...channel, is_member: isMember } : null,
             });
         }
     }
@@ -109,10 +110,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Add is_member flag to each channel
-    const channelsWithMembership = channels?.map((channel) => ({
-        ...channel,
-        is_member: memberChannelIds.includes(channel.id),
-    })) || [];
+    const channelsWithMembership =
+        channels?.map((channel) => ({
+            ...channel,
+            is_member: memberChannelIds.includes(channel.id),
+        })) || [];
 
     // If joined filter is on, only return joined channels
     if (joined) {
@@ -133,7 +135,10 @@ function generateSymmetricKey(): string {
 
 // Helper to generate a Waku content topic
 function generateContentTopic(channelId: string, channelName: string): string {
-    const safeName = channelName.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 20);
+    const safeName = channelName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "-")
+        .slice(0, 20);
     return `/spritz/1/channel-${safeName}-${channelId.slice(0, 8)}/proto`;
 }
 
@@ -146,7 +151,7 @@ export async function POST(request: NextRequest) {
     try {
         // Get authenticated user
         const session = await getAuthenticatedUser(request);
-        
+
         const body = await request.json();
         const {
             name,
@@ -162,10 +167,8 @@ export async function POST(request: NextRequest) {
 
         // POAP channels always use Waku/Logos
         const messagingType =
-            poapEventId != null
-                ? "waku"
-                : bodyMessagingType ?? "standard";
-        
+            poapEventId != null ? "waku" : bodyMessagingType ?? "standard";
+
         // Use session address, fall back to body for backward compatibility
         const creatorAddress = session?.userAddress || bodyCreatorAddress;
 
@@ -183,18 +186,22 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-        
+
         // Validate messaging type
         if (messagingType !== "standard" && messagingType !== "waku") {
             return NextResponse.json(
-                { error: "Invalid messaging type. Must be 'standard' or 'waku'" },
+                {
+                    error: "Invalid messaging type. Must be 'standard' or 'waku'",
+                },
                 { status: 400 }
             );
         }
-        
+
         // Warn if using unauthenticated fallback
         if (!session && bodyCreatorAddress) {
-            console.warn("[Channels] Using unauthenticated creatorAddress - migrate to session auth");
+            console.warn(
+                "[Channels] Using unauthenticated creatorAddress - migrate to session auth"
+            );
         }
 
         // For POAP channels: unique name and link to POAP event
@@ -210,8 +217,8 @@ export async function POST(request: NextRequest) {
         const sanitizedDescription = description
             ? sanitizeInput(description, INPUT_LIMITS.MEDIUM_TEXT)
             : isPoapChannel
-              ? `Community channel for holders of this POAP.`
-              : null;
+            ? `Community channel for holders of this POAP.`
+            : null;
 
         // Check if channel name already exists
         const { data: existingByName } = await supabase
@@ -261,10 +268,12 @@ export async function POST(request: NextRequest) {
             channelData.poap_event_id = poapEventId;
             channelData.poap_event_name =
                 typeof poapEventName === "string" ? poapEventName.trim() : null;
-            channelData.poap_image_url =
+            const poapImg =
                 typeof poapImageUrl === "string" && poapImageUrl.trim()
                     ? poapImageUrl.trim()
                     : null;
+            channelData.poap_image_url = poapImg;
+            channelData.icon_url = poapImg;
         }
 
         // For Waku channels, generate encryption key and content topic
@@ -293,7 +302,10 @@ export async function POST(request: NextRequest) {
 
         // Update content topic with actual channel ID for Waku channels
         if (messagingType === "waku" && channel) {
-            const correctTopic = generateContentTopic(channel.id, sanitizedName);
+            const correctTopic = generateContentTopic(
+                channel.id,
+                sanitizedName
+            );
             await supabase
                 .from("shout_public_channels")
                 .update({ waku_content_topic: correctTopic })
@@ -316,4 +328,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-
