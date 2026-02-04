@@ -6,26 +6,42 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Helper to check if channel is POAP or Collection (icon is locked)
+async function isPoapOrCollectionChannel(channelId: string): Promise<boolean> {
+    const { data } = await supabase
+        .from("shout_public_channels")
+        .select("poap_event_id, poap_collection_id")
+        .eq("id", channelId)
+        .single();
+    return !!(data?.poap_event_id ?? data?.poap_collection_id);
+}
+
 // Helper to check if user can edit channel icon
-async function canEditChannelIcon(userAddress: string, channelId: string): Promise<boolean> {
+async function canEditChannelIcon(
+    userAddress: string,
+    channelId: string
+): Promise<boolean> {
+    // POAP and Collection channels: icon cannot be changed
+    if (await isPoapOrCollectionChannel(channelId)) return false;
+
     // Check if global admin
     const { data: admin } = await supabase
         .from("shout_admins")
         .select("id")
         .eq("wallet_address", userAddress)
         .single();
-    
+
     if (admin) return true;
-    
+
     // Check if channel owner
     const { data: channel } = await supabase
         .from("shout_public_channels")
         .select("creator_address")
         .eq("id", channelId)
         .single();
-    
+
     if (channel?.creator_address?.toLowerCase() === userAddress) return true;
-    
+
     // Check if moderator for this channel
     const { data: moderator } = await supabase
         .from("shout_moderators")
@@ -33,9 +49,9 @@ async function canEditChannelIcon(userAddress: string, channelId: string): Promi
         .eq("user_address", userAddress)
         .eq("channel_id", channelId)
         .single();
-    
+
     if (moderator) return true;
-    
+
     // Check if global moderator
     const { data: globalMod } = await supabase
         .from("shout_moderators")
@@ -43,7 +59,7 @@ async function canEditChannelIcon(userAddress: string, channelId: string): Promi
         .eq("user_address", userAddress)
         .is("channel_id", null)
         .single();
-    
+
     return !!globalMod;
 }
 
@@ -57,7 +73,9 @@ export async function POST(
     try {
         const formData = await request.formData();
         const file = formData.get("file") as File | null;
-        const userAddress = (formData.get("userAddress") as string)?.toLowerCase();
+        const userAddress = (
+            formData.get("userAddress") as string
+        )?.toLowerCase();
 
         if (!userAddress) {
             return NextResponse.json(
@@ -73,17 +91,27 @@ export async function POST(
             );
         }
 
-        // Check permissions
+        // Check permissions (also blocks POAP/Collection channels)
         const canEdit = await canEditChannelIcon(userAddress, id);
         if (!canEdit) {
+            const isLocked = await isPoapOrCollectionChannel(id);
             return NextResponse.json(
-                { error: "Only admins, moderators, and channel owners can update the icon" },
+                {
+                    error: isLocked
+                        ? "Cannot change icon for POAP or Collection channels"
+                        : "Only admins, moderators, and channel owners can update the icon",
+                },
                 { status: 403 }
             );
         }
 
         // Validate file type
-        const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+        const allowedTypes = [
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+            "image/webp",
+        ];
         if (!allowedTypes.includes(file.type)) {
             return NextResponse.json(
                 { error: "Only JPEG, PNG, GIF, and WebP images are allowed" },
@@ -141,9 +169,9 @@ export async function POST(
             );
         }
 
-        return NextResponse.json({ 
-            success: true, 
-            icon_url: iconUrl 
+        return NextResponse.json({
+            success: true,
+            icon_url: iconUrl,
         });
     } catch (e) {
         console.error("[Channel Icon] Error:", e);
@@ -172,11 +200,16 @@ export async function DELETE(
             );
         }
 
-        // Check permissions
+        // Check permissions (also blocks POAP/Collection channels)
         const canEdit = await canEditChannelIcon(userAddress, id);
         if (!canEdit) {
+            const isLocked = await isPoapOrCollectionChannel(id);
             return NextResponse.json(
-                { error: "Only admins, moderators, and channel owners can update the icon" },
+                {
+                    error: isLocked
+                        ? "Cannot change icon for POAP or Collection channels"
+                        : "Only admins, moderators, and channel owners can update the icon",
+                },
                 { status: 403 }
             );
         }
