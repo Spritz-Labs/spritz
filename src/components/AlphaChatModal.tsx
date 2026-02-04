@@ -99,6 +99,8 @@ interface AlphaChatModalProps {
         name: string | null;
         avatar: string | null;
     } | null;
+    /** When set, clicking a user avatar opens the full user card instead of the popover */
+    onOpenUserCard?: (address: string) => void;
     // For adding friends
     onAddFriend?: (address: string) => Promise<boolean>;
     // Check if already a friend
@@ -117,6 +119,7 @@ export function AlphaChatModal({
     userAddress,
     alphaChat,
     getUserInfo,
+    onOpenUserCard,
     onAddFriend,
     isFriend,
     onOpenDM,
@@ -534,15 +537,18 @@ export function AlphaChatModal({
         []
     );
 
-    // Handle user click with position tracking
+    // Handle user click: open full user card if handler provided, else show popover
     const handleUserClick = useCallback(
         (address: string, event: React.MouseEvent) => {
+            if (onOpenUserCard) {
+                onOpenUserCard(address);
+                return;
+            }
             const rect = (
                 event.currentTarget as HTMLElement
             ).getBoundingClientRect();
-            // Position popup below the clicked element, but check if it would go off screen
             const viewportHeight = window.innerHeight;
-            const popupHeight = 280; // Approximate popup height
+            const popupHeight = 280;
             const y = rect.bottom + 8;
             const adjustedY =
                 y + popupHeight > viewportHeight
@@ -554,7 +560,7 @@ export function AlphaChatModal({
             });
             setSelectedUser(address);
         },
-        []
+        [onOpenUserCard]
     );
 
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)

@@ -82,6 +82,8 @@ type ChannelChatModalProps = {
         name: string | null;
         avatar: string | null;
     } | null;
+    /** When set, clicking a user avatar opens the full user card instead of the popover */
+    onOpenUserCard?: (address: string) => void;
     // For adding friends
     onAddFriend?: (address: string) => Promise<boolean>;
     // Check if already a friend
@@ -110,6 +112,7 @@ export function ChannelChatModal({
     onLeave,
     onMessageSent,
     getUserInfo,
+    onOpenUserCard,
     onAddFriend,
     isFriend,
     onOpenDM,
@@ -762,9 +765,13 @@ export function ChannelChatModal({
         []
     );
 
-    // Handle user click with position tracking
+    // Handle user click: open full user card if handler provided, else show popover
     const handleUserClick = useCallback(
         (address: string, event: React.MouseEvent) => {
+            if (onOpenUserCard) {
+                onOpenUserCard(address);
+                return;
+            }
             const rect = (
                 event.currentTarget as HTMLElement
             ).getBoundingClientRect();
@@ -781,7 +788,7 @@ export function ChannelChatModal({
             });
             setSelectedUser(address);
         },
-        []
+        [onOpenUserCard]
     );
 
     // Fetch online statuses for message senders
@@ -3502,8 +3509,13 @@ export function ChannelChatModal({
                     isOpen={showMembersList}
                     onClose={() => setShowMembersList(false)}
                     onUserClick={(address) => {
-                        setSelectedUser(address);
-                        setShowMembersList(false);
+                        if (onOpenUserCard) {
+                            onOpenUserCard(address);
+                            setShowMembersList(false);
+                        } else {
+                            setSelectedUser(address);
+                            setShowMembersList(false);
+                        }
                     }}
                     getUserInfo={getUserInfo}
                     currentUserAddress={userAddress}

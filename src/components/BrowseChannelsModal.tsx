@@ -85,6 +85,10 @@ export function BrowseChannelsModal({
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(initialShowCreate);
     const [view, setView] = useState<"all" | "poap">("all");
+    /** When view is "poap": All = both, Collections = only collections, POAPs = only events */
+    const [poapSubView, setPoapSubView] = useState<
+        "all" | "collections" | "poaps"
+    >("all");
     const [poapEvents, setPoapEvents] = useState<PoapEventWithChannel[]>([]);
     const [poapLoading, setPoapLoading] = useState(false);
     const [poapError, setPoapError] = useState<string | null>(null);
@@ -219,6 +223,16 @@ export function BrowseChannelsModal({
         const q = debouncedSearch.trim().toLowerCase();
         return poapEvents.filter((e) => e.eventName.toLowerCase().includes(q));
     }, [poapEvents, debouncedSearch]);
+
+    const filteredPoapCollections = useMemo(() => {
+        if (!debouncedSearch.trim()) return poapCollections;
+        const q = debouncedSearch.trim().toLowerCase();
+        return poapCollections.filter(
+            (c) =>
+                c.title.toLowerCase().includes(q) ||
+                (c.description ?? "").toLowerCase().includes(q)
+        );
+    }, [poapCollections, debouncedSearch]);
 
     const [newChannel, setNewChannel] = useState({
         name: "",
@@ -498,23 +512,109 @@ export function BrowseChannelsModal({
                                 From my POAPs
                             </button>
                         </div>
+                        {/* POAP sub-tabs: All | Collections | POAPs (only when "From my POAPs" is selected) */}
+                        {view === "poap" && (
+                            <div className="flex gap-1 p-1 bg-zinc-800/30 rounded-lg shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => setPoapSubView("all")}
+                                    className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                        poapSubView === "all"
+                                            ? "bg-zinc-700 text-white"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    All
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPoapSubView("collections")
+                                    }
+                                    className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                                        poapSubView === "collections"
+                                            ? "bg-zinc-700 text-white"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    Collections
+                                    {!poapCollectionsLoading &&
+                                        poapCollections.length > 0 && (
+                                            <span className="opacity-80">
+                                                (
+                                                {searchQuery.trim()
+                                                    ? filteredPoapCollections.length
+                                                    : poapCollections.length}
+                                                )
+                                            </span>
+                                        )}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setPoapSubView("poaps")}
+                                    className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1 ${
+                                        poapSubView === "poaps"
+                                            ? "bg-zinc-700 text-white"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    POAPs
+                                    {!poapLoading && poapEvents.length > 0 && (
+                                        <span className="opacity-80">
+                                            (
+                                            {searchQuery.trim()
+                                                ? filteredPoapEvents.length
+                                                : poapEvents.length}
+                                            )
+                                        </span>
+                                    )}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* Channel List or POAP List */}
                     <div className="flex flex-col min-h-0 flex-1">
                         <p className="px-3 py-1.5 text-xs text-zinc-500 border-b border-zinc-800/50 shrink-0">
                             {view === "poap"
-                                ? poapLoading
-                                    ? "Loading your POAPs..."
-                                    : `${filteredPoapEvents.length} POAP${
-                                          filteredPoapEvents.length !== 1
-                                              ? "s"
-                                              : ""
-                                      }${
+                                ? (() => {
+                                      if (poapSubView === "collections") {
+                                          if (poapCollectionsLoading)
+                                              return "Loading collections...";
+                                          const n =
+                                              filteredPoapCollections.length;
+                                          return `${n} collection${
+                                              n !== 1 ? "s" : ""
+                                          }${
+                                              searchQuery.trim()
+                                                  ? " (filtered)"
+                                                  : ""
+                                          }`;
+                                      }
+                                      if (poapSubView === "poaps") {
+                                          if (poapLoading)
+                                              return "Loading your POAPs...";
+                                          const n = filteredPoapEvents.length;
+                                          return `${n} POAP${
+                                              n !== 1 ? "s" : ""
+                                          }${
+                                              searchQuery.trim()
+                                                  ? " (filtered)"
+                                                  : " you hold"
+                                          }`;
+                                      }
+                                      if (poapCollectionsLoading || poapLoading)
+                                          return "Loading...";
+                                      const c = filteredPoapCollections.length;
+                                      const p = filteredPoapEvents.length;
+                                      return `${c} collection${
+                                          c !== 1 ? "s" : ""
+                                      } • ${p} POAP${p !== 1 ? "s" : ""}${
                                           searchQuery.trim()
                                               ? " (filtered)"
-                                              : " you hold"
-                                      }`
+                                              : ""
+                                      }`;
+                                  })()
                                 : isLoading
                                 ? "Loading..."
                                 : `${filteredChannels.length} channel${
@@ -524,16 +624,231 @@ export function BrowseChannelsModal({
                         <div className="p-3 sm:p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 min-w-0 overscroll-contain">
                             {view === "poap" ? (
                                 <>
-                                    {/* Collections (user holds at least one POAP in collection) */}
-                                    {(poapCollectionsLoading ||
-                                        poapCollections.length > 0) && (
-                                        <div className="mb-4">
-                                            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
-                                                Collections you can join
-                                            </p>
-                                            {poapCollectionsLoading ? (
-                                                <div className="grid gap-2">
-                                                    {[1, 2].map((i) => (
+                                    {/* Collections (only when sub-tab is All or Collections) */}
+                                    {(poapSubView === "all" ||
+                                        poapSubView === "collections") &&
+                                        (poapCollectionsLoading ||
+                                            filteredPoapCollections.length >
+                                                0 ||
+                                            (poapSubView === "collections" &&
+                                                !poapCollectionsLoading)) && (
+                                            <div
+                                                className={
+                                                    poapSubView ===
+                                                    "collections"
+                                                        ? ""
+                                                        : "mb-4"
+                                                }
+                                            >
+                                                {poapSubView === "all" && (
+                                                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                                        Collections you can join
+                                                    </p>
+                                                )}
+                                                {poapCollectionsLoading ? (
+                                                    <div className="grid gap-2">
+                                                        {[1, 2].map((i) => (
+                                                            <div
+                                                                key={i}
+                                                                className="p-2.5 sm:p-4 bg-zinc-800/50 rounded-xl flex flex-row items-start gap-2 sm:gap-3 min-w-0"
+                                                            >
+                                                                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 animate-pulse shrink-0" />
+                                                                <div className="flex-1 min-w-0 space-y-2">
+                                                                    <div className="h-4 bg-zinc-700 rounded animate-pulse w-3/4" />
+                                                                    <div className="h-3 bg-zinc-700/80 rounded animate-pulse w-1/2" />
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <div className="grid gap-3 min-w-0">
+                                                        {filteredPoapCollections.map(
+                                                            (col) => (
+                                                                <motion.div
+                                                                    key={col.id}
+                                                                    initial={{
+                                                                        opacity: 0,
+                                                                        y: 10,
+                                                                    }}
+                                                                    animate={{
+                                                                        opacity: 1,
+                                                                        y: 0,
+                                                                    }}
+                                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
+                                                                >
+                                                                    <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
+                                                                        {col.logoImageUrl ||
+                                                                        col.bannerImageUrl ? (
+                                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 mt-0.5">
+                                                                                <img
+                                                                                    src={
+                                                                                        (col.logoImageUrl ??
+                                                                                            col.bannerImageUrl) +
+                                                                                        "?size=small"
+                                                                                    }
+                                                                                    alt=""
+                                                                                    className="w-full h-full object-cover"
+                                                                                />
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0 mt-0.5">
+                                                                                📚
+                                                                            </div>
+                                                                        )}
+                                                                        <div className="flex-1 min-w-0 pr-2">
+                                                                            <p
+                                                                                className="text-white font-medium truncate text-sm sm:text-base leading-tight"
+                                                                                title={
+                                                                                    col.title
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    col.title
+                                                                                }
+                                                                            </p>
+                                                                            <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
+                                                                                {
+                                                                                    col.dropsCount
+                                                                                }{" "}
+                                                                                POAPs
+                                                                                in
+                                                                                collection
+                                                                                {col.channel
+                                                                                    ? ` • ${Number(
+                                                                                          (
+                                                                                              col.channel as {
+                                                                                                  member_count?: number;
+                                                                                              }
+                                                                                          )
+                                                                                              .member_count ??
+                                                                                              0
+                                                                                      )} members${
+                                                                                          col
+                                                                                              .channel
+                                                                                              .is_member
+                                                                                              ? " • You're in"
+                                                                                              : ""
+                                                                                      }`
+                                                                                    : " • No channel yet"}
+                                                                            </p>
+                                                                        </div>
+                                                                        {col.channel ? (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    col.channel!
+                                                                                        .is_member
+                                                                                        ? onJoinChannel(
+                                                                                              col.channel as PublicChannel
+                                                                                          )
+                                                                                        : handleJoin(
+                                                                                              col.channel as PublicChannel
+                                                                                          )
+                                                                                }
+                                                                                disabled={
+                                                                                    joiningChannel ===
+                                                                                    col.channel!
+                                                                                        .id
+                                                                                }
+                                                                                className={`shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
+                                                                                    col.channel!
+                                                                                        .is_member
+                                                                                        ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
+                                                                                        : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
+                                                                                }`}
+                                                                            >
+                                                                                {joiningChannel ===
+                                                                                col.channel!
+                                                                                    .id ? (
+                                                                                    <span className="animate-pulse">
+                                                                                        ...
+                                                                                    </span>
+                                                                                ) : col.channel!
+                                                                                      .is_member ? (
+                                                                                    "Open"
+                                                                                ) : (
+                                                                                    "Join"
+                                                                                )}
+                                                                            </button>
+                                                                        ) : (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() =>
+                                                                                    handleCreatePoapCollectionChannel(
+                                                                                        col
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    creatingPoapCollectionId ===
+                                                                                    col.id
+                                                                                }
+                                                                                className="shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
+                                                                            >
+                                                                                {creatingPoapCollectionId ===
+                                                                                col.id ? (
+                                                                                    <span className="animate-pulse">
+                                                                                        Creating...
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <>
+                                                                                        <span className="sm:hidden">
+                                                                                            Create
+                                                                                        </span>
+                                                                                        <span className="hidden sm:inline">
+                                                                                            Create
+                                                                                            channel
+                                                                                        </span>
+                                                                                    </>
+                                                                                )}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </motion.div>
+                                                            )
+                                                        )}
+                                                    </div>
+                                                )}
+                                                {poapSubView ===
+                                                    "collections" &&
+                                                    !poapCollectionsLoading &&
+                                                    filteredPoapCollections.length ===
+                                                        0 && (
+                                                        <div className="text-center py-12 px-4">
+                                                            <p className="text-zinc-500 text-sm">
+                                                                {poapCollections.length ===
+                                                                0
+                                                                    ? "No collections you can join yet."
+                                                                    : "No collections match your search."}
+                                                            </p>
+                                                            {poapCollections.length ===
+                                                                0 && (
+                                                                <p className="text-zinc-600 text-xs mt-2">
+                                                                    Hold a POAP
+                                                                    from a
+                                                                    collection
+                                                                    to see it
+                                                                    here.
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                            </div>
+                                        )}
+                                    {/* POAPs (only when sub-tab is All or POAPs) */}
+                                    {(poapSubView === "all" ||
+                                        poapSubView === "poaps") && (
+                                        <>
+                                            {poapSubView === "all" &&
+                                                filteredPoapCollections.length >
+                                                    0 &&
+                                                !poapCollectionsLoading && (
+                                                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 mt-2">
+                                                        POAPs you hold
+                                                    </p>
+                                                )}
+                                            {poapLoading ? (
+                                                <div className="grid gap-3 min-w-0">
+                                                    {[1, 2, 3, 4].map((i) => (
                                                         <div
                                                             key={i}
                                                             className="p-2.5 sm:p-4 bg-zinc-800/50 rounded-xl flex flex-row items-start gap-2 sm:gap-3 min-w-0"
@@ -543,15 +858,75 @@ export function BrowseChannelsModal({
                                                                 <div className="h-4 bg-zinc-700 rounded animate-pulse w-3/4" />
                                                                 <div className="h-3 bg-zinc-700/80 rounded animate-pulse w-1/2" />
                                                             </div>
+                                                            <div className="h-8 w-16 sm:w-20 bg-zinc-700 rounded-lg animate-pulse shrink-0" />
                                                         </div>
                                                     ))}
                                                 </div>
+                                            ) : poapError ? (
+                                                <div className="text-center py-8">
+                                                    <p className="text-zinc-400 text-sm mb-2">
+                                                        {poapError}
+                                                    </p>
+                                                    <p className="text-zinc-500 text-xs mb-4">
+                                                        Add POAP_API_KEY to
+                                                        enable POAP channels.{" "}
+                                                        <a
+                                                            href="https://documentation.poap.tech/docs/getting-started"
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-orange-400 hover:underline"
+                                                        >
+                                                            POAP API docs
+                                                        </a>
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={
+                                                            fetchPoapEvents
+                                                        }
+                                                        className="text-sm text-orange-400 hover:underline"
+                                                    >
+                                                        Retry
+                                                    </button>
+                                                </div>
+                                            ) : filteredPoapEvents.length ===
+                                              0 ? (
+                                                <div className="text-center py-12 px-4">
+                                                    <p className="text-zinc-500 text-sm">
+                                                        {poapEvents.length === 0
+                                                            ? "No POAPs found for your wallet."
+                                                            : "No POAPs match your search."}
+                                                    </p>
+                                                    {poapEvents.length ===
+                                                        0 && (
+                                                        <>
+                                                            <p className="text-zinc-600 text-xs mt-2">
+                                                                Attend events
+                                                                and claim POAPs
+                                                                to unlock
+                                                                channels on
+                                                                Logos.
+                                                            </p>
+                                                            <a
+                                                                href="https://poap.xyz"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-block mt-3 text-xs text-orange-400 hover:text-orange-300"
+                                                            >
+                                                                Learn about
+                                                                POAPs →
+                                                            </a>
+                                                        </>
+                                                    )}
+                                                </div>
                                             ) : (
                                                 <div className="grid gap-3 min-w-0">
-                                                    {poapCollections.map(
-                                                        (col) => (
+                                                    {filteredPoapEvents.map(
+                                                        (event) => (
                                                             <motion.div
-                                                                key={col.id}
+                                                                key={
+                                                                    event.eventId
+                                                                }
                                                                 initial={{
                                                                     opacity: 0,
                                                                     y: 10,
@@ -563,93 +938,97 @@ export function BrowseChannelsModal({
                                                                 className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
                                                             >
                                                                 <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
-                                                                    {col.logoImageUrl ||
-                                                                    col.bannerImageUrl ? (
-                                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 mt-0.5">
+                                                                    {event.imageUrl ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                setViewerImage(
+                                                                                    event.imageUrl!
+                                                                                )
+                                                                            }
+                                                                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none mt-0.5"
+                                                                        >
                                                                             <img
-                                                                                src={
-                                                                                    (col.logoImageUrl ??
-                                                                                        col.bannerImageUrl) +
-                                                                                    "?size=small"
-                                                                                }
+                                                                                src={`${event.imageUrl}?size=small`}
                                                                                 alt=""
                                                                                 className="w-full h-full object-cover"
                                                                             />
-                                                                        </div>
+                                                                        </button>
                                                                     ) : (
                                                                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0 mt-0.5">
-                                                                            📚
+                                                                            🎫
                                                                         </div>
                                                                     )}
                                                                     <div className="flex-1 min-w-0 pr-2">
                                                                         <p
                                                                             className="text-white font-medium truncate text-sm sm:text-base leading-tight"
                                                                             title={
-                                                                                col.title
+                                                                                event.eventName
                                                                             }
                                                                         >
                                                                             {
-                                                                                col.title
+                                                                                event.eventName
                                                                             }
                                                                         </p>
-                                                                        <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
-                                                                            {
-                                                                                col.dropsCount
-                                                                            }{" "}
-                                                                            POAPs
-                                                                            in
-                                                                            collection
-                                                                            {col.channel
-                                                                                ? ` • ${Number(
-                                                                                      (
-                                                                                          col.channel as {
-                                                                                              member_count?: number;
-                                                                                          }
-                                                                                      )
-                                                                                          .member_count ??
-                                                                                          0
-                                                                                  )} members${
-                                                                                      col
-                                                                                          .channel
-                                                                                          .is_member
-                                                                                          ? " • You're in"
-                                                                                          : ""
-                                                                                  }`
-                                                                                : " • No channel yet"}
-                                                                        </p>
+                                                                        {event.channel ? (
+                                                                            <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
+                                                                                {Number(
+                                                                                    (
+                                                                                        event.channel as {
+                                                                                            member_count?: number;
+                                                                                        }
+                                                                                    )
+                                                                                        .member_count ??
+                                                                                        0
+                                                                                )}{" "}
+                                                                                members
+                                                                                {event
+                                                                                    .channel
+                                                                                    .is_member &&
+                                                                                    " • You're in"}
+                                                                            </p>
+                                                                        ) : (
+                                                                            <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5">
+                                                                                No
+                                                                                channel
+                                                                                yet
+                                                                                •
+                                                                                Logos
+                                                                            </p>
+                                                                        )}
                                                                     </div>
-                                                                    {col.channel ? (
+                                                                    {event.channel ? (
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
-                                                                                col.channel!
+                                                                                event.channel!
                                                                                     .is_member
                                                                                     ? onJoinChannel(
-                                                                                          col.channel as PublicChannel
+                                                                                          event.channel as PublicChannel
                                                                                       )
                                                                                     : handleJoin(
-                                                                                          col.channel as PublicChannel
+                                                                                          event.channel as PublicChannel
                                                                                       )
                                                                             }
                                                                             disabled={
                                                                                 joiningChannel ===
-                                                                                col.channel!
+                                                                                event.channel!
                                                                                     .id
                                                                             }
                                                                             className={`shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
-                                                                                col.channel!
+                                                                                event.channel!
                                                                                     .is_member
                                                                                     ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
                                                                                     : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
                                                                             }`}
                                                                         >
                                                                             {joiningChannel ===
-                                                                            col.channel!
+                                                                            event.channel!
                                                                                 .id ? (
                                                                                 <span className="animate-pulse">
                                                                                     ...
                                                                                 </span>
-                                                                            ) : col.channel!
+                                                                            ) : event.channel!
                                                                                   .is_member ? (
                                                                                 "Open"
                                                                             ) : (
@@ -660,18 +1039,18 @@ export function BrowseChannelsModal({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
-                                                                                handleCreatePoapCollectionChannel(
-                                                                                    col
+                                                                                handleCreatePoapChannel(
+                                                                                    event
                                                                                 )
                                                                             }
                                                                             disabled={
-                                                                                creatingPoapCollectionId ===
-                                                                                col.id
+                                                                                creatingPoapEventId ===
+                                                                                event.eventId
                                                                             }
                                                                             className="shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
                                                                         >
-                                                                            {creatingPoapCollectionId ===
-                                                                            col.id ? (
+                                                                            {creatingPoapEventId ===
+                                                                            event.eventId ? (
                                                                                 <span className="animate-pulse">
                                                                                     Creating...
                                                                                 </span>
@@ -694,226 +1073,7 @@ export function BrowseChannelsModal({
                                                     )}
                                                 </div>
                                             )}
-                                        </div>
-                                    )}
-                                    {poapCollections.length > 0 &&
-                                        !poapCollectionsLoading && (
-                                            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 mt-2">
-                                                POAPs you hold
-                                            </p>
-                                        )}
-                                    {poapLoading ? (
-                                        <div className="grid gap-3 min-w-0">
-                                            {[1, 2, 3, 4].map((i) => (
-                                                <div
-                                                    key={i}
-                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 rounded-xl flex flex-row items-start gap-2 sm:gap-3 min-w-0"
-                                                >
-                                                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 animate-pulse shrink-0" />
-                                                    <div className="flex-1 min-w-0 space-y-2">
-                                                        <div className="h-4 bg-zinc-700 rounded animate-pulse w-3/4" />
-                                                        <div className="h-3 bg-zinc-700/80 rounded animate-pulse w-1/2" />
-                                                    </div>
-                                                    <div className="h-8 w-16 sm:w-20 bg-zinc-700 rounded-lg animate-pulse shrink-0" />
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : poapError ? (
-                                        <div className="text-center py-8">
-                                            <p className="text-zinc-400 text-sm mb-2">
-                                                {poapError}
-                                            </p>
-                                            <p className="text-zinc-500 text-xs mb-4">
-                                                Add POAP_API_KEY to enable POAP
-                                                channels.{" "}
-                                                <a
-                                                    href="https://documentation.poap.tech/docs/getting-started"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-orange-400 hover:underline"
-                                                >
-                                                    POAP API docs
-                                                </a>
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={fetchPoapEvents}
-                                                className="text-sm text-orange-400 hover:underline"
-                                            >
-                                                Retry
-                                            </button>
-                                        </div>
-                                    ) : filteredPoapEvents.length === 0 ? (
-                                        <div className="text-center py-12 px-4">
-                                            <p className="text-zinc-500 text-sm">
-                                                {poapEvents.length === 0
-                                                    ? "No POAPs found for your wallet."
-                                                    : "No POAPs match your search."}
-                                            </p>
-                                            {poapEvents.length === 0 && (
-                                                <>
-                                                    <p className="text-zinc-600 text-xs mt-2">
-                                                        Attend events and claim
-                                                        POAPs to unlock channels
-                                                        on Logos.
-                                                    </p>
-                                                    <a
-                                                        href="https://poap.xyz"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-block mt-3 text-xs text-orange-400 hover:text-orange-300"
-                                                    >
-                                                        Learn about POAPs →
-                                                    </a>
-                                                </>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="grid gap-3 min-w-0">
-                                            {filteredPoapEvents.map((event) => (
-                                                <motion.div
-                                                    key={event.eventId}
-                                                    initial={{
-                                                        opacity: 0,
-                                                        y: 10,
-                                                    }}
-                                                    animate={{
-                                                        opacity: 1,
-                                                        y: 0,
-                                                    }}
-                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
-                                                >
-                                                    <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
-                                                        {event.imageUrl ? (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    setViewerImage(
-                                                                        event.imageUrl!
-                                                                    )
-                                                                }
-                                                                className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 focus:ring-2 focus:ring-orange-500 focus:outline-none mt-0.5"
-                                                            >
-                                                                <img
-                                                                    src={`${event.imageUrl}?size=small`}
-                                                                    alt=""
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            </button>
-                                                        ) : (
-                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0 mt-0.5">
-                                                                🎫
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-1 min-w-0 pr-2">
-                                                            <p
-                                                                className="text-white font-medium truncate text-sm sm:text-base leading-tight"
-                                                                title={
-                                                                    event.eventName
-                                                                }
-                                                            >
-                                                                {
-                                                                    event.eventName
-                                                                }
-                                                            </p>
-                                                            {event.channel ? (
-                                                                <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
-                                                                    {Number(
-                                                                        (
-                                                                            event.channel as {
-                                                                                member_count?: number;
-                                                                            }
-                                                                        )
-                                                                            .member_count ??
-                                                                            0
-                                                                    )}{" "}
-                                                                    members
-                                                                    {event
-                                                                        .channel
-                                                                        .is_member &&
-                                                                        " • You're in"}
-                                                                </p>
-                                                            ) : (
-                                                                <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5">
-                                                                    No channel
-                                                                    yet • Logos
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        {event.channel ? (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    event.channel!
-                                                                        .is_member
-                                                                        ? onJoinChannel(
-                                                                              event.channel as PublicChannel
-                                                                          )
-                                                                        : handleJoin(
-                                                                              event.channel as PublicChannel
-                                                                          )
-                                                                }
-                                                                disabled={
-                                                                    joiningChannel ===
-                                                                    event.channel!
-                                                                        .id
-                                                                }
-                                                                className={`shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
-                                                                    event.channel!
-                                                                        .is_member
-                                                                        ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
-                                                                        : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
-                                                                }`}
-                                                            >
-                                                                {joiningChannel ===
-                                                                event.channel!
-                                                                    .id ? (
-                                                                    <span className="animate-pulse">
-                                                                        ...
-                                                                    </span>
-                                                                ) : event.channel!
-                                                                      .is_member ? (
-                                                                    "Open"
-                                                                ) : (
-                                                                    "Join"
-                                                                )}
-                                                            </button>
-                                                        ) : (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    handleCreatePoapChannel(
-                                                                        event
-                                                                    )
-                                                                }
-                                                                disabled={
-                                                                    creatingPoapEventId ===
-                                                                    event.eventId
-                                                                }
-                                                                className="shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
-                                                            >
-                                                                {creatingPoapEventId ===
-                                                                event.eventId ? (
-                                                                    <span className="animate-pulse">
-                                                                        Creating...
-                                                                    </span>
-                                                                ) : (
-                                                                    <>
-                                                                        <span className="sm:hidden">
-                                                                            Create
-                                                                        </span>
-                                                                        <span className="hidden sm:inline">
-                                                                            Create
-                                                                            channel
-                                                                        </span>
-                                                                    </>
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </motion.div>
-                                            ))}
-                                        </div>
+                                        </>
                                     )}
                                 </>
                             ) : isLoading ? (

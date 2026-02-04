@@ -96,6 +96,8 @@ import { useChatPinned } from "@/hooks/useChatPinned";
 import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
 import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
 import { useWakeLock } from "@/hooks/useWakeLock";
+import { useModeration } from "@/hooks/useModeration";
+import { UserCardModal } from "./UserCardModal";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -173,6 +175,9 @@ function DashboardContent({
     const [profileAvatarInitialTab, setProfileAvatarInitialTab] = useState<
         "profile" | "goLive"
     >("profile");
+
+    // User card (Telegram-style profile when clicking another user's avatar)
+    const [userCardAddress, setUserCardAddress] = useState<string | null>(null);
 
     // Bottom navigation tab state - default to chats
     type NavTab =
@@ -1537,6 +1542,8 @@ function DashboardContent({
             })),
         [friends, getEffectiveAvatar]
     );
+
+    const moderation = useModeration(userAddress);
 
     // Normalize to a valid Date or null (invalid/missing values sort to bottom)
     const toValidLastMessageAt = useCallback((value: unknown): Date | null => {
@@ -5649,6 +5656,7 @@ function DashboardContent({
                 userAddress={userAddress}
                 alphaChat={alphaChat}
                 getUserInfo={getAlphaUserInfo}
+                onOpenUserCard={(address) => setUserCardAddress(address)}
                 onAddFriend={async (address) => {
                     const result = await sendFriendRequest(address);
                     if (result) {
@@ -5672,6 +5680,72 @@ function DashboardContent({
                     updateLastMessageTime("global-spritz");
                 }}
             />
+
+            {/* User Card (Telegram-style profile when clicking another user's avatar) */}
+            {userCardAddress && (
+                <UserCardModal
+                    isOpen={!!userCardAddress}
+                    onClose={() => setUserCardAddress(null)}
+                    peerAddress={userCardAddress}
+                    peerName={
+                        getAlphaUserInfo(userCardAddress)?.name ??
+                        friendsListData.find(
+                            (f) =>
+                                f.address.toLowerCase() ===
+                                userCardAddress.toLowerCase()
+                        )?.nickname ??
+                        null
+                    }
+                    peerAvatar={
+                        getAlphaUserInfo(userCardAddress)?.avatar ??
+                        friendsListData.find(
+                            (f) =>
+                                f.address.toLowerCase() ===
+                                userCardAddress.toLowerCase()
+                        )?.avatar ??
+                        null
+                    }
+                    username={
+                        friendsListData.find(
+                            (f) =>
+                                f.address.toLowerCase() ===
+                                userCardAddress.toLowerCase()
+                        )?.reachUsername ?? null
+                    }
+                    onCall={(friend) =>
+                        handleCall(friend as FriendsListFriend)
+                    }
+                    onVideoCall={(friend) =>
+                        handleVideoCall(friend as FriendsListFriend)
+                    }
+                    onMute={
+                        moderation.permissions.canMute
+                            ? () => {
+                                  if (moderation.isUserMuted(userCardAddress)) {
+                                      moderation.unmuteUser(userCardAddress);
+                                  } else {
+                                      moderation.muteUser(userCardAddress, {});
+                                  }
+                              }
+                            : undefined
+                    }
+                    isMuted={
+                        moderation.permissions.canMute
+                            ? moderation.isUserMuted(userCardAddress)
+                            : false
+                    }
+                    onAddFriend={async (address) => {
+                        const result = await sendFriendRequest(address);
+                        return result;
+                    }}
+                    isFriend={friends.some(
+                        (f) =>
+                            f.friend_address.toLowerCase() ===
+                            userCardAddress.toLowerCase()
+                    )}
+                    pushStateForBack={true}
+                />
+            )}
 
             {/* Create Group Modal */}
             <CreateGroupModal
@@ -5835,6 +5909,7 @@ function DashboardContent({
                         setSelectedChannel(null);
                     }}
                     getUserInfo={getAlphaUserInfo}
+                    onOpenUserCard={(address) => setUserCardAddress(address)}
                     onAddFriend={async (address) => {
                         const result = await sendFriendRequest(address);
                         return result;
