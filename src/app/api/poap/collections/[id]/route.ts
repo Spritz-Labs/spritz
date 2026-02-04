@@ -24,7 +24,10 @@ export async function GET(
     const { id } = await params;
     const idNum = parseInt(id, 10);
     if (Number.isNaN(idNum) || idNum < 1) {
-        return NextResponse.json({ error: "Invalid collection ID" }, { status: 400 });
+        return NextResponse.json(
+            { error: "Invalid collection ID" },
+            { status: 400 }
+        );
     }
 
     const client = getCollectionsClient();
@@ -38,7 +41,10 @@ export async function GET(
     try {
         const collection = await client.get(idNum);
         if (!collection) {
-            return NextResponse.json({ error: "Collection not found" }, { status: 404 });
+            return NextResponse.json(
+                { error: "Collection not found" },
+                { status: 404 }
+            );
         }
         let dropIds: number[] = [];
         try {

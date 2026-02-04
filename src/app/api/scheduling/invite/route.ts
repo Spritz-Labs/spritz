@@ -14,7 +14,9 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const resend = process.env.RESEND_API_KEY
+    ? new Resend(process.env.RESEND_API_KEY)
+    : null;
 
 // Always use app.spritz.chat for email links (not spritz.chat which is landing page)
 const BASE_URL = "https://app.spritz.chat";
@@ -45,16 +47,16 @@ function generateICSFile({
     uid: string;
 }): string {
     const endTime = addMinutes(startTime, duration);
-    
+
     // Format dates in ICS format (YYYYMMDDTHHmmssZ)
     const formatICSDate = (date: Date): string => {
         return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
     };
-    
+
     const dtStart = formatICSDate(startTime);
     const dtEnd = formatICSDate(endTime);
     const dtStamp = formatICSDate(new Date());
-    
+
     // Escape special characters in text fields
     const escapeICS = (text: string): string => {
         return text
@@ -63,7 +65,7 @@ function generateICSFile({
             .replace(/,/g, "\\,")
             .replace(/\n/g, "\\n");
     };
-    
+
     let icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//Spritz//Video Calls//EN
@@ -84,12 +86,14 @@ SEQUENCE:0`;
         icsContent += `
 ORGANIZER;CN="${escapeICS(organizerName)}":mailto:${organizerEmail}`;
     }
-    
+
     if (attendeeEmail) {
         icsContent += `
-ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN="${escapeICS(attendeeName)}":mailto:${attendeeEmail}`;
+ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;CN="${escapeICS(
+            attendeeName
+        )}":mailto:${attendeeEmail}`;
     }
-    
+
     icsContent += `
 BEGIN:VALARM
 ACTION:DISPLAY
@@ -153,7 +157,12 @@ export async function POST(request: NextRequest) {
             .eq("wallet_address", call.recipient_wallet_address)
             .single();
 
-        const hostName = hostUser?.display_name || `${call.recipient_wallet_address.slice(0, 6)}...${call.recipient_wallet_address.slice(-4)}`;
+        const hostName =
+            hostUser?.display_name ||
+            `${call.recipient_wallet_address.slice(
+                0,
+                6
+            )}...${call.recipient_wallet_address.slice(-4)}`;
         const guestName = call.guest_name || call.scheduler_name || "Guest";
         const scheduledTime = new Date(call.scheduled_at);
         const timezone = call.timezone || "UTC";
@@ -161,18 +170,29 @@ export async function POST(request: NextRequest) {
         const isPaid = call.is_paid || call.payment_amount_cents > 0;
 
         // Format time for display
-        const formattedDate = formatInTimeZone(scheduledTime, timezone, "EEEE, MMMM d, yyyy");
-        const formattedTime = formatInTimeZone(scheduledTime, timezone, "h:mm a zzz");
+        const formattedDate = formatInTimeZone(
+            scheduledTime,
+            timezone,
+            "EEEE, MMMM d, yyyy"
+        );
+        const formattedTime = formatInTimeZone(
+            scheduledTime,
+            timezone,
+            "h:mm a zzz"
+        );
 
         const emailsSent = [];
         const joinUrl = `${BASE_URL}/join/${inviteToken}`;
-        const guestEmailAddress = schedulerEmail || call.guest_email || call.scheduler_email;
+        const guestEmailAddress =
+            schedulerEmail || call.guest_email || call.scheduler_email;
         const hostEmailAddress = recipientEmail || hostUser?.email;
 
         // Generate ICS calendar file
         const icsContent = generateICSFile({
             title: `${isPaid ? "Priority Session" : "Call"} with ${hostName}`,
-            description: `Join your Spritz video call at: ${joinUrl}${call.notes ? `\\n\\nNotes: ${call.notes}` : ""}`,
+            description: `Join your Spritz video call at: ${joinUrl}${
+                call.notes ? `\\n\\nNotes: ${call.notes}` : ""
+            }`,
             startTime: scheduledTime,
             duration,
             location: joinUrl,
@@ -182,7 +202,7 @@ export async function POST(request: NextRequest) {
             attendeeName: guestName,
             uid: call.id,
         });
-        
+
         // Convert to base64 for email attachment
         const icsBase64 = Buffer.from(icsContent).toString("base64");
         const icsAttachment = {
@@ -252,7 +272,7 @@ export async function POST(request: NextRequest) {
                               notes: call.notes,
                               timezone,
                               scheduledTime,
-                            }),
+                          }),
                     attachments: [icsAttachment],
                 });
                 emailsSent.push({ email: hostEmailAddress, type: "host" });
@@ -299,10 +319,14 @@ function generateHostSelfCreatedEmail({
     scheduledTime,
 }: HostSelfCreatedEmailParams): string {
     const endTime = addMinutes(scheduledTime, duration);
-    const gcalStart = scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const gcalEnd = endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalStart =
+        scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalEnd =
+        endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
     const gcalTitle = encodeURIComponent(`Spritz Call`);
-    const gcalDetails = encodeURIComponent(`Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`);
+    const gcalDetails = encodeURIComponent(
+        `Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`
+    );
     const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${gcalTitle}&dates=${gcalStart}/${gcalEnd}&details=${gcalDetails}`;
 
     return `
@@ -379,10 +403,14 @@ function generateGuestEmail({
 }: GuestEmailParams): string {
     // Generate Google Calendar link with proper dates
     const endTime = addMinutes(scheduledTime, duration);
-    const gcalStart = scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const gcalEnd = endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalStart =
+        scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalEnd =
+        endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
     const gcalTitle = encodeURIComponent(`Call with ${hostName}`);
-    const gcalDetails = encodeURIComponent(`Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`);
+    const gcalDetails = encodeURIComponent(
+        `Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`
+    );
     const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${gcalTitle}&dates=${gcalStart}/${gcalEnd}&details=${gcalDetails}`;
 
     return `
@@ -412,7 +440,9 @@ function generateGuestEmail({
                 Hi ${guestName}!
             </h1>
             <p style="color: #a1a1aa; font-size: 16px; margin: 0 0 32px 0; text-align: center; line-height: 1.5;">
-                Your ${isPaid ? "priority session" : "call"} with ${hostName} is confirmed.
+                Your ${
+                    isPaid ? "priority session" : "call"
+                } with ${hostName} is confirmed.
             </p>
 
             <!-- Time Card -->
@@ -433,13 +463,17 @@ function generateGuestEmail({
                 </p>
             </div>
 
-            ${notes ? `
+            ${
+                notes
+                    ? `
             <!-- Notes -->
             <div style="background: #09090b; border-radius: 12px; padding: 16px; margin-bottom: 24px; border-left: 3px solid #FF5500;">
                 <p style="color: #a1a1aa; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px 0;">Your notes</p>
                 <p style="color: #e4e4e7; font-size: 14px; margin: 0; line-height: 1.5;">${notes}</p>
             </div>
-            ` : ""}
+            `
+                    : ""
+            }
 
             <!-- Join Button -->
             <a href="${BASE_URL}/join/${inviteToken}" style="display: block; background: linear-gradient(135deg, #FF5500, #FB8D22); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 16px;">
@@ -493,10 +527,14 @@ function generateHostEmail({
 }: HostEmailParams): string {
     // Generate Google Calendar link with proper dates
     const endTime = addMinutes(scheduledTime, duration);
-    const gcalStart = scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
-    const gcalEnd = endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalStart =
+        scheduledTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const gcalEnd =
+        endTime.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
     const gcalTitle = encodeURIComponent(`Call with ${guestName}`);
-    const gcalDetails = encodeURIComponent(`Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`);
+    const gcalDetails = encodeURIComponent(
+        `Join your Spritz video call at: ${BASE_URL}/join/${inviteToken}`
+    );
     const googleCalendarUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${gcalTitle}&dates=${gcalStart}/${gcalEnd}&details=${gcalDetails}`;
 
     return `
@@ -526,14 +564,24 @@ function generateHostEmail({
                 ${guestName} booked a call
             </h1>
             <p style="color: #a1a1aa; font-size: 16px; margin: 0 0 32px 0; text-align: center; line-height: 1.5;">
-                ${isPaid ? `This is a paid session ($${((amount || 0) / 100).toFixed(2)})` : "Free consultation"}
+                ${
+                    isPaid
+                        ? `This is a paid session ($${(
+                              (amount || 0) / 100
+                          ).toFixed(2)})`
+                        : "Free consultation"
+                }
             </p>
 
             <!-- Guest Info -->
             <div style="background: #09090b; border-radius: 16px; padding: 20px; margin-bottom: 16px;">
                 <p style="color: #71717a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px 0;">Guest Details</p>
                 <p style="color: #ffffff; font-size: 16px; font-weight: 600; margin: 0 0 4px 0;">${guestName}</p>
-                ${guestEmail ? `<p style="color: #a1a1aa; font-size: 14px; margin: 0;">${guestEmail}</p>` : ""}
+                ${
+                    guestEmail
+                        ? `<p style="color: #a1a1aa; font-size: 14px; margin: 0;">${guestEmail}</p>`
+                        : ""
+                }
             </div>
 
             <!-- Time Card -->
@@ -550,13 +598,17 @@ function generateHostEmail({
                 </p>
             </div>
 
-            ${notes ? `
+            ${
+                notes
+                    ? `
             <!-- Notes -->
             <div style="background: #09090b; border-radius: 12px; padding: 16px; margin-bottom: 24px; border-left: 3px solid #FF5500;">
                 <p style="color: #a1a1aa; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px 0;">Notes from guest</p>
                 <p style="color: #e4e4e7; font-size: 14px; margin: 0; line-height: 1.5;">${notes}</p>
             </div>
-            ` : ""}
+            `
+                    : ""
+            }
 
             <!-- Join Button -->
             <a href="${BASE_URL}/join/${inviteToken}" style="display: block; background: linear-gradient(135deg, #FF5500, #FB8D22); color: #ffffff; text-decoration: none; padding: 16px 32px; border-radius: 12px; font-size: 16px; font-weight: 600; text-align: center; margin-bottom: 16px;">
@@ -580,4 +632,3 @@ function generateHostEmail({
 </html>
     `;
 }
-

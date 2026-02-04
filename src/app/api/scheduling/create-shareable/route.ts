@@ -10,7 +10,10 @@ function getAppUrl(request: NextRequest): string {
         return process.env.NEXT_PUBLIC_APP_URL;
     }
     const proto = request.headers.get("x-forwarded-proto") || "https";
-    const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
+    const host =
+        request.headers.get("x-forwarded-host") ||
+        request.headers.get("host") ||
+        "localhost:3000";
     return `${proto}://${host}`;
 }
 
@@ -33,7 +36,7 @@ export async function POST(request: NextRequest) {
     try {
         // Get authenticated user
         const session = await getAuthenticatedUser(request);
-        
+
         const body = await request.json();
         const {
             schedulerAddress: bodySchedulerAddress,
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest) {
             title,
             timezone,
         } = body;
-        
+
         // Use session address, fall back to body for backward compatibility
         const schedulerAddress = session?.userAddress || bodySchedulerAddress;
 
@@ -52,10 +55,12 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-        
+
         // Warn if using unauthenticated fallback
         if (!session && bodySchedulerAddress) {
-            console.warn("[CreateShareable] Using unauthenticated address - migrate to session auth");
+            console.warn(
+                "[CreateShareable] Using unauthenticated address - migrate to session auth"
+            );
         }
 
         // Validate scheduled time is in the future
@@ -71,7 +76,9 @@ export async function POST(request: NextRequest) {
         const inviteToken = generateInviteToken();
 
         // Sanitize title input
-        const sanitizedTitle = title ? sanitizeInput(title, INPUT_LIMITS.SHORT_TEXT) : "Scheduled Call";
+        const sanitizedTitle = title
+            ? sanitizeInput(title, INPUT_LIMITS.SHORT_TEXT)
+            : "Scheduled Call";
 
         // Create the scheduled call entry
         // Note: recipient_wallet_address is set to schedulerAddress since they're hosting
@@ -102,13 +109,18 @@ export async function POST(request: NextRequest) {
 
         // Send email to the user (host) with join link and calendar invite
         try {
-            const inviteRes = await fetch(`${getAppUrl(request)}/api/scheduling/invite`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ scheduledCallId: scheduledCall.id }),
-            });
+            const inviteRes = await fetch(
+                `${getAppUrl(request)}/api/scheduling/invite`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ scheduledCallId: scheduledCall.id }),
+                }
+            );
             if (!inviteRes.ok) {
-                console.warn("[CreateShareable] Invite email failed (user may not have email on file)");
+                console.warn(
+                    "[CreateShareable] Invite email failed (user may not have email on file)"
+                );
             }
         } catch (inviteErr) {
             console.warn("[CreateShareable] Invite email error:", inviteErr);
@@ -132,4 +144,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-

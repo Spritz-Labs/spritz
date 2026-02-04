@@ -94,8 +94,7 @@ export function BrowseChannelsModal({
     const [poapCollections, setPoapCollections] = useState<
         PoapCollectionForUser[]
     >([]);
-    const [poapCollectionsLoading, setPoapCollectionsLoading] =
-        useState(false);
+    const [poapCollectionsLoading, setPoapCollectionsLoading] = useState(false);
     const [creatingPoapCollectionId, setCreatingPoapCollectionId] = useState<
         number | null
     >(null);
@@ -594,12 +593,28 @@ export function BrowseChannelsModal({
                                                                             }
                                                                         </p>
                                                                         <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
-                                                                            {col.dropsCount}{" "}
+                                                                            {
+                                                                                col.dropsCount
+                                                                            }{" "}
                                                                             POAPs
                                                                             in
                                                                             collection
                                                                             {col.channel
-                                                                                ? ` • ${Number((col.channel as { member_count?: number }).member_count ?? 0)} members${col.channel.is_member ? " • You're in" : ""}`
+                                                                                ? ` • ${Number(
+                                                                                      (
+                                                                                          col.channel as {
+                                                                                              member_count?: number;
+                                                                                          }
+                                                                                      )
+                                                                                          .member_count ??
+                                                                                          0
+                                                                                  )} members${
+                                                                                      col
+                                                                                          .channel
+                                                                                          .is_member
+                                                                                          ? " • You're in"
+                                                                                          : ""
+                                                                                  }`
                                                                                 : " • No channel yet"}
                                                                         </p>
                                                                     </div>
@@ -607,7 +622,8 @@ export function BrowseChannelsModal({
                                                                         <button
                                                                             type="button"
                                                                             onClick={() =>
-                                                                                col.channel!.is_member
+                                                                                col.channel!
+                                                                                    .is_member
                                                                                     ? onJoinChannel(
                                                                                           col.channel as PublicChannel
                                                                                       )
@@ -617,20 +633,24 @@ export function BrowseChannelsModal({
                                                                             }
                                                                             disabled={
                                                                                 joiningChannel ===
-                                                                                col.channel!.id
+                                                                                col.channel!
+                                                                                    .id
                                                                             }
                                                                             className={`shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
-                                                                                col.channel!.is_member
+                                                                                col.channel!
+                                                                                    .is_member
                                                                                     ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
                                                                                     : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
                                                                             }`}
                                                                         >
                                                                             {joiningChannel ===
-                                                                            col.channel!.id ? (
+                                                                            col.channel!
+                                                                                .id ? (
                                                                                 <span className="animate-pulse">
                                                                                     ...
                                                                                 </span>
-                                                                            ) : col.channel!.is_member ? (
+                                                                            ) : col.channel!
+                                                                                  .is_member ? (
                                                                                 "Open"
                                                                             ) : (
                                                                                 "Join"
@@ -676,11 +696,12 @@ export function BrowseChannelsModal({
                                             )}
                                         </div>
                                     )}
-                                    {poapCollections.length > 0 && !poapCollectionsLoading && (
-                                        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 mt-2">
-                                            POAPs you hold
-                                        </p>
-                                    )}
+                                    {poapCollections.length > 0 &&
+                                        !poapCollectionsLoading && (
+                                            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 mt-2">
+                                                POAPs you hold
+                                            </p>
+                                        )}
                                     {poapLoading ? (
                                         <div className="grid gap-3 min-w-0">
                                             {[1, 2, 3, 4].map((i) => (

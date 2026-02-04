@@ -21,7 +21,9 @@ export type PoapCollectionForUser = {
     /** User holds at least one POAP in this collection */
     canJoin: true;
     /** Existing channel linked to this collection, if any */
-    channel: (Record<string, unknown> & { id: string; is_member?: boolean }) | null;
+    channel:
+        | (Record<string, unknown> & { id: string; is_member?: boolean })
+        | null;
 };
 
 function getCollectionsClient(): CollectionsClient | null {
@@ -43,10 +45,14 @@ function getCollectionsClient(): CollectionsClient | null {
 export async function GET(request: NextRequest) {
     const addressesParam = request.nextUrl.searchParams.get("addresses");
     const addressParam = request.nextUrl.searchParams.get("address");
-    const memberAddressParam = request.nextUrl.searchParams.get("memberAddress");
+    const memberAddressParam =
+        request.nextUrl.searchParams.get("memberAddress");
 
     const rawAddresses: string[] = addressesParam
-        ? addressesParam.split(",").map((a) => a.trim()).filter(Boolean)
+        ? addressesParam
+              .split(",")
+              .map((a) => a.trim())
+              .filter(Boolean)
         : addressParam?.trim()
         ? [addressParam.trim()]
         : [];
@@ -65,7 +71,9 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    const memberAddress = (memberAddressParam?.trim() || rawAddresses[0]).toLowerCase();
+    const memberAddress = (
+        memberAddressParam?.trim() || rawAddresses[0]
+    ).toLowerCase();
     const client = getCollectionsClient();
     if (!client) {
         return NextResponse.json(
@@ -75,26 +83,55 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // 1) Get user's POAP event IDs (scan)
+        // 1) Get user's POAP event IDs (scan) — parse all common response shapes so we don't miss any
         const userEventIds = new Set<number>();
         for (const addr of rawAddresses) {
-            const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(addr)}`;
+            const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
+                addr
+            )}`;
             const scanRes = await fetch(scanUrl, {
                 headers: { "X-API-Key": apiKey },
                 next: { revalidate: 300 },
             });
             if (!scanRes.ok) continue;
             const rawList = await scanRes.json();
-            const list = Array.isArray(rawList) ? rawList : rawList?.tokens ?? rawList?.poaps ?? [];
+            const list = Array.isArray(rawList)
+                ? rawList
+                : rawList?.tokens ?? rawList?.poaps ?? [];
             for (const item of list) {
                 const event = item?.event ?? item;
+                // Support multiple API shapes: event.id, event_id, eventId, drop_id
+                const rawId =
+                    event?.id ??
+                    (
+                        item as {
+                            event_id?: number;
+                            eventId?: number;
+                            drop_id?: number;
+                        }
+                    )?.event_id ??
+                    (
+                        item as {
+                            event_id?: number;
+                            eventId?: number;
+                            drop_id?: number;
+                        }
+                    )?.eventId ??
+                    (
+                        item as {
+                            event_id?: number;
+                            eventId?: number;
+                            drop_id?: number;
+                        }
+                    )?.drop_id;
                 const eventId =
-                    typeof event?.id === "number"
-                        ? event.id
-                        : typeof event?.id === "string"
-                        ? parseInt(event.id, 10)
+                    typeof rawId === "number"
+                        ? rawId
+                        : typeof rawId === "string"
+                        ? parseInt(rawId, 10)
                         : null;
-                if (eventId != null && !Number.isNaN(eventId)) userEventIds.add(eventId);
+                if (eventId != null && !Number.isNaN(eventId))
+                    userEventIds.add(eventId);
             }
         }
 
@@ -102,29 +139,42 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ collections: [] });
         }
 
-        // 2) List collections with pagination; for each page get(id) to get dropIds, filter by user event overlap
-        const allMatching: { id: number; title: string; description: string | null; logoImageUrl: string | null; bannerImageUrl: string; dropsCount: number; year: number | null }[] = [];
+        // 2) List collections with pagination; for each page get(id) to get dropIds, filter by user event overlap.
+        // Double coverage: 200 pages = up to 6000 collections so "Collections you can join" is complete.
+        const allMatching: {
+            id: number;
+            title: string;
+            description: string | null;
+            logoImageUrl: string | null;
+            bannerImageUrl: string;
+            dropsCount: number;
+            year: number | null;
+        }[] = [];
         const pageSize = 30;
-        const maxPages = 5;
+        const maxPages = 200;
         let offset = 0;
         let page = 0;
 
         while (page < maxPages) {
             const result = await client.list({ offset, limit: pageSize });
             if (result.items.length === 0) break;
-            // Get full collection (with dropIds) for each item
             const batch = await Promise.all(
                 result.items.map((c) => client.get(c.id))
             );
             for (const col of batch) {
                 if (!col) continue;
-                let dropIds: number[] = [];
+                let dropIds: unknown[] = [];
                 try {
                     dropIds = col.dropIds ?? [];
                 } catch {
                     // dropIds only when fetched with get()
                 }
-                const hasOverlap = dropIds.some((d) => userEventIds.has(d));
+                // Normalize drop IDs (API may return numbers or strings) and check overlap
+                const hasOverlap = dropIds.some((d) => {
+                    const id =
+                        typeof d === "number" ? d : parseInt(String(d), 10);
+                    return !Number.isNaN(id) && userEventIds.has(id);
+                });
                 if (hasOverlap) {
                     allMatching.push({
                         id: col.id,

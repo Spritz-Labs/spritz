@@ -234,12 +234,9 @@ export async function POST(request: NextRequest) {
             typeof poapCollectionId === "number" &&
             !Number.isNaN(poapCollectionId);
         const isPoapChannel = isPoapEventChannel || isPoapCollectionChannel;
-        const baseName = (
-            name ||
-            poapEventName ||
-            poapCollectionName ||
-            ""
-        ).trim() || (isPoapCollectionChannel ? "Collection" : "POAP");
+        const baseName =
+            (name || poapEventName || poapCollectionName || "").trim() ||
+            (isPoapCollectionChannel ? "Collection" : "POAP");
         const sanitizedName = sanitizeInput(
             isPoapChannel ? `POAP: ${baseName}` : baseName,
             INPUT_LIMITS.SHORT_TEXT

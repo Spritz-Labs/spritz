@@ -269,7 +269,9 @@ export async function POST(
             }
             const userEventIds = new Set<number>();
             for (const addr of addressesToCheckCol) {
-                const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(addr)}`;
+                const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
+                    addr
+                )}`;
                 const scanRes = await fetch(scanUrl, {
                     headers: { "X-API-Key": apiKey },
                     next: { revalidate: 60 },
@@ -296,8 +298,7 @@ export async function POST(
             if (!hasOverlap) {
                 return NextResponse.json(
                     {
-                        error:
-                            "You need at least one POAP from this collection to join. Hold a POAP in the collection in your wallet to join.",
+                        error: "You need at least one POAP from this collection to join. Hold a POAP in the collection in your wallet to join.",
                     },
                     { status: 403 }
                 );

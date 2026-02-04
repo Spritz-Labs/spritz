@@ -1,16 +1,31 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { PublicChannel } from "@/app/api/channels/route";
-import type { ChannelMessage, ChannelReaction } from "@/app/api/channels/[id]/messages/route";
+import type {
+    ChannelMessage,
+    ChannelReaction,
+} from "@/app/api/channels/[id]/messages/route";
 import { createClient } from "@supabase/supabase-js";
 
-export const CHANNEL_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯", "🙌", "🎉"];
+export const CHANNEL_REACTION_EMOJIS = [
+    "👍",
+    "❤️",
+    "🔥",
+    "😂",
+    "🤙",
+    "🤯",
+    "🙏",
+    "💯",
+    "🙌",
+    "🎉",
+];
 
 // Initialize Supabase client for realtime
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = supabaseUrl && supabaseAnonKey 
-    ? createClient(supabaseUrl, supabaseAnonKey) 
-    : null;
+const supabase =
+    supabaseUrl && supabaseAnonKey
+        ? createClient(supabaseUrl, supabaseAnonKey)
+        : null;
 
 // Channel new message callback type
 export type ChannelMessageCallback = (data: {
@@ -32,9 +47,11 @@ export function useChannels(userAddress: string | null) {
     const [joinedChannels, setJoinedChannels] = useState<PublicChannel[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    
+
     // Track which channels have notifications enabled (stored locally)
-    const [notificationSettings, setNotificationSettings] = useState<Record<string, boolean>>(() => {
+    const [notificationSettings, setNotificationSettings] = useState<
+        Record<string, boolean>
+    >(() => {
         if (typeof window !== "undefined") {
             try {
                 const stored = localStorage.getItem("channel_notifications");
@@ -45,10 +62,12 @@ export function useChannels(userAddress: string | null) {
         }
         return {};
     });
-    
+
     // Callbacks for new channel messages
-    const newMessageCallbacksRef = useRef<Set<ChannelMessageCallback>>(new Set());
-    
+    const newMessageCallbacksRef = useRef<Set<ChannelMessageCallback>>(
+        new Set()
+    );
+
     // Track the currently open channel to avoid notifications for it
     const activeChannelRef = useRef<string | null>(null);
 
@@ -71,7 +90,9 @@ export function useChannels(userAddress: string | null) {
             setChannels(data.channels || []);
         } catch (e) {
             console.error("[useChannels] Error:", e);
-            setError(e instanceof Error ? e.message : "Failed to fetch channels");
+            setError(
+                e instanceof Error ? e.message : "Failed to fetch channels"
+            );
         } finally {
             setIsLoading(false);
         }
@@ -85,7 +106,9 @@ export function useChannels(userAddress: string | null) {
 
         try {
             const res = await fetch(
-                `/api/channels?userAddress=${encodeURIComponent(userAddress)}&joined=true`
+                `/api/channels?userAddress=${encodeURIComponent(
+                    userAddress
+                )}&joined=true`
             );
             const data = await res.json();
 
@@ -217,31 +240,40 @@ export function useChannels(userAddress: string | null) {
 
     // Toggle notification setting for a channel
     const toggleChannelNotifications = useCallback((channelId: string) => {
-        setNotificationSettings(prev => {
+        setNotificationSettings((prev) => {
             const newSettings = {
                 ...prev,
                 [channelId]: !prev[channelId],
             };
             // Persist to localStorage
             if (typeof window !== "undefined") {
-                localStorage.setItem("channel_notifications", JSON.stringify(newSettings));
+                localStorage.setItem(
+                    "channel_notifications",
+                    JSON.stringify(newSettings)
+                );
             }
             return newSettings;
         });
     }, []);
 
     // Check if notifications are enabled for a channel
-    const isNotificationsEnabled = useCallback((channelId: string) => {
-        return notificationSettings[channelId] === true;
-    }, [notificationSettings]);
+    const isNotificationsEnabled = useCallback(
+        (channelId: string) => {
+            return notificationSettings[channelId] === true;
+        },
+        [notificationSettings]
+    );
 
     // Register callback for new channel messages
-    const onNewChannelMessage = useCallback((callback: ChannelMessageCallback) => {
-        newMessageCallbacksRef.current.add(callback);
-        return () => {
-            newMessageCallbacksRef.current.delete(callback);
-        };
-    }, []);
+    const onNewChannelMessage = useCallback(
+        (callback: ChannelMessageCallback) => {
+            newMessageCallbacksRef.current.add(callback);
+            return () => {
+                newMessageCallbacksRef.current.delete(callback);
+            };
+        },
+        []
+    );
 
     // Set active channel (to prevent notifications for currently open channel)
     const setActiveChannel = useCallback((channelId: string | null) => {
@@ -252,10 +284,14 @@ export function useChannels(userAddress: string | null) {
     useEffect(() => {
         if (!supabase || !userAddress || joinedChannels.length === 0) return;
 
-        console.log("[useChannels] Setting up realtime subscription for", joinedChannels.length, "channels");
+        console.log(
+            "[useChannels] Setting up realtime subscription for",
+            joinedChannels.length,
+            "channels"
+        );
 
-        const channelIds = joinedChannels.map(c => c.id);
-        
+        const channelIds = joinedChannels.map((c) => c.id);
+
         const subscription = supabase
             .channel("channel-messages-global")
             .on(
@@ -278,22 +314,32 @@ export function useChannels(userAddress: string | null) {
                     if (!channelIds.includes(newMessage.channel_id)) return;
 
                     // Skip if message is from self
-                    if (newMessage.sender_address.toLowerCase() === userAddress.toLowerCase()) return;
+                    if (
+                        newMessage.sender_address.toLowerCase() ===
+                        userAddress.toLowerCase()
+                    )
+                        return;
 
                     // Skip if this channel is currently active (chat is open)
-                    if (activeChannelRef.current === newMessage.channel_id) return;
+                    if (activeChannelRef.current === newMessage.channel_id)
+                        return;
 
                     // Check if notifications are enabled for this channel
                     if (!notificationSettings[newMessage.channel_id]) return;
 
                     // Find channel info
-                    const channel = joinedChannels.find(c => c.id === newMessage.channel_id);
+                    const channel = joinedChannels.find(
+                        (c) => c.id === newMessage.channel_id
+                    );
                     if (!channel) return;
 
-                    console.log("[useChannels] New message in channel:", channel.name);
+                    console.log(
+                        "[useChannels] New message in channel:",
+                        channel.name
+                    );
 
                     // Trigger callbacks
-                    newMessageCallbacksRef.current.forEach(callback => {
+                    newMessageCallbacksRef.current.forEach((callback) => {
                         try {
                             callback({
                                 channelId: newMessage.channel_id,
@@ -333,44 +379,60 @@ export function useChannels(userAddress: string | null) {
     };
 }
 
-export function useChannelMessages(channelId: string | null, userAddress: string | null) {
+export function useChannelMessages(
+    channelId: string | null,
+    userAddress: string | null
+) {
     const [messages, setMessages] = useState<ChannelMessage[]>([]);
     const [pinnedMessages, setPinnedMessages] = useState<ChannelMessage[]>([]);
-    const [reactions, setReactions] = useState<Record<string, ChannelMessageReaction[]>>({});
+    const [reactions, setReactions] = useState<
+        Record<string, ChannelMessageReaction[]>
+    >({});
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<ChannelMessage | null>(null);
-    
+
     const PAGE_SIZE = 50;
 
     // Process raw reactions into grouped format
-    const processReactions = useCallback((rawReactions: ChannelReaction[]) => {
-        const reactionMap: Record<string, ChannelMessageReaction[]> = {};
-        
-        rawReactions.forEach(r => {
-            if (!reactionMap[r.message_id]) {
-                reactionMap[r.message_id] = CHANNEL_REACTION_EMOJIS.map(emoji => ({
-                    emoji,
-                    count: 0,
-                    hasReacted: false,
-                    users: [],
-                }));
-            }
-            
-            const idx = reactionMap[r.message_id].findIndex(x => x.emoji === r.emoji);
-            if (idx >= 0) {
-                reactionMap[r.message_id][idx].count++;
-                reactionMap[r.message_id][idx].users.push(r.user_address);
-                if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
-                    reactionMap[r.message_id][idx].hasReacted = true;
+    const processReactions = useCallback(
+        (rawReactions: ChannelReaction[]) => {
+            const reactionMap: Record<string, ChannelMessageReaction[]> = {};
+
+            rawReactions.forEach((r) => {
+                if (!reactionMap[r.message_id]) {
+                    reactionMap[r.message_id] = CHANNEL_REACTION_EMOJIS.map(
+                        (emoji) => ({
+                            emoji,
+                            count: 0,
+                            hasReacted: false,
+                            users: [],
+                        })
+                    );
                 }
-            }
-        });
-        
-        return reactionMap;
-    }, [userAddress]);
+
+                const idx = reactionMap[r.message_id].findIndex(
+                    (x) => x.emoji === r.emoji
+                );
+                if (idx >= 0) {
+                    reactionMap[r.message_id][idx].count++;
+                    reactionMap[r.message_id][idx].users.push(r.user_address);
+                    if (
+                        userAddress &&
+                        r.user_address.toLowerCase() ===
+                            userAddress.toLowerCase()
+                    ) {
+                        reactionMap[r.message_id][idx].hasReacted = true;
+                    }
+                }
+            });
+
+            return reactionMap;
+        },
+        [userAddress]
+    );
 
     const fetchMessages = useCallback(async () => {
         if (!channelId) return;
@@ -379,7 +441,9 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         setError(null);
 
         try {
-            const res = await fetch(`/api/channels/${channelId}/messages?limit=${PAGE_SIZE}`);
+            const res = await fetch(
+                `/api/channels/${channelId}/messages?limit=${PAGE_SIZE}`
+            );
             const data = await res.json();
 
             if (!res.ok) {
@@ -389,14 +453,16 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             const fetchedMessages = data.messages || [];
             setMessages(fetchedMessages);
             setHasMore(fetchedMessages.length >= PAGE_SIZE);
-            
+
             // Process reactions
             if (data.reactions) {
                 setReactions(processReactions(data.reactions));
             }
         } catch (e) {
             console.error("[useChannelMessages] Error:", e);
-            setError(e instanceof Error ? e.message : "Failed to fetch messages");
+            setError(
+                e instanceof Error ? e.message : "Failed to fetch messages"
+            );
         } finally {
             setIsLoading(false);
         }
@@ -404,7 +470,8 @@ export function useChannelMessages(channelId: string | null, userAddress: string
 
     // Load older messages (for infinite scroll)
     const loadMoreMessages = useCallback(async () => {
-        if (!channelId || isLoadingMore || !hasMore || messages.length === 0) return;
+        if (!channelId || isLoadingMore || !hasMore || messages.length === 0)
+            return;
 
         setIsLoadingMore(true);
 
@@ -414,7 +481,9 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             const before = oldestMessage.created_at;
 
             const res = await fetch(
-                `/api/channels/${channelId}/messages?limit=${PAGE_SIZE}&before=${encodeURIComponent(before)}`
+                `/api/channels/${channelId}/messages?limit=${PAGE_SIZE}&before=${encodeURIComponent(
+                    before
+                )}`
             );
             const data = await res.json();
 
@@ -423,20 +492,20 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             }
 
             const olderMessages = data.messages || [];
-            
+
             if (olderMessages.length > 0) {
                 // Prepend older messages
-                setMessages(prev => [...olderMessages, ...prev]);
-                
+                setMessages((prev) => [...olderMessages, ...prev]);
+
                 // Process and merge reactions
                 if (data.reactions) {
-                    setReactions(prev => ({
+                    setReactions((prev) => ({
                         ...prev,
                         ...processReactions(data.reactions),
                     }));
                 }
             }
-            
+
             setHasMore(olderMessages.length >= PAGE_SIZE);
         } catch (e) {
             console.error("[useChannelMessages] Error loading more:", e);
@@ -446,7 +515,11 @@ export function useChannelMessages(channelId: string | null, userAddress: string
     }, [channelId, isLoadingMore, hasMore, messages, processReactions]);
 
     const sendMessage = useCallback(
-        async (content: string, messageType: "text" | "image" | "pixel_art" | "location" = "text", replyToId?: string) => {
+        async (
+            content: string,
+            messageType: "text" | "image" | "pixel_art" | "location" = "text",
+            replyToId?: string
+        ) => {
             if (!channelId || !userAddress || !content.trim()) return null;
 
             try {
@@ -469,10 +542,10 @@ export function useChannelMessages(channelId: string | null, userAddress: string
 
                 // Add message to local state
                 setMessages((prev) => [...prev, data.message]);
-                
+
                 // Clear reply state
                 setReplyingTo(null);
-                
+
                 // Check for agent mentions and trigger responses (fire and forget)
                 if (content.includes("@[") && content.includes("](")) {
                     fetch("/api/channels/agent-response", {
@@ -486,18 +559,35 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                             originalMessageId: data.message?.id,
                         }),
                     })
-                    .then(async (res) => {
-                        const result = await res.json();
-                        if (!res.ok) {
-                            console.error("[useChannelMessages] Agent response error:", result.error);
-                        } else {
-                            console.log("[useChannelMessages] Agent response:", result);
-                            if (result.processed && result.responsesGenerated === 0 && result.mentionsFound > 0) {
-                                console.warn("[useChannelMessages] Agent mentioned but no response generated. Check server logs for details.");
+                        .then(async (res) => {
+                            const result = await res.json();
+                            if (!res.ok) {
+                                console.error(
+                                    "[useChannelMessages] Agent response error:",
+                                    result.error
+                                );
+                            } else {
+                                console.log(
+                                    "[useChannelMessages] Agent response:",
+                                    result
+                                );
+                                if (
+                                    result.processed &&
+                                    result.responsesGenerated === 0 &&
+                                    result.mentionsFound > 0
+                                ) {
+                                    console.warn(
+                                        "[useChannelMessages] Agent mentioned but no response generated. Check server logs for details."
+                                    );
+                                }
                             }
-                        }
-                    })
-                    .catch(err => console.error("[useChannelMessages] Agent response error:", err));
+                        })
+                        .catch((err) =>
+                            console.error(
+                                "[useChannelMessages] Agent response error:",
+                                err
+                            )
+                        );
                 }
 
                 return data.message as ChannelMessage;
@@ -531,29 +621,40 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 }
 
                 // Optimistically update local state
-                setReactions(prev => {
+                setReactions((prev) => {
                     const updated = { ...prev };
                     if (!updated[messageId]) {
-                        updated[messageId] = CHANNEL_REACTION_EMOJIS.map(e => ({
-                            emoji: e,
-                            count: 0,
-                            hasReacted: false,
-                            users: [],
-                        }));
+                        updated[messageId] = CHANNEL_REACTION_EMOJIS.map(
+                            (e) => ({
+                                emoji: e,
+                                count: 0,
+                                hasReacted: false,
+                                users: [],
+                            })
+                        );
                     }
 
-                    const idx = updated[messageId].findIndex(r => r.emoji === emoji);
+                    const idx = updated[messageId].findIndex(
+                        (r) => r.emoji === emoji
+                    );
                     if (idx >= 0) {
                         const wasReacted = updated[messageId][idx].hasReacted;
                         updated[messageId][idx] = {
                             ...updated[messageId][idx],
-                            count: wasReacted 
-                                ? Math.max(0, updated[messageId][idx].count - 1) 
+                            count: wasReacted
+                                ? Math.max(0, updated[messageId][idx].count - 1)
                                 : updated[messageId][idx].count + 1,
                             hasReacted: !wasReacted,
                             users: wasReacted
-                                ? updated[messageId][idx].users.filter(u => u.toLowerCase() !== userAddress.toLowerCase())
-                                : [...updated[messageId][idx].users, userAddress.toLowerCase()],
+                                ? updated[messageId][idx].users.filter(
+                                      (u) =>
+                                          u.toLowerCase() !==
+                                          userAddress.toLowerCase()
+                                  )
+                                : [
+                                      ...updated[messageId][idx].users,
+                                      userAddress.toLowerCase(),
+                                  ],
                         };
                     }
 
@@ -581,7 +682,10 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 setPinnedMessages(data.pinnedMessages || []);
             }
         } catch (e) {
-            console.error("[useChannelMessages] Error fetching pinned messages:", e);
+            console.error(
+                "[useChannelMessages] Error fetching pinned messages:",
+                e
+            );
         }
     }, [channelId]);
 
@@ -591,17 +695,22 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             if (!channelId) return false;
 
             try {
-                const res = await fetch(`/api/channels/${channelId}/messages/pin`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    credentials: "include",
-                    body: JSON.stringify({ messageId, pin }),
-                });
+                const res = await fetch(
+                    `/api/channels/${channelId}/messages/pin`,
+                    {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        credentials: "include",
+                        body: JSON.stringify({ messageId, pin }),
+                    }
+                );
 
                 const data = await res.json();
 
                 if (!res.ok) {
-                    throw new Error(data.error || "Failed to update pin status");
+                    throw new Error(
+                        data.error || "Failed to update pin status"
+                    );
                 }
 
                 // Update local state
@@ -612,7 +721,9 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                                   ...msg,
                                   is_pinned: pin,
                                   pinned_by: pin ? userAddress : null,
-                                  pinned_at: pin ? new Date().toISOString() : null,
+                                  pinned_at: pin
+                                      ? new Date().toISOString()
+                                      : null,
                               }
                             : msg
                     )
@@ -633,7 +744,9 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                         ]);
                     }
                 } else {
-                    setPinnedMessages((prev) => prev.filter((m) => m.id !== messageId));
+                    setPinnedMessages((prev) =>
+                        prev.filter((m) => m.id !== messageId)
+                    );
                 }
 
                 return true;
@@ -656,7 +769,10 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         if (!channelId || !supabase) return;
 
         const client = supabase;
-        console.log("[useChannelMessages] Setting up realtime subscription for channel:", channelId);
+        console.log(
+            "[useChannelMessages] Setting up realtime subscription for channel:",
+            channelId
+        );
 
         const subscription = client
             .channel(`channel-messages-${channelId}`)
@@ -670,11 +786,14 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 },
                 (payload) => {
                     const newMessage = payload.new as ChannelMessage;
-                    console.log("[useChannelMessages] Realtime message received:", newMessage.id);
-                    
+                    console.log(
+                        "[useChannelMessages] Realtime message received:",
+                        newMessage.id
+                    );
+
                     setMessages((prev) => {
                         // Check if message already exists
-                        const exists = prev.some(m => m.id === newMessage.id);
+                        const exists = prev.some((m) => m.id === newMessage.id);
                         if (exists) {
                             return prev;
                         }
@@ -686,7 +805,9 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             .subscribe();
 
         return () => {
-            console.log("[useChannelMessages] Cleaning up realtime subscription");
+            console.log(
+                "[useChannelMessages] Cleaning up realtime subscription"
+            );
             subscription.unsubscribe();
         };
     }, [channelId, supabase]);
@@ -705,14 +826,17 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             if (!channelId || !userAddress || !newContent.trim()) return false;
 
             try {
-                const res = await fetch(`/api/channels/${channelId}/messages/${messageId}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        content: newContent.trim(),
-                        userAddress,
-                    }),
-                });
+                const res = await fetch(
+                    `/api/channels/${channelId}/messages/${messageId}`,
+                    {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            content: newContent.trim(),
+                            userAddress,
+                        }),
+                    }
+                );
 
                 if (!res.ok) {
                     const data = await res.json();
@@ -723,7 +847,12 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 setMessages((prev) =>
                     prev.map((msg) =>
                         msg.id === messageId
-                            ? { ...msg, content: newContent.trim(), is_edited: true, edited_at: new Date().toISOString() }
+                            ? {
+                                  ...msg,
+                                  content: newContent.trim(),
+                                  is_edited: true,
+                                  edited_at: new Date().toISOString(),
+                              }
                             : msg
                     )
                 );
@@ -743,13 +872,16 @@ export function useChannelMessages(channelId: string | null, userAddress: string
             if (!channelId || !userAddress) return false;
 
             try {
-                const res = await fetch(`/api/channels/${channelId}/messages/${messageId}`, {
-                    method: "DELETE",
-                    headers: { 
-                        "Content-Type": "application/json",
-                        "x-user-address": userAddress,
-                    },
-                });
+                const res = await fetch(
+                    `/api/channels/${channelId}/messages/${messageId}`,
+                    {
+                        method: "DELETE",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "x-user-address": userAddress,
+                        },
+                    }
+                );
 
                 if (!res.ok) {
                     const data = await res.json();
@@ -760,7 +892,11 @@ export function useChannelMessages(channelId: string | null, userAddress: string
                 setMessages((prev) =>
                     prev.map((msg) =>
                         msg.id === messageId
-                            ? { ...msg, content: "[Message deleted]", is_deleted: true }
+                            ? {
+                                  ...msg,
+                                  content: "[Message deleted]",
+                                  is_deleted: true,
+                              }
                             : msg
                     )
                 );
@@ -794,4 +930,3 @@ export function useChannelMessages(channelId: string | null, userAddress: string
         setReplyingTo,
     };
 }
-
