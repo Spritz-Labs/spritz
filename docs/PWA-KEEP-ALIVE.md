@@ -31,6 +31,10 @@ Ways we try to keep connections alive (or recover quickly) when the app runs as 
 
 -   **`PasskeyProvider`**, **`EmailAuthProvider`**, **`useAuth`**, **`useSolanaAuth`**: On `visibilitychange` (and sometimes focus), we re-check or refresh session so the user doesn’t appear logged out after a long background.
 
+## 7. Offline (no internet)
+
+-   **page-client.tsx**: When the app is opened with no internet, we show a friendly **OfflineScreen** instead of a black loading screen or redirect to login. We listen for `navigator.onLine` and `online`/`offline` events. The screen explains that the user is offline and that we’ll sign them in when they’re back online; we do not grant access or cache session offline (security). A “Try again” button rechecks the connection.
+
 ## Optional improvements
 
 -   **Supabase Realtime**: Re-subscribe or ping on visibility if we detect a stale channel (e.g. no events for a long time after becoming visible).

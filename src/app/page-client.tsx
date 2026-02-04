@@ -14,6 +14,7 @@ import { Dashboard } from "@/components/Dashboard";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { Globe } from "@/components/Globe";
 import { SpritzLogo } from "@/components/SpritzLogo";
+import { OfflineScreen } from "@/components/OfflineScreen";
 import { WalletConnectionStatus } from "@/components/WalletConnectionStatus";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
 import { useEmailAuthContext } from "@/context/EmailAuthProvider";
@@ -44,7 +45,7 @@ function hasSavedWalletSession(): boolean {
             }
         }
         const solanaCredentials = localStorage.getItem(
-            SOLANA_AUTH_CREDENTIALS_KEY,
+            SOLANA_AUTH_CREDENTIALS_KEY
         );
         if (solanaCredentials) {
             const parsed = JSON.parse(solanaCredentials);
@@ -119,11 +120,11 @@ export default function Home() {
         // Check if user intentionally disconnected - don't auto-reconnect
         if (typeof window !== "undefined") {
             const intentionallyDisconnected = sessionStorage.getItem(
-                "wallet_intentionally_disconnected",
+                "wallet_intentionally_disconnected"
             );
             if (intentionallyDisconnected === "true") {
                 console.log(
-                    "[PWA] User intentionally disconnected, skipping auto-reconnect",
+                    "[PWA] User intentionally disconnected, skipping auto-reconnect"
                 );
                 return;
             }
@@ -159,17 +160,17 @@ export default function Home() {
                     const granted = await navigator.storage.persist();
                     if (granted) {
                         console.log(
-                            "[PWA] Persistent storage granted - data will not be evicted",
+                            "[PWA] Persistent storage granted - data will not be evicted"
                         );
                     } else {
                         console.log(
-                            "[PWA] Persistent storage denied - data may be evicted by browser",
+                            "[PWA] Persistent storage denied - data may be evicted by browser"
                         );
                     }
                 } catch (err) {
                     console.warn(
                         "[PWA] Could not request persistent storage:",
-                        err,
+                        err
                     );
                 }
             }
@@ -188,10 +189,10 @@ export default function Home() {
         if (typeof window === "undefined") return;
 
         const intentionallyDisconnected = sessionStorage.getItem(
-            "wallet_intentionally_disconnected",
+            "wallet_intentionally_disconnected"
         );
         const lastWalletAddress = localStorage.getItem(
-            "spritz_last_wallet_address",
+            "spritz_last_wallet_address"
         );
         const pwaUpdateReload = sessionStorage.getItem("pwa_update_reload");
 
@@ -206,15 +207,15 @@ export default function Home() {
 
         if (intentionallyDisconnected === "true") {
             console.log(
-                "[PWA] Wallet reconnection disabled - user chose other auth method",
+                "[PWA] Wallet reconnection disabled - user chose other auth method"
             );
         } else if (!lastWalletAddress) {
             console.log(
-                "[PWA] No previous wallet connection found - showing auth options",
+                "[PWA] No previous wallet connection found - showing auth options"
             );
         } else {
             console.log(
-                "[PWA] Previous wallet user detected - usePWAWalletPersistence will handle reconnect",
+                "[PWA] Previous wallet user detected - usePWAWalletPersistence will handle reconnect"
             );
         }
     }, []);
@@ -226,7 +227,7 @@ export default function Home() {
 
         const shouldAutoReconnect = () => {
             const intentionallyDisconnected = sessionStorage.getItem(
-                "wallet_intentionally_disconnected",
+                "wallet_intentionally_disconnected"
             );
             return intentionallyDisconnected !== "true";
         };
@@ -235,7 +236,7 @@ export default function Home() {
             if (!document.hidden && shouldAutoReconnect()) {
                 // App is now visible
                 console.log(
-                    "[PWA] App foregrounded, checking wallet connection...",
+                    "[PWA] App foregrounded, checking wallet connection..."
                 );
 
                 // If we have saved session but wallet isn't connected, try reconnecting
@@ -245,7 +246,7 @@ export default function Home() {
                     !isReconnecting
                 ) {
                     console.log(
-                        "[PWA] Wallet not connected but session exists, reconnecting...",
+                        "[PWA] Wallet not connected but session exists, reconnecting..."
                     );
                     attemptReconnect();
                 }
@@ -271,7 +272,7 @@ export default function Home() {
         return () => {
             document.removeEventListener(
                 "visibilitychange",
-                handleVisibilityChange,
+                handleVisibilityChange
             );
             window.removeEventListener("focus", handleFocus);
         };
@@ -327,6 +328,7 @@ export default function Home() {
     } = useAuth();
 
     const [mounted, setMounted] = useState(false);
+    const [isOnline, setIsOnline] = useState(true);
     const [initializing, setInitializing] = useState(true);
     const [signingIn, setSigningIn] = useState(false);
     const [authTimeout, setAuthTimeout] = useState(false);
@@ -337,17 +339,31 @@ export default function Home() {
 
     // Server-side session - source of truth after updates/refreshes
     const [serverAuthMethod, setServerAuthMethod] = useState<string | null>(
-        null,
+        null
     );
     const [serverUserAddress, setServerUserAddress] = useState<string | null>(
-        null,
+        null
     );
 
     // Handle hydration
     useEffect(() => {
         setMounted(true);
+        setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
         // Check for saved session on mount
         hasSavedSession.current = hasSavedWalletSession();
+    }, []);
+
+    // Listen for online/offline so we show friendly offline screen instead of black/loading
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener("online", handleOnline);
+        window.addEventListener("offline", handleOffline);
+        return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+        };
     }, []);
 
     // Fetch session from server on mount
@@ -367,7 +383,7 @@ export default function Home() {
                         console.log(
                             "[Auth] Server session:",
                             data.session.authMethod,
-                            data.session.userAddress?.slice(0, 10),
+                            data.session.userAddress?.slice(0, 10)
                         );
                         setServerAuthMethod(data.session.authMethod);
                         setServerUserAddress(data.session.userAddress);
@@ -386,7 +402,7 @@ export default function Home() {
         if (mounted && (isSiweLoading || initializing)) {
             const timeout = setTimeout(() => {
                 console.log(
-                    "[Auth] Loading timeout reached - showing recovery option",
+                    "[Auth] Loading timeout reached - showing recovery option"
                 );
                 setAuthTimeout(true);
             }, 15000); // 15 second timeout
@@ -472,17 +488,17 @@ export default function Home() {
                     // Track failure
                     const currentFailures =
                         failedSignInAttempts.current.get(
-                            walletAddress.toLowerCase(),
+                            walletAddress.toLowerCase()
                         ) || 0;
                     failedSignInAttempts.current.set(
                         walletAddress.toLowerCase(),
-                        currentFailures + 1,
+                        currentFailures + 1
                     );
                     hasAutoSignInFailed.current = true;
                 } else {
                     // Success - clear failures
                     failedSignInAttempts.current.delete(
-                        walletAddress.toLowerCase(),
+                        walletAddress.toLowerCase()
                     );
                     hasAutoSignInFailed.current = false;
                 }
@@ -523,25 +539,25 @@ export default function Home() {
     const activeWalletType: WalletType = isEmailAuthenticated
         ? "evm" // Email users always use EVM (derived addresses)
         : isPasskeyAuthenticated
-          ? "evm" // Passkey users always use EVM (smart accounts)
-          : isAlienAuthenticated
-            ? "evm" // Alien users use EVM (identity addresses)
-            : isWorldIdAuthenticated
-              ? "evm" // World ID users use EVM (nullifier hash as address)
-              : walletType ||
-                (siweUser?.walletAddress?.startsWith("0x")
-                    ? "evm"
-                    : siweUser?.walletAddress
-                      ? "solana"
-                      : null) ||
-                (serverAuthMethod === "passkey" || serverAuthMethod === "email"
-                    ? "evm"
-                    : null) ||
-                (serverUserAddress?.startsWith("0x")
-                    ? "evm"
-                    : serverUserAddress
-                      ? "solana"
-                      : null);
+        ? "evm" // Passkey users always use EVM (smart accounts)
+        : isAlienAuthenticated
+        ? "evm" // Alien users use EVM (identity addresses)
+        : isWorldIdAuthenticated
+        ? "evm" // World ID users use EVM (nullifier hash as address)
+        : walletType ||
+          (siweUser?.walletAddress?.startsWith("0x")
+              ? "evm"
+              : siweUser?.walletAddress
+              ? "solana"
+              : null) ||
+          (serverAuthMethod === "passkey" || serverAuthMethod === "email"
+              ? "evm"
+              : null) ||
+          (serverUserAddress?.startsWith("0x")
+              ? "evm"
+              : serverUserAddress
+              ? "solana"
+              : null);
 
     // Require authentication for all users
     // Email auth, passkey auth, Alien auth, World ID auth, SIWE/SIWS authentication, or valid server session
@@ -641,12 +657,12 @@ export default function Home() {
                     k.startsWith("waku_") || // Clear ALL Waku/messaging data
                     k.startsWith("shout_") || // Clear group data
                     k === AUTH_CREDENTIALS_KEY ||
-                    k === SOLANA_AUTH_CREDENTIALS_KEY,
+                    k === SOLANA_AUTH_CREDENTIALS_KEY
             );
             keysToRemove.forEach((k) => localStorage.removeItem(k));
             console.log(
                 "[Logout] Cleared localStorage keys:",
-                keysToRemove.length,
+                keysToRemove.length
             );
         } catch (e) {
             console.error("[Logout] Clear storage error:", e);
@@ -685,7 +701,7 @@ export default function Home() {
                     k.includes("walletconnect") ||
                     k.includes("wallet") ||
                     k === AUTH_CREDENTIALS_KEY ||
-                    k === SOLANA_AUTH_CREDENTIALS_KEY,
+                    k === SOLANA_AUTH_CREDENTIALS_KEY
             );
             console.log("[Recovery] Removing keys:", keysToRemove.length);
             keysToRemove.forEach((k) => {
@@ -695,7 +711,7 @@ export default function Home() {
 
             // Also clear session storage (except the disconnect flag)
             const sessionKeysToRemove = Object.keys(sessionStorage).filter(
-                (k) => k !== "wallet_intentionally_disconnected",
+                (k) => k !== "wallet_intentionally_disconnected"
             );
             sessionKeysToRemove.forEach((k) => sessionStorage.removeItem(k));
 
@@ -718,6 +734,11 @@ export default function Home() {
         window.location.reload();
     };
 
+    // Offline: show friendly screen instead of black/loading or redirect to login
+    if (mounted && !isOnline) {
+        return <OfflineScreen onRetry={() => setIsOnline(navigator.onLine)} />;
+    }
+
     // Show loading splash while checking auth
     if (isCheckingAuth) {
         // Determine appropriate loading message
@@ -739,7 +760,9 @@ export default function Home() {
             <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
                 <div className="flex flex-col items-center justify-center text-center max-w-md">
                     <div
-                        className={`mb-4 ${showRecovery ? "" : "animate-pulse"}`}
+                        className={`mb-4 ${
+                            showRecovery ? "" : "animate-pulse"
+                        }`}
                     >
                         <SpritzLogo
                             size="2xl"
@@ -839,16 +862,16 @@ export default function Home() {
                                     // Track failure for manual attempts too
                                     const currentFailures =
                                         failedSignInAttempts.current.get(
-                                            walletAddress.toLowerCase(),
+                                            walletAddress.toLowerCase()
                                         ) || 0;
                                     failedSignInAttempts.current.set(
                                         walletAddress.toLowerCase(),
-                                        currentFailures + 1,
+                                        currentFailures + 1
                                     );
                                 } else if (success && walletAddress) {
                                     // Success - clear failures
                                     failedSignInAttempts.current.delete(
-                                        walletAddress.toLowerCase(),
+                                        walletAddress.toLowerCase()
                                     );
                                     hasAutoSignInFailed.current = false;
                                 }
