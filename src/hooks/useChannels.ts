@@ -167,6 +167,10 @@ export function useChannels(userAddress: string | null) {
             poapEventId?: number;
             poapEventName?: string;
             poapImageUrl?: string;
+            /** Create a POAP Collection-linked channel; one channel per POAP collection */
+            poapCollectionId?: number;
+            poapCollectionName?: string;
+            poapCollectionImageUrl?: string;
         }) => {
             if (!userAddress) return null;
 
@@ -179,7 +183,8 @@ export function useChannels(userAddress: string | null) {
                         ...params,
                         creatorAddress: userAddress,
                         messagingType:
-                            params.poapEventId != null
+                            params.poapEventId != null ||
+                            params.poapCollectionId != null
                                 ? "waku"
                                 : params.messagingType || "standard",
                     }),

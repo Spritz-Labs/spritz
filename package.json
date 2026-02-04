@@ -26,6 +26,7 @@
         "@huddle01/web-core": "^2.6.4",
         "@livepeer/react": "^4.3.6",
         "@metamask/sdk": "^0.33.1",
+        "@poap-xyz/poap-sdk": "^0.22.0",
         "@react-three/drei": "^10.7.7",
         "@react-three/fiber": "^9.4.2",
         "@reown/appkit": "^1.8.14",

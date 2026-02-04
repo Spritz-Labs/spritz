@@ -110,7 +110,7 @@ export async function POST(
         // Check if channel exists and if it's a POAP channel
         const { data: channel } = await supabase
             .from("shout_public_channels")
-            .select("id, name, poap_event_id")
+            .select("id, name, poap_event_id, poap_collection_id")
             .eq("id", id)
             .single();
 
@@ -126,6 +126,12 @@ export async function POST(
             typeof channel.poap_event_id === "number" &&
             !Number.isNaN(channel.poap_event_id)
                 ? channel.poap_event_id
+                : null;
+        const poapCollectionId =
+            channel.poap_collection_id != null &&
+            typeof channel.poap_collection_id === "number" &&
+            !Number.isNaN(channel.poap_collection_id)
+                ? channel.poap_collection_id
                 : null;
 
         if (poapEventId !== null) {
@@ -199,6 +205,99 @@ export async function POST(
                 return NextResponse.json(
                     {
                         error: "You need this POAP to join this channel. Hold the POAP in your wallet to join.",
+                    },
+                    { status: 403 }
+                );
+            }
+        }
+
+        // POAP collection channel: user must hold at least one POAP in the collection
+        if (poapCollectionId !== null) {
+            const apiKey = process.env.POAP_API_KEY;
+            if (!apiKey) {
+                return NextResponse.json(
+                    {
+                        error: "POAP verification is not configured. You need a POAP from this collection to join.",
+                    },
+                    { status: 403 }
+                );
+            }
+            const { PoapCompass } = await import("@poap-xyz/poap-sdk");
+            const { CollectionsClient } = await import("@poap-xyz/poap-sdk");
+            const compass = new PoapCompass({ apiKey });
+            const collectionsClient = new CollectionsClient(compass);
+            const collection = await collectionsClient.get(poapCollectionId);
+            if (!collection) {
+                return NextResponse.json(
+                    { error: "Collection not found" },
+                    { status: 500 }
+                );
+            }
+            let dropIds: number[] = [];
+            try {
+                dropIds = collection.dropIds ?? [];
+            } catch {
+                // dropIds only when fetched with get()
+            }
+            const addressesToCheckCol: string[] = [normalizedAddress];
+            const originalTrimmed =
+                typeof userAddress === "string"
+                    ? userAddress.trim().toLowerCase()
+                    : "";
+            if (
+                originalTrimmed &&
+                originalTrimmed !== normalizedAddress &&
+                !addressesToCheckCol.includes(originalTrimmed)
+            ) {
+                addressesToCheckCol.push(originalTrimmed);
+            }
+            let userRow: { smart_wallet_address: string | null } | null = null;
+            const { data: userData } = await supabase
+                .from("shout_users")
+                .select("smart_wallet_address")
+                .eq("wallet_address", normalizedAddress)
+                .maybeSingle();
+            userRow = userData;
+            if (
+                userRow?.smart_wallet_address &&
+                userRow.smart_wallet_address.toLowerCase() !== normalizedAddress
+            ) {
+                const smart = userRow.smart_wallet_address.toLowerCase();
+                if (!addressesToCheckCol.includes(smart)) {
+                    addressesToCheckCol.push(smart);
+                }
+            }
+            const userEventIds = new Set<number>();
+            for (const addr of addressesToCheckCol) {
+                const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(addr)}`;
+                const scanRes = await fetch(scanUrl, {
+                    headers: { "X-API-Key": apiKey },
+                    next: { revalidate: 60 },
+                });
+                if (!scanRes.ok) continue;
+                const rawList = await scanRes.json();
+                const list = Array.isArray(rawList)
+                    ? rawList
+                    : rawList?.tokens ?? rawList?.poaps ?? [];
+                for (const item of list) {
+                    const event = item?.event ?? item;
+                    const eventId =
+                        typeof event?.id === "number"
+                            ? event.id
+                            : typeof event?.id === "string"
+                            ? parseInt(event.id, 10)
+                            : null;
+                    if (eventId != null && !Number.isNaN(eventId)) {
+                        userEventIds.add(eventId);
+                    }
+                }
+            }
+            const hasOverlap = dropIds.some((d) => userEventIds.has(d));
+            if (!hasOverlap) {
+                return NextResponse.json(
+                    {
+                        error:
+                            "You need at least one POAP from this collection to join. Hold a POAP in the collection in your wallet to join.",
                     },
                     { status: 403 }
                 );

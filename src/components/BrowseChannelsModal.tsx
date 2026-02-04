@@ -7,6 +7,7 @@ import type { PublicChannel } from "@/app/api/channels/route";
 import { ChannelIcon } from "./ChannelIcon";
 import { ImageViewerModal } from "./ImageViewerModal";
 import type { PoapEventWithChannel } from "@/app/api/poap/events-with-channels/route";
+import type { PoapCollectionForUser } from "@/app/api/poap/collections-for-user/route";
 
 function showToast(message: string, type: "success" | "neutral" = "success") {
     const toast = document.createElement("div");
@@ -88,6 +89,14 @@ export function BrowseChannelsModal({
     const [poapLoading, setPoapLoading] = useState(false);
     const [poapError, setPoapError] = useState<string | null>(null);
     const [creatingPoapEventId, setCreatingPoapEventId] = useState<
+        number | null
+    >(null);
+    const [poapCollections, setPoapCollections] = useState<
+        PoapCollectionForUser[]
+    >([]);
+    const [poapCollectionsLoading, setPoapCollectionsLoading] =
+        useState(false);
+    const [creatingPoapCollectionId, setCreatingPoapCollectionId] = useState<
         number | null
     >(null);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
@@ -173,11 +182,38 @@ export function BrowseChannelsModal({
         }
     }, [userAddress, addressesForPoap]);
 
+    const fetchPoapCollections = useCallback(async () => {
+        if (!addressesForPoap.length || !userAddress) {
+            setPoapCollections([]);
+            return;
+        }
+        setPoapCollectionsLoading(true);
+        try {
+            const params = new URLSearchParams();
+            params.set("addresses", addressesForPoap.join(","));
+            params.set("memberAddress", userAddress);
+            const res = await fetch(
+                `/api/poap/collections-for-user?${params.toString()}`
+            );
+            const data = await res.json();
+            if (res.ok) {
+                setPoapCollections(data.collections ?? []);
+            } else {
+                setPoapCollections([]);
+            }
+        } catch {
+            setPoapCollections([]);
+        } finally {
+            setPoapCollectionsLoading(false);
+        }
+    }, [userAddress, addressesForPoap]);
+
     useEffect(() => {
         if (isOpen && view === "poap") {
             fetchPoapEvents();
+            fetchPoapCollections();
         }
-    }, [isOpen, view, fetchPoapEvents]);
+    }, [isOpen, view, fetchPoapEvents, fetchPoapCollections]);
 
     const filteredPoapEvents = useMemo(() => {
         if (!debouncedSearch.trim()) return poapEvents;
@@ -257,6 +293,39 @@ export function BrowseChannelsModal({
             );
         } finally {
             setCreatingPoapEventId(null);
+        }
+    };
+
+    const handleCreatePoapCollectionChannel = async (
+        col: PoapCollectionForUser
+    ) => {
+        setCreatingPoapCollectionId(col.id);
+        setPoapError(null);
+        try {
+            const channel = await createChannel({
+                name: col.title,
+                poapCollectionId: col.id,
+                poapCollectionName: col.title,
+                poapCollectionImageUrl:
+                    col.logoImageUrl ?? col.bannerImageUrl ?? undefined,
+            });
+            if (channel) {
+                showToast("✓ Channel created");
+                onJoinChannel(channel as PublicChannel);
+                setPoapCollections((prev) =>
+                    prev.map((c) =>
+                        c.id === col.id
+                            ? { ...c, channel: { ...channel, is_member: true } }
+                            : c
+                    )
+                );
+            }
+        } catch (e) {
+            setPoapError(
+                e instanceof Error ? e.message : "Failed to create channel"
+            );
+        } finally {
+            setCreatingPoapCollectionId(null);
         }
     };
 
@@ -456,6 +525,162 @@ export function BrowseChannelsModal({
                         <div className="p-3 sm:p-4 overflow-y-auto overflow-x-hidden flex-1 min-h-0 min-w-0 overscroll-contain">
                             {view === "poap" ? (
                                 <>
+                                    {/* Collections (user holds at least one POAP in collection) */}
+                                    {(poapCollectionsLoading ||
+                                        poapCollections.length > 0) && (
+                                        <div className="mb-4">
+                                            <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2">
+                                                Collections you can join
+                                            </p>
+                                            {poapCollectionsLoading ? (
+                                                <div className="grid gap-2">
+                                                    {[1, 2].map((i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="p-2.5 sm:p-4 bg-zinc-800/50 rounded-xl flex flex-row items-start gap-2 sm:gap-3 min-w-0"
+                                                        >
+                                                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 animate-pulse shrink-0" />
+                                                            <div className="flex-1 min-w-0 space-y-2">
+                                                                <div className="h-4 bg-zinc-700 rounded animate-pulse w-3/4" />
+                                                                <div className="h-3 bg-zinc-700/80 rounded animate-pulse w-1/2" />
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="grid gap-3 min-w-0">
+                                                    {poapCollections.map(
+                                                        (col) => (
+                                                            <motion.div
+                                                                key={col.id}
+                                                                initial={{
+                                                                    opacity: 0,
+                                                                    y: 10,
+                                                                }}
+                                                                animate={{
+                                                                    opacity: 1,
+                                                                    y: 0,
+                                                                }}
+                                                                className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
+                                                            >
+                                                                <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
+                                                                    {col.logoImageUrl ||
+                                                                    col.bannerImageUrl ? (
+                                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl overflow-hidden shrink-0 ring-1 ring-zinc-600 mt-0.5">
+                                                                            <img
+                                                                                src={
+                                                                                    (col.logoImageUrl ??
+                                                                                        col.bannerImageUrl) +
+                                                                                    "?size=small"
+                                                                                }
+                                                                                alt=""
+                                                                                className="w-full h-full object-cover"
+                                                                            />
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-zinc-700 flex items-center justify-center text-xl sm:text-2xl shrink-0 mt-0.5">
+                                                                            📚
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex-1 min-w-0 pr-2">
+                                                                        <p
+                                                                            className="text-white font-medium truncate text-sm sm:text-base leading-tight"
+                                                                            title={
+                                                                                col.title
+                                                                            }
+                                                                        >
+                                                                            {
+                                                                                col.title
+                                                                            }
+                                                                        </p>
+                                                                        <p className="text-zinc-500 text-[11px] sm:text-xs mt-0.5 truncate">
+                                                                            {col.dropsCount}{" "}
+                                                                            POAPs
+                                                                            in
+                                                                            collection
+                                                                            {col.channel
+                                                                                ? ` • ${Number((col.channel as { member_count?: number }).member_count ?? 0)} members${col.channel.is_member ? " • You're in" : ""}`
+                                                                                : " • No channel yet"}
+                                                                        </p>
+                                                                    </div>
+                                                                    {col.channel ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                col.channel!.is_member
+                                                                                    ? onJoinChannel(
+                                                                                          col.channel as PublicChannel
+                                                                                      )
+                                                                                    : handleJoin(
+                                                                                          col.channel as PublicChannel
+                                                                                      )
+                                                                            }
+                                                                            disabled={
+                                                                                joiningChannel ===
+                                                                                col.channel!.id
+                                                                            }
+                                                                            className={`shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 ${
+                                                                                col.channel!.is_member
+                                                                                    ? "bg-zinc-700 text-zinc-300 hover:bg-orange-500/20 hover:text-orange-400"
+                                                                                    : "bg-[#FF5500] text-white hover:bg-[#FF6600]"
+                                                                            }`}
+                                                                        >
+                                                                            {joiningChannel ===
+                                                                            col.channel!.id ? (
+                                                                                <span className="animate-pulse">
+                                                                                    ...
+                                                                                </span>
+                                                                            ) : col.channel!.is_member ? (
+                                                                                "Open"
+                                                                            ) : (
+                                                                                "Join"
+                                                                            )}
+                                                                        </button>
+                                                                    ) : (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() =>
+                                                                                handleCreatePoapCollectionChannel(
+                                                                                    col
+                                                                                )
+                                                                            }
+                                                                            disabled={
+                                                                                creatingPoapCollectionId ===
+                                                                                col.id
+                                                                            }
+                                                                            className="shrink-0 self-start py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg text-xs sm:text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:opacity-50"
+                                                                        >
+                                                                            {creatingPoapCollectionId ===
+                                                                            col.id ? (
+                                                                                <span className="animate-pulse">
+                                                                                    Creating...
+                                                                                </span>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <span className="sm:hidden">
+                                                                                        Create
+                                                                                    </span>
+                                                                                    <span className="hidden sm:inline">
+                                                                                        Create
+                                                                                        channel
+                                                                                    </span>
+                                                                                </>
+                                                                            )}
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </motion.div>
+                                                        )
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {poapCollections.length > 0 && !poapCollectionsLoading && (
+                                        <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-2 mt-2">
+                                            POAPs you hold
+                                        </p>
+                                    )}
                                     {poapLoading ? (
                                         <div className="grid gap-3 min-w-0">
                                             {[1, 2, 3, 4].map((i) => (

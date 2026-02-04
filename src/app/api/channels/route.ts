@@ -33,6 +33,10 @@ export type PublicChannel = {
     poap_event_id?: number | null;
     poap_event_name?: string | null;
     poap_image_url?: string | null;
+    // POAP Collection-linked channel (one channel per POAP collection)
+    poap_collection_id?: number | null;
+    poap_collection_name?: string | null;
+    poap_collection_image_url?: string | null;
 };
 
 // GET /api/channels - List all public channels (optional: ?poapEventId= for channel by POAP event)
@@ -171,17 +175,24 @@ export async function POST(request: NextRequest) {
             poapEventId,
             poapEventName,
             poapImageUrl,
+            poapCollectionId,
+            poapCollectionName,
+            poapCollectionImageUrl,
         } = body;
 
-        // POAP channels always use Waku/Logos
+        // POAP event/collection channels always use Waku/Logos
         const messagingType =
-            poapEventId != null ? "waku" : bodyMessagingType ?? "standard";
+            poapEventId != null || poapCollectionId != null
+                ? "waku"
+                : bodyMessagingType ?? "standard";
 
         // Use session address, fall back to body for backward compatibility
         const creatorAddress = session?.userAddress || bodyCreatorAddress;
 
         const hasName = name && String(name).trim();
-        const hasPoap = poapEventId != null && (poapEventName || name);
+        const hasPoap =
+            (poapEventId != null && (poapEventName || name)) ||
+            (poapCollectionId != null && (poapCollectionName || name));
         if (!creatorAddress) {
             return NextResponse.json(
                 { error: "Authentication is required" },
@@ -212,12 +223,23 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // For POAP channels: unique name and link to POAP event
-        const isPoapChannel =
+        // For POAP event channels: unique name and link to POAP event
+        const isPoapEventChannel =
             poapEventId != null &&
             typeof poapEventId === "number" &&
             !Number.isNaN(poapEventId);
-        const baseName = (name || poapEventName || "").trim() || "POAP";
+        // For POAP collection channels: one channel per collection
+        const isPoapCollectionChannel =
+            poapCollectionId != null &&
+            typeof poapCollectionId === "number" &&
+            !Number.isNaN(poapCollectionId);
+        const isPoapChannel = isPoapEventChannel || isPoapCollectionChannel;
+        const baseName = (
+            name ||
+            poapEventName ||
+            poapCollectionName ||
+            ""
+        ).trim() || (isPoapCollectionChannel ? "Collection" : "POAP");
         const sanitizedName = sanitizeInput(
             isPoapChannel ? `POAP: ${baseName}` : baseName,
             INPUT_LIMITS.SHORT_TEXT
@@ -225,7 +247,9 @@ export async function POST(request: NextRequest) {
         const sanitizedDescription = description
             ? sanitizeInput(description, INPUT_LIMITS.MEDIUM_TEXT)
             : isPoapChannel
-            ? `Community channel for holders of this POAP.`
+            ? isPoapCollectionChannel
+                ? "Community channel for holders of POAPs in this collection."
+                : "Community channel for holders of this POAP."
             : null;
 
         // Check if channel name already exists
@@ -242,8 +266,8 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // POAP: at most one channel per POAP event
-        if (isPoapChannel) {
+        // POAP event: at most one channel per POAP event
+        if (isPoapEventChannel) {
             const { data: existingByPoap } = await supabase
                 .from("shout_public_channels")
                 .select("id, name")
@@ -254,6 +278,23 @@ export async function POST(request: NextRequest) {
                     {
                         error: "A channel for this POAP already exists",
                         existingChannelId: existingByPoap.id,
+                    },
+                    { status: 400 }
+                );
+            }
+        }
+        // POAP collection: at most one channel per POAP collection
+        if (isPoapCollectionChannel) {
+            const { data: existingByCol } = await supabase
+                .from("shout_public_channels")
+                .select("id, name")
+                .eq("poap_collection_id", poapCollectionId)
+                .maybeSingle();
+            if (existingByCol) {
+                return NextResponse.json(
+                    {
+                        error: "A channel for this collection already exists",
+                        existingChannelId: existingByCol.id,
                     },
                     { status: 400 }
                 );
@@ -272,7 +313,7 @@ export async function POST(request: NextRequest) {
             messaging_type: messagingType,
         };
 
-        if (isPoapChannel) {
+        if (isPoapEventChannel) {
             channelData.poap_event_id = poapEventId;
             channelData.poap_event_name =
                 typeof poapEventName === "string" ? poapEventName.trim() : null;
@@ -282,6 +323,20 @@ export async function POST(request: NextRequest) {
                     : null;
             channelData.poap_image_url = poapImg;
             channelData.icon_url = poapImg;
+        }
+        if (isPoapCollectionChannel) {
+            channelData.poap_collection_id = poapCollectionId;
+            channelData.poap_collection_name =
+                typeof poapCollectionName === "string"
+                    ? poapCollectionName.trim()
+                    : null;
+            const colImg =
+                typeof poapCollectionImageUrl === "string" &&
+                poapCollectionImageUrl.trim()
+                    ? poapCollectionImageUrl.trim()
+                    : null;
+            channelData.poap_collection_image_url = colImg;
+            if (colImg && !channelData.icon_url) channelData.icon_url = colImg;
         }
 
         // For Waku channels, generate encryption key and content topic
