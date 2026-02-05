@@ -78,6 +78,7 @@ import { usePoints } from "@/hooks/usePoints";
 import { useUserInvites } from "@/hooks/useUserInvites";
 import { EmailVerificationModal } from "./EmailVerificationModal";
 import { InvitesModal } from "./InvitesModal";
+import { WelcomeModal } from "./WelcomeModal";
 import { AlphaChatModal } from "./AlphaChatModal";
 import { useAlphaChat } from "@/hooks/useAlphaChat";
 import { Leaderboard } from "./Leaderboard";
@@ -420,6 +421,8 @@ function DashboardContent({
         claimDailyBonus,
         isClaimingBonus,
         dismissDailyBonus,
+        showWelcome,
+        dismissWelcome,
     } = useLoginTracking({
         walletAddress: userAddress,
         walletType: actualAuthMethod,
@@ -6329,6 +6332,14 @@ function DashboardContent({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Welcome Modal for New Users */}
+            <WelcomeModal
+                isOpen={showWelcome}
+                onClose={dismissWelcome}
+                onSendFriendRequest={sendFriendRequest}
+                userAddress={userAddress}
+            />
 
             {/* Toast Notification for New Messages */}
             <AnimatePresence>

@@ -1107,9 +1107,12 @@ export function ChannelChatModal({
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
             const target = e.target as HTMLElement;
+            // Don't deselect when clicking on input areas to prevent focus/cursor issues
             if (
                 !target.closest("[data-message-actions]") &&
-                !target.closest("[data-message-bubble]")
+                !target.closest("[data-message-bubble]") &&
+                !target.closest("textarea") &&
+                !target.closest("input")
             ) {
                 setSelectedMessage(null);
                 setShowReactionPicker(null);

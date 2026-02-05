@@ -12,6 +12,7 @@ type LoginTrackingParams = {
 
 const TRACKING_KEY = "spritz_last_login_track";
 const DAILY_BONUS_DISMISSED_KEY = "spritz_daily_bonus_dismissed";
+const WELCOME_SEEN_KEY = "spritz_welcome_seen";
 
 export function useLoginTracking({
     walletAddress,
@@ -24,6 +25,7 @@ export function useLoginTracking({
     const hasFetchedBonus = useRef(false); // Prevent double fetching
     const [dailyBonusAvailable, setDailyBonusAvailable] = useState(false);
     const [isClaimingBonus, setIsClaimingBonus] = useState(false);
+    const [showWelcome, setShowWelcome] = useState(false);
 
     // Check if daily bonus was already dismissed today
     const wasDismissedToday = useCallback((): boolean => {
@@ -46,6 +48,28 @@ export function useLoginTracking({
             date: today,
             address: walletAddress.toLowerCase(),
         }));
+    }, [walletAddress]);
+
+    // Check if welcome message was already seen
+    const wasWelcomeSeen = useCallback((): boolean => {
+        try {
+            const seen = localStorage.getItem(WELCOME_SEEN_KEY);
+            if (!seen) return false;
+            const data = JSON.parse(seen);
+            return data.address === walletAddress?.toLowerCase();
+        } catch {
+            return false;
+        }
+    }, [walletAddress]);
+
+    // Mark welcome as seen
+    const dismissWelcome = useCallback(() => {
+        if (!walletAddress) return;
+        localStorage.setItem(WELCOME_SEEN_KEY, JSON.stringify({
+            address: walletAddress.toLowerCase(),
+            timestamp: Date.now(),
+        }));
+        setShowWelcome(false);
     }, [walletAddress]);
 
     const trackLogin = useCallback(async () => {
@@ -99,6 +123,11 @@ export function useLoginTracking({
                 setDailyBonusAvailable(true);
             }
 
+            // Show welcome message for new users (only if not seen before)
+            if (data.isNewUser && !wasWelcomeSeen()) {
+                setShowWelcome(true);
+            }
+
             // Save tracking timestamp
             localStorage.setItem(
                 TRACKING_KEY,
@@ -108,11 +137,11 @@ export function useLoginTracking({
                 })
             );
 
-            console.log("[Login] Tracked user login:", walletAddress, "dailyBonus:", data.dailyBonusAvailable);
+            console.log("[Login] Tracked user login:", walletAddress, "isNewUser:", data.isNewUser, "dailyBonus:", data.dailyBonusAvailable);
         } catch (error) {
             console.error("[Login] Failed to track login:", error);
         }
-    }, [walletAddress, walletType, chain, ensName, username, wasDismissedToday]);
+    }, [walletAddress, walletType, chain, ensName, username, wasDismissedToday, wasWelcomeSeen]);
 
     // Check daily bonus availability
     const checkDailyBonus = useCallback(async () => {
@@ -187,6 +216,8 @@ export function useLoginTracking({
         isClaimingBonus,
         checkDailyBonus,
         dismissDailyBonus, // Export so Dashboard can call it when user dismisses modal
+        showWelcome,
+        dismissWelcome,
     };
 }
 
