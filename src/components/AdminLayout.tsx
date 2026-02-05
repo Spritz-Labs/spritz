@@ -18,6 +18,12 @@ const NAV_ITEMS = [
     { href: "/admin", label: "Invites", icon: "🎟️", mobileLabel: "Invites" },
     { href: "/admin/users", label: "Users", icon: "👥", mobileLabel: "Users" },
     {
+        href: "/admin/chats",
+        label: "Chats",
+        icon: "💬",
+        mobileLabel: "Chats",
+    },
+    {
         href: "/admin/events",
         label: "Events",
         icon: "📅",
@@ -32,8 +38,8 @@ const NAV_ITEMS = [
     {
         href: "/admin/agent-chats",
         label: "Agent Chats",
-        icon: "💬",
-        mobileLabel: "Agent Chats",
+        icon: "🤖",
+        mobileLabel: "AI Chats",
     },
     {
         href: "/admin/bug-reports",

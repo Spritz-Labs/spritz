@@ -101,6 +101,7 @@ import { UserCardModal } from "./UserCardModal";
 import { LocationChatPicker } from "./LocationChatPicker";
 import { LocationChatModal } from "./LocationChatModal";
 import { type LocationChat } from "@/hooks/useLocationChat";
+import type { JoinedLocationChat } from "@/app/api/location-chats/joined/route";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -1049,6 +1050,28 @@ function DashboardContent({
         useState<PublicChannel | null>(null);
     const [selectedLocationChat, setSelectedLocationChat] =
         useState<LocationChat | null>(null);
+    const [joinedLocationChats, setJoinedLocationChats] = useState<JoinedLocationChat[]>([]);
+
+    // Fetch joined location chats
+    const fetchJoinedLocationChats = useCallback(async () => {
+        if (!userAddress) return;
+        try {
+            const res = await fetch("/api/location-chats/joined");
+            if (res.ok) {
+                const data = await res.json();
+                setJoinedLocationChats(data.chats || []);
+            }
+        } catch (err) {
+            console.error("[Dashboard] Failed to fetch joined location chats:", err);
+        }
+    }, [userAddress]);
+
+    // Fetch location chats on mount and when userAddress changes
+    useEffect(() => {
+        if (userAddress) {
+            fetchJoinedLocationChats();
+        }
+    }, [userAddress, fetchJoinedLocationChats]);
 
     // Global chat icon from app settings
     const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(
@@ -1695,6 +1718,40 @@ function DashboardContent({
             });
         });
 
+        // Add joined location chats
+        joinedLocationChats.forEach((locChat) => {
+            const locationKey = `location-${locChat.id}`;
+            const lastMsgTime = lastMessageTimes[locationKey];
+            const lastMessageAt = lastMsgTime
+                ? toValidLastMessageAt(lastMsgTime)
+                : locChat.last_message_at
+                ? toValidLastMessageAt(locChat.last_message_at)
+                : toValidLastMessageAt(locChat.joined_at);
+            items.push({
+                id: locationKey,
+                type: "location",
+                name: locChat.name,
+                avatar: null,
+                lastMessage:
+                    lastMessagePreviews[locationKey] ||
+                    locChat.last_message_preview ||
+                    locChat.google_place_name ||
+                    `${locChat.member_count} members`,
+                lastMessageAt,
+                unreadCount: 0,
+                isPinned: pinnedIds.has(locationKey),
+                metadata: {
+                    memberCount: locChat.member_count,
+                    isPublic: true,
+                    googlePlaceName: locChat.google_place_name || undefined,
+                    googlePlaceAddress: locChat.google_place_address || undefined,
+                    latitude: locChat.latitude,
+                    longitude: locChat.longitude,
+                    emoji: locChat.emoji,
+                },
+            });
+        });
+
         return items;
     }, [
         friendsListData,
@@ -1703,6 +1760,7 @@ function DashboardContent({
         lastMessagePreviews,
         joinedChannels,
         groups,
+        joinedLocationChats,
         pinnedIds,
         alphaUnreadCount,
         isAlphaMember,
@@ -2783,9 +2841,36 @@ function DashboardContent({
                     }
                     break;
                 }
+                case "location": {
+                    const locationId = chat.id.replace("location-", "");
+                    const locChat = joinedLocationChats.find(
+                        (lc) => lc.id === locationId
+                    );
+                    if (locChat) {
+                        // Convert JoinedLocationChat to LocationChat format for the modal
+                        setSelectedLocationChat({
+                            id: locChat.id,
+                            name: locChat.name,
+                            description: locChat.description ?? undefined,
+                            emoji: locChat.emoji,
+                            member_count: locChat.member_count,
+                            message_count: locChat.message_count,
+                            google_place_id: locChat.google_place_id,
+                            google_place_name: locChat.google_place_name || locChat.name,
+                            google_place_address: locChat.google_place_address ?? undefined,
+                            google_place_rating: locChat.google_place_rating ?? undefined,
+                            latitude: locChat.latitude,
+                            longitude: locChat.longitude,
+                            created_at: locChat.created_at,
+                            is_active: true,
+                            creator_address: "", // Not available in joined list
+                        });
+                    }
+                    break;
+                }
             }
         },
-        [friendsListData, joinedChannels, groups, markAsRead, userAddress]
+        [friendsListData, joinedChannels, groups, joinedLocationChats, markAsRead, userAddress]
     );
 
     const handleUnlockGroupSubmit = async () => {
@@ -5998,6 +6083,7 @@ function DashboardContent({
                 onJoinLocationChat={(chat) => {
                     setIsBrowseChannelsOpen(false);
                     setBrowseChannelsInitialCreate(false);
+                    fetchJoinedLocationChats();
                     setSelectedLocationChat(chat);
                 }}
                 initialShowCreate={browseChannelsInitialCreate}
@@ -6006,10 +6092,14 @@ function DashboardContent({
             {/* Location Chat Picker */}
             <LocationChatPicker
                 isOpen={showLocationChatPicker}
-                onClose={() => setShowLocationChatPicker(false)}
+                onClose={() => {
+                    setShowLocationChatPicker(false);
+                    fetchJoinedLocationChats();
+                }}
                 onChatCreated={(chat) => {
                     console.log("[Dashboard] Location chat created/joined:", chat.name);
                     setShowLocationChatPicker(false);
+                    fetchJoinedLocationChats();
                     setSelectedLocationChat(chat as LocationChat);
                 }}
             />
@@ -6019,7 +6109,11 @@ function DashboardContent({
                 <LocationChatModal
                     key={selectedLocationChat.id}
                     isOpen={!!selectedLocationChat}
-                    onClose={() => setSelectedLocationChat(null)}
+                    onClose={() => {
+                        setSelectedLocationChat(null);
+                        // Refresh the joined location chats list
+                        fetchJoinedLocationChats();
+                    }}
                     locationChat={selectedLocationChat}
                     userAddress={userAddress}
                     getUserInfo={getAlphaUserInfo}

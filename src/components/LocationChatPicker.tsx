@@ -66,29 +66,82 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
     const [error, setError] = useState<string | null>(null);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);
+    const [locationErrorCode, setLocationErrorCode] = useState<number | null>(null);
+    const [isRequestingLocation, setIsRequestingLocation] = useState(false);
     const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
     
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Get user's location on mount
-    useEffect(() => {
-        if (isOpen && !userLocation) {
+    // Function to request location with better error handling
+    const requestLocation = useCallback(() => {
+        if (!navigator.geolocation) {
+            setLocationError("Geolocation is not supported by your browser");
+            setLocationErrorCode(-1);
+            return;
+        }
+
+        setIsRequestingLocation(true);
+        setLocationError(null);
+        setLocationErrorCode(null);
+
+        // Try with high accuracy first, then fall back to lower accuracy
+        const tryGetLocation = (highAccuracy: boolean, timeout: number) => {
             navigator.geolocation.getCurrentPosition(
                 (position) => {
+                    console.log("[LocationChatPicker] Got location:", position.coords);
                     setUserLocation({
                         lat: position.coords.latitude,
                         lng: position.coords.longitude,
                     });
+                    setLocationError(null);
+                    setLocationErrorCode(null);
+                    setIsRequestingLocation(false);
                 },
                 (err) => {
-                    console.error("[LocationChatPicker] Geolocation error:", err);
-                    setLocationError("Enable location access to find nearby places");
+                    console.error("[LocationChatPicker] Geolocation error:", err.code, err.message);
+                    
+                    // If high accuracy failed due to timeout, try with low accuracy
+                    if (highAccuracy && err.code === 3) {
+                        console.log("[LocationChatPicker] Retrying with low accuracy...");
+                        tryGetLocation(false, 30000);
+                        return;
+                    }
+
+                    setIsRequestingLocation(false);
+                    setLocationErrorCode(err.code);
+                    
+                    switch (err.code) {
+                        case 1: // PERMISSION_DENIED
+                            setLocationError("Location access was denied. Please enable it in your browser settings.");
+                            break;
+                        case 2: // POSITION_UNAVAILABLE
+                            setLocationError("Unable to determine your location. Please try again.");
+                            break;
+                        case 3: // TIMEOUT
+                            setLocationError("Location request timed out. Please check your connection and try again.");
+                            break;
+                        default:
+                            setLocationError("An error occurred while getting your location.");
+                    }
                 },
-                { enableHighAccuracy: true, timeout: 10000 }
+                { 
+                    enableHighAccuracy: highAccuracy, 
+                    timeout: timeout,
+                    maximumAge: 60000 // Accept cached position up to 1 minute old
+                }
             );
+        };
+
+        tryGetLocation(true, 15000);
+    }, []);
+
+    // Get user's location on mount
+    useEffect(() => {
+        if (isOpen && !userLocation && !isRequestingLocation && !locationError) {
+            requestLocation();
         }
-    }, [isOpen, userLocation]);
+    }, [isOpen, userLocation, isRequestingLocation, locationError, requestLocation]);
 
     // Focus input when opened
     useEffect(() => {
@@ -301,18 +354,41 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
 
                         {/* Content */}
                         <div className="flex-1 overflow-y-auto">
-                            {/* Location Error */}
-                            {locationError && (
-                                <div className="p-4 m-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                            {/* Location Loading */}
+                            {isRequestingLocation && !userLocation && (
+                                <div className="p-4 m-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
                                     <div className="flex items-center gap-3">
-                                        <svg className="w-5 h-5 text-amber-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                                        <div>
+                                            <p className="text-blue-400 text-sm font-medium">Getting your location...</p>
+                                            <p className="text-blue-400/70 text-xs mt-1">
+                                                This may take a few seconds
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Location Error */}
+                            {locationError && !isRequestingLocation && (
+                                <div className="p-4 m-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                                    <div className="flex items-start gap-3">
+                                        <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                         </svg>
-                                        <div>
+                                        <div className="flex-1">
                                             <p className="text-amber-400 text-sm font-medium">{locationError}</p>
                                             <p className="text-amber-400/70 text-xs mt-1">
-                                                Location is needed to find nearby places
+                                                {locationErrorCode === 1 
+                                                    ? "Check your browser's address bar for the location icon, or go to Settings > Privacy > Location Services"
+                                                    : "Location is needed to find nearby places"}
                                             </p>
+                                            <button
+                                                onClick={requestLocation}
+                                                className="mt-3 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium rounded-lg transition-colors"
+                                            >
+                                                Try Again
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

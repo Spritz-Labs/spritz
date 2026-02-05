@@ -24,7 +24,7 @@ import {
 } from "recharts";
 
 type Period = "24h" | "7d" | "30d" | "90d" | "365d";
-type SectionTab = "overview" | "users" | "wallets" | "communication" | "agents";
+type SectionTab = "overview" | "users" | "wallets" | "communication" | "chats" | "agents";
 
 type TimeSeriesItem = {
     date: string;
@@ -220,6 +220,7 @@ const SECTION_TABS: { value: SectionTab; label: string; icon: string }[] = [
     { value: "users", label: "Users", icon: "👥" },
     { value: "wallets", label: "Wallets", icon: "💳" },
     { value: "communication", label: "Communication", icon: "📞" },
+    { value: "chats", label: "Chats", icon: "💬" },
     { value: "agents", label: "AI Agents", icon: "🤖" },
 ];
 
@@ -392,6 +393,7 @@ export default function AnalyticsPage() {
                             {activeSection === "users" && <UsersSection data={data} period={selectedPeriod} getDisplayName={getDisplayName} />}
                             {activeSection === "wallets" && <WalletsSection data={data} period={selectedPeriod} />}
                             {activeSection === "communication" && <CommunicationSection data={data} period={selectedPeriod} />}
+                            {activeSection === "chats" && <ChatsSection period={selectedPeriod} />}
                             {activeSection === "agents" && <AgentsSection data={data} period={selectedPeriod} />}
                         </motion.div>
                     </AnimatePresence>
@@ -921,6 +923,209 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
             {data.officialAgentsList?.length > 0 && (
                 <OfficialAgentsIntegration agents={data.officialAgentsList} />
             )}
+        </div>
+    );
+}
+
+// ============================================
+// CHATS SECTION
+// ============================================
+
+type ChatStats = {
+    totalChannels: number;
+    totalLocationChats: number;
+    standardChannels: number;
+    wakuChannels: number;
+    poapEventChannels: number;
+    poapCollectionChannels: number;
+    officialChannels: number;
+    totalMembers: number;
+    totalMessages: number;
+    activeChannels: number;
+    activeLocationChats: number;
+    topChannels: { id: string; name: string; emoji: string; type: string; member_count: number; message_count: number }[];
+    topLocationChats: { id: string; name: string; emoji: string; google_place_name: string; member_count: number; message_count: number }[];
+};
+
+function ChatsSection({ period }: { period: Period }) {
+    const { getAuthHeaders, isReady } = useAdmin();
+    const [stats, setStats] = useState<ChatStats | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        async function fetchChatStats() {
+            if (!isReady) return;
+            const authHeaders = getAuthHeaders();
+            if (!authHeaders) return;
+
+            setIsLoading(true);
+            try {
+                const res = await fetch("/api/admin/chats", { headers: authHeaders });
+                if (res.ok) {
+                    const data = await res.json();
+                    setStats({
+                        ...data.summary,
+                        topChannels: data.channels.slice(0, 10).map((c: { id: string; name: string; emoji: string; type: string; member_count: number; message_count: number }) => ({
+                            id: c.id,
+                            name: c.name,
+                            emoji: c.emoji,
+                            type: c.type,
+                            member_count: c.member_count,
+                            message_count: c.message_count,
+                        })),
+                        topLocationChats: data.locationChats.slice(0, 10).map((c: { id: string; name: string; emoji: string; google_place_name: string; member_count: number; message_count: number }) => ({
+                            id: c.id,
+                            name: c.name,
+                            emoji: c.emoji,
+                            google_place_name: c.google_place_name,
+                            member_count: c.member_count,
+                            message_count: c.message_count,
+                        })),
+                    });
+                }
+            } catch (err) {
+                console.error("[ChatsSection] Error:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        fetchChatStats();
+    }, [isReady, getAuthHeaders]);
+
+    if (isLoading || !stats) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="w-8 h-8 border-4 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
+            </div>
+        );
+    }
+
+    const channelTypeData = [
+        { name: "Standard", value: stats.standardChannels, color: "#3B82F6" },
+        { name: "Decentralized", value: stats.wakuChannels, color: "#8B5CF6" },
+        { name: "POAP Event", value: stats.poapEventChannels, color: "#EC4899" },
+        { name: "POAP Collection", value: stats.poapCollectionChannels, color: "#F59E0B" },
+        { name: "Location", value: stats.totalLocationChats, color: "#EF4444" },
+    ].filter(d => d.value > 0);
+
+    return (
+        <div className="space-y-6">
+            {/* Chat Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <MetricCard label="Total Channels" value={stats.totalChannels} icon="💬" />
+                <MetricCard label="Location Chats" value={stats.totalLocationChats} icon="📍" />
+                <MetricCard label="Standard" value={stats.standardChannels} icon="☁️" />
+                <MetricCard label="Decentralized" value={stats.wakuChannels} icon="🌐" />
+                <MetricCard label="POAP Channels" value={stats.poapEventChannels + stats.poapCollectionChannels} icon="🎫" />
+                <MetricCard label="Official" value={stats.officialChannels} icon="⭐" />
+            </div>
+
+            {/* Engagement Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MetricCard label="Total Members" value={stats.totalMembers} icon="👥" subtext="across all chats" />
+                <MetricCard label="Total Messages" value={stats.totalMessages} icon="📊" subtext="in public chats" />
+                <MetricCard label="Active Channels" value={stats.activeChannels} icon="✅" subtext={`of ${stats.totalChannels}`} />
+                <MetricCard label="Active Locations" value={stats.activeLocationChats} icon="📍" subtext={`of ${stats.totalLocationChats}`} />
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Channel Type Breakdown */}
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Chat Type Distribution</h3>
+                    <div className="h-56">
+                        {channelTypeData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                    <Pie 
+                                        data={channelTypeData} 
+                                        cx="50%" 
+                                        cy="50%" 
+                                        innerRadius={50} 
+                                        outerRadius={80} 
+                                        dataKey="value" 
+                                        nameKey="name"
+                                        label={(props) => {
+                                            const { name, percent } = props as { name?: string; percent?: number };
+                                            return `${name} (${((percent || 0) * 100).toFixed(0)}%)`;
+                                        }}
+                                    >
+                                        {channelTypeData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <p className="text-zinc-500 text-center py-20">No chat data yet</p>
+                        )}
+                    </div>
+                </div>
+
+                {/* Activity Comparison */}
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Top Chats by Activity</h3>
+                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                        {stats.topChannels.slice(0, 5).map((ch, index) => (
+                            <div key={ch.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                                <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
+                                <span className="text-xl">{ch.emoji}</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate text-sm">{ch.name}</p>
+                                    <p className="text-xs text-zinc-500">{ch.type}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm text-blue-400">{ch.member_count} 👥</p>
+                                    <p className="text-xs text-zinc-500">{ch.message_count} msgs</p>
+                                </div>
+                            </div>
+                        ))}
+                        {stats.topChannels.length === 0 && (
+                            <p className="text-zinc-500 text-center py-4">No channels yet</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Top Location Chats */}
+            {stats.topLocationChats.length > 0 && (
+                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">📍 Top Location Chats</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {stats.topLocationChats.slice(0, 6).map((lc, index) => (
+                            <div key={lc.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                                <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
+                                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center text-lg">
+                                    {lc.emoji}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium truncate text-sm">{lc.name}</p>
+                                    <p className="text-xs text-zinc-500 truncate">{lc.google_place_name}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-sm text-red-400">{lc.member_count} 👥</p>
+                                    <p className="text-xs text-zinc-500">{lc.message_count} msgs</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Quick Link to Chats Admin */}
+            <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50 flex items-center justify-between">
+                <div>
+                    <h3 className="font-medium text-white">Manage Public Chats</h3>
+                    <p className="text-sm text-zinc-400">View all channels and location chats, toggle official status, or deactivate</p>
+                </div>
+                <a
+                    href="/admin/chats"
+                    className="px-4 py-2 bg-[#FF5500] hover:bg-[#E04D00] text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                    Go to Chats →
+                </a>
+            </div>
         </div>
     );
 }

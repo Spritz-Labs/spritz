@@ -201,7 +201,7 @@ function CreateFolderModal({
 // Unified chat item that can represent any chat type
 export type UnifiedChatItem = {
     id: string;
-    type: "dm" | "group" | "channel" | "global";
+    type: "dm" | "group" | "channel" | "global" | "location";
     name: string;
     avatar: string | null;
     lastMessage: string | null;
@@ -219,6 +219,12 @@ export type UnifiedChatItem = {
         isPublic?: boolean;
         // For global chat
         isAlpha?: boolean;
+        // For location chats
+        googlePlaceName?: string;
+        googlePlaceAddress?: string;
+        latitude?: number;
+        longitude?: number;
+        emoji?: string;
     };
 };
 
@@ -321,6 +327,28 @@ const getChatTypeIcon = (type: UnifiedChatItem["type"]) => {
                     />
                 </svg>
             );
+        case "location":
+            return (
+                <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                </svg>
+            );
     }
 };
 
@@ -350,7 +378,7 @@ type ChatRowProps = {
     onAssignFolder: (
         chatId: string,
         emoji: string | null,
-        chatType: "dm" | "group" | "channel" | "global"
+        chatType: "dm" | "group" | "channel" | "global" | "location"
     ) => void;
     onCloseFolderPicker: () => void;
     allAvailableFolders: ChatFolder[];
@@ -439,6 +467,8 @@ const ChatRow = memo(
                                         ? "bg-gradient-to-br from-blue-500 to-cyan-500"
                                         : chat.type === "group"
                                         ? "bg-gradient-to-br from-purple-500 to-pink-500"
+                                        : chat.type === "location"
+                                        ? "bg-gradient-to-br from-red-500 to-orange-500"
                                         : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
                                 } ${
                                     chat.unreadCount > 0
@@ -447,7 +477,9 @@ const ChatRow = memo(
                                 }`}
                             >
                                 <span className="text-white font-bold text-base sm:text-lg">
-                                    {chat.name[0]?.toUpperCase() ?? "?"}
+                                    {chat.type === "location" && chat.metadata.emoji
+                                        ? chat.metadata.emoji
+                                        : chat.name[0]?.toUpperCase() ?? "?"}
                                 </span>
                             </div>
                             {chat.type === "dm" && chat.isOnline && (
@@ -1018,7 +1050,7 @@ function UnifiedChatListInner({
         (
             chatId: string,
             emoji: string | null,
-            chatType: "dm" | "group" | "channel" | "global" = "dm"
+            chatType: "dm" | "group" | "channel" | "global" | "location" = "dm"
         ) => {
             if (emoji && emoji !== ARCHIVED_FOLDER_EMOJI) {
                 const folder = allAvailableFolders.find(
