@@ -154,6 +154,9 @@ function DashboardContent({
     // EVM address for hooks that require it
     // For Solana users, pass null to disable EVM-specific features
     const evmAddress = isSolanaUser ? null : (userAddress as `0x${string}`);
+    const { smartWallet } = useSmartWallet(
+        isSolanaUser ? null : (userAddress as string)
+    );
     const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
     const [isUsernameModalOpen, setIsUsernameModalOpen] = useState(false);
     const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
@@ -465,8 +468,13 @@ function DashboardContent({
         trackScheduleCreated,
     } = useAnalytics(userAddress);
 
-    // Check if user is an admin
-    const { isAdmin, isSuperAdmin } = useAdminCheck(userAddress);
+    // Check both primary address and smart wallet so admins work when signing in with either
+    const { isAdmin, isSuperAdmin } = useAdminCheck(
+        userAddress,
+        smartWallet?.smartWalletAddress
+            ? [smartWallet.smartWalletAddress]
+            : undefined
+    );
 
     // Beta access is passed from SIWE auth (or fall back to hook for non-EVM users)
     // Use || so if EITHER source says true, access is granted (more forgiving for cache issues)
@@ -634,8 +642,15 @@ function DashboardContent({
         }
     };
 
-    // Alpha Channel
-    const alphaChat = useAlphaChat(userAddress);
+    // Alpha Channel (check membership for both EOA and smart wallet so passkey users are recognized)
+    const alphaAdditionalAddresses = useMemo(
+        () =>
+            smartWallet?.smartWalletAddress
+                ? [smartWallet.smartWalletAddress]
+                : undefined,
+        [smartWallet?.smartWalletAddress]
+    );
+    const alphaChat = useAlphaChat(userAddress, alphaAdditionalAddresses);
     const {
         unreadCount: alphaUnreadCount,
         isMember: isAlphaMember,
@@ -996,9 +1011,6 @@ function DashboardContent({
         onNewChannelMessage,
         setActiveChannel,
     } = useChannels(userAddress);
-    const { smartWallet } = useSmartWallet(
-        isSolanaUser ? null : (userAddress as string)
-    );
     // For POAP scan: use Smart Wallet (passkey) + identity so we check both
     const poapAddresses = useMemo(() => {
         if (!userAddress || isSolanaUser) return [userAddress].filter(Boolean);
@@ -2693,7 +2705,7 @@ function DashboardContent({
 
     // Handle unified chat item click
     const handleUnifiedChatClick = useCallback(
-        (chat: UnifiedChatItem) => {
+        async (chat: UnifiedChatItem) => {
             switch (chat.type) {
                 case "dm":
                     // Find the friend and open chat
@@ -2708,15 +2720,31 @@ function DashboardContent({
                 case "global":
                     setIsAlphaChatOpen(true);
                     break;
-                case "channel":
+                case "channel": {
                     const channelId = chat.id.replace("channel-", "");
-                    const channel = joinedChannels.find(
+                    let channel = joinedChannels.find(
                         (c) => c.id === channelId
                     );
                     if (channel) {
                         setSelectedChannel(channel);
+                    } else {
+                        // Fallback: fetch channel by ID (e.g. list was stale or join just happened)
+                        try {
+                            const res = await fetch(
+                                `/api/channels/${channelId}?userAddress=${encodeURIComponent(
+                                    userAddress ?? ""
+                                )}`
+                            );
+                            const data = await res.json();
+                            if (res.ok && data.channel) {
+                                setSelectedChannel(data.channel);
+                            }
+                        } catch {
+                            // Ignore; user can retry
+                        }
                     }
                     break;
+                }
                 case "group": {
                     const groupId = chat.id.replace("group-", "");
                     const group = groups.find((g) => g.id === groupId);
@@ -2734,7 +2762,7 @@ function DashboardContent({
                 }
             }
         },
-        [friendsListData, joinedChannels, groups, markAsRead]
+        [friendsListData, joinedChannels, groups, markAsRead, userAddress]
     );
 
     const handleUnlockGroupSubmit = async () => {
@@ -4674,7 +4702,9 @@ function DashboardContent({
                                     <UnifiedChatList
                                         chats={unifiedChats}
                                         userAddress={userAddress}
-                                        isChatsLoading={false}
+                                        isChatsLoading={isFriendsLoading}
+                                        chatsError={friendsError}
+                                        onRetry={refreshFriends}
                                         onChatClick={handleUnifiedChatClick}
                                         onCallClick={handleUnifiedCallClick}
                                         onVideoClick={handleUnifiedVideoClick}
@@ -5712,9 +5742,7 @@ function DashboardContent({
                                 userCardAddress.toLowerCase()
                         )?.reachUsername ?? null
                     }
-                    onCall={(friend) =>
-                        handleCall(friend as FriendsListFriend)
-                    }
+                    onCall={(friend) => handleCall(friend as FriendsListFriend)}
                     onVideoCall={(friend) =>
                         handleVideoCall(friend as FriendsListFriend)
                     }
