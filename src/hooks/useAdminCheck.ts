@@ -10,10 +10,14 @@ type AdminStatus = {
 };
 
 /**
- * Lightweight hook to check if a wallet address is an admin.
+ * Lightweight hook to check if a wallet address (or any of several) is an admin.
  * Does not require SIWE - just checks the database.
+ * Pass additionalAddresses (e.g. smart wallet when userAddress is EOA, or vice versa) so admins are recognized regardless of which address they signed in with.
  */
-export function useAdminCheck(walletAddress: string | null): AdminStatus {
+export function useAdminCheck(
+    walletAddress: string | null,
+    additionalAddresses?: (string | null)[]
+): AdminStatus {
     const [status, setStatus] = useState<AdminStatus>({
         isAdmin: false,
         isSuperAdmin: false,
@@ -22,8 +26,17 @@ export function useAdminCheck(walletAddress: string | null): AdminStatus {
 
     useEffect(() => {
         const checkAdminStatus = async () => {
-            if (!walletAddress || !supabase) {
-                setStatus({ isAdmin: false, isSuperAdmin: false, isLoading: false });
+            const addresses = [walletAddress, ...(additionalAddresses ?? [])]
+                .filter((a): a is string => !!a && typeof a === "string")
+                .map((a) => a.toLowerCase());
+            const unique = [...new Set(addresses)];
+
+            if (unique.length === 0 || !supabase) {
+                setStatus({
+                    isAdmin: false,
+                    isSuperAdmin: false,
+                    isLoading: false,
+                });
                 return;
             }
 
@@ -31,11 +44,16 @@ export function useAdminCheck(walletAddress: string | null): AdminStatus {
                 const { data, error } = await supabase
                     .from("shout_admins")
                     .select("is_super_admin")
-                    .eq("wallet_address", walletAddress.toLowerCase())
-                    .single();
+                    .in("wallet_address", unique)
+                    .limit(1)
+                    .maybeSingle();
 
                 if (error || !data) {
-                    setStatus({ isAdmin: false, isSuperAdmin: false, isLoading: false });
+                    setStatus({
+                        isAdmin: false,
+                        isSuperAdmin: false,
+                        isLoading: false,
+                    });
                     return;
                 }
 
@@ -46,13 +64,16 @@ export function useAdminCheck(walletAddress: string | null): AdminStatus {
                 });
             } catch (err) {
                 console.error("[AdminCheck] Error checking admin status:", err);
-                setStatus({ isAdmin: false, isSuperAdmin: false, isLoading: false });
+                setStatus({
+                    isAdmin: false,
+                    isSuperAdmin: false,
+                    isLoading: false,
+                });
             }
         };
 
         checkAdminStatus();
-    }, [walletAddress]);
+    }, [walletAddress, additionalAddresses?.join(",")]);
 
     return status;
 }
-

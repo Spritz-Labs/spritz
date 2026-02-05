@@ -35,7 +35,18 @@ export type AlphaMessageReaction = {
     users: string[];
 };
 
-export const ALPHA_REACTION_EMOJIS = ["👍", "❤️", "🔥", "😂", "🤙", "🤯", "🙏", "💯", "🙌", "🎉"];
+export const ALPHA_REACTION_EMOJIS = [
+    "👍",
+    "❤️",
+    "🔥",
+    "😂",
+    "🤙",
+    "🤯",
+    "🙏",
+    "💯",
+    "🙌",
+    "🎉",
+];
 
 export type AlphaMembership = {
     user_address: string;
@@ -60,7 +71,10 @@ type AlphaChatState = {
 
 const PAGE_SIZE = 50;
 
-export function useAlphaChat(userAddress: string | null) {
+export function useAlphaChat(
+    userAddress: string | null,
+    additionalAddresses?: (string | null)[]
+) {
     const [state, setState] = useState<AlphaChatState>({
         messages: [],
         pinnedMessages: [],
@@ -80,30 +94,54 @@ export function useAlphaChat(userAddress: string | null) {
     const loadData = useCallback(async () => {
         if (!isSupabaseConfigured || !supabase || !userAddress) {
             console.log("[AlphaChat] Not configured or no user address");
-            setState(prev => ({ ...prev, isLoading: false }));
+            setState((prev) => ({ ...prev, isLoading: false }));
             return;
         }
 
         const client = supabase;
-        console.log("[AlphaChat] Loading data for:", userAddress.toLowerCase());
+        const addressesToCheck = [
+            userAddress.toLowerCase(),
+            ...(additionalAddresses || [])
+                .filter((a): a is string => !!a)
+                .map((a) => a.toLowerCase()),
+        ].filter((a, i, arr) => arr.indexOf(a) === i);
+
+        console.log(
+            "[AlphaChat] Loading data for:",
+            userAddress.toLowerCase(),
+            "checking addresses:",
+            addressesToCheck
+        );
 
         try {
-            // Get membership - use maybeSingle() instead of single() to avoid errors
-            const { data: membershipData, error: membershipError } = await client
-                .from("shout_alpha_membership")
-                .select("*")
-                .eq("user_address", userAddress.toLowerCase())
-                .is("left_at", null)
-                .maybeSingle();
+            // Get membership for any of the user's addresses (EOA + smart wallet) so passkey users are recognized
+            const { data: membershipRows, error: membershipError } =
+                await client
+                    .from("shout_alpha_membership")
+                    .select("*")
+                    .in("user_address", addressesToCheck)
+                    .is("left_at", null);
 
             if (membershipError) {
-                console.error("[AlphaChat] Membership query error:", membershipError);
+                console.error(
+                    "[AlphaChat] Membership query error:",
+                    membershipError
+                );
             }
 
-            console.log("[AlphaChat] Membership result:", membershipData ? "Found" : "Not found");
+            const membershipData = membershipRows?.length
+                ? membershipRows.find(
+                      (r) => r.user_address === userAddress.toLowerCase()
+                  ) ?? membershipRows[0]
+                : null;
+
+            console.log(
+                "[AlphaChat] Membership result:",
+                membershipData ? "Found" : "Not found"
+            );
 
             if (!membershipData) {
-                setState(prev => ({
+                setState((prev) => ({
                     ...prev,
                     isLoading: false,
                     isMember: false,
@@ -117,34 +155,48 @@ export function useAlphaChat(userAddress: string | null) {
             // Order descending first to get newest, then reverse for display
             const { data: messagesDesc, error: messagesError } = await client
                 .from("shout_alpha_messages")
-                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .select(
+                    "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                )
                 .order("created_at", { ascending: false })
                 .limit(PAGE_SIZE);
-            
+
             // Reverse to get chronological order for display
             const messages = messagesDesc?.reverse() || [];
             const hasMore = (messagesDesc?.length || 0) >= PAGE_SIZE;
 
             if (messagesError) {
-                console.error("[AlphaChat] Messages query error:", messagesError);
+                console.error(
+                    "[AlphaChat] Messages query error:",
+                    messagesError
+                );
             }
 
             // Get pinned messages
             const { data: pinnedData, error: pinnedError } = await client
                 .from("shout_alpha_messages")
-                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .select(
+                    "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                )
                 .eq("is_pinned", true)
                 .order("pinned_at", { ascending: false });
 
             if (pinnedError) {
-                console.error("[AlphaChat] Pinned messages query error:", pinnedError);
+                console.error(
+                    "[AlphaChat] Pinned messages query error:",
+                    pinnedError
+                );
             }
             const pinnedMessages = pinnedData || [];
 
-            console.log("[AlphaChat] Loaded", messages?.length || 0, "messages");
+            console.log(
+                "[AlphaChat] Loaded",
+                messages?.length || 0,
+                "messages"
+            );
 
             // Get reactions for these messages
-            const messageIds = messages?.map(m => m.id) || [];
+            const messageIds = messages?.map((m) => m.id) || [];
             let reactionsData: AlphaReaction[] = [];
             if (messageIds.length > 0) {
                 const { data, error: reactionsError } = await client
@@ -152,38 +204,56 @@ export function useAlphaChat(userAddress: string | null) {
                     .select("*")
                     .in("message_id", messageIds);
                 if (reactionsError) {
-                    console.error("[AlphaChat] Reactions query error:", reactionsError);
+                    console.error(
+                        "[AlphaChat] Reactions query error:",
+                        reactionsError
+                    );
                 }
                 reactionsData = data || [];
             }
 
             // Process reactions into grouped format
-            const processedReactions: Record<string, AlphaMessageReaction[]> = {};
-            messageIds.forEach(msgId => {
-                processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(emoji => ({
-                    emoji,
-                    count: 0,
-                    hasReacted: false,
-                    users: [],
-                }));
+            const processedReactions: Record<string, AlphaMessageReaction[]> =
+                {};
+            messageIds.forEach((msgId) => {
+                processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(
+                    (emoji) => ({
+                        emoji,
+                        count: 0,
+                        hasReacted: false,
+                        users: [],
+                    })
+                );
             });
-            reactionsData.forEach(r => {
+            reactionsData.forEach((r) => {
                 if (processedReactions[r.message_id]) {
-                    const idx = processedReactions[r.message_id].findIndex(x => x.emoji === r.emoji);
+                    const idx = processedReactions[r.message_id].findIndex(
+                        (x) => x.emoji === r.emoji
+                    );
                     if (idx >= 0) {
                         processedReactions[r.message_id][idx].count++;
-                        processedReactions[r.message_id][idx].users.push(r.user_address);
-                        if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
-                            processedReactions[r.message_id][idx].hasReacted = true;
+                        processedReactions[r.message_id][idx].users.push(
+                            r.user_address
+                        );
+                        if (
+                            userAddress &&
+                            r.user_address.toLowerCase() ===
+                                userAddress.toLowerCase()
+                        ) {
+                            processedReactions[r.message_id][idx].hasReacted =
+                                true;
                         }
                     }
                 }
             });
 
             // Calculate unread count
-            const unreadCount = messages?.filter(
-                msg => new Date(msg.created_at) > new Date(membershipData.last_read_at)
-            ).length || 0;
+            const unreadCount =
+                messages?.filter(
+                    (msg) =>
+                        new Date(msg.created_at) >
+                        new Date(membershipData.last_read_at)
+                ).length || 0;
 
             setState({
                 messages: messages || [],
@@ -199,18 +269,25 @@ export function useAlphaChat(userAddress: string | null) {
             });
         } catch (err) {
             console.error("[AlphaChat] Load error:", err);
-            setState(prev => ({ ...prev, isLoading: false }));
+            setState((prev) => ({ ...prev, isLoading: false }));
         }
-    }, [userAddress]);
+    }, [userAddress, additionalAddresses]);
 
     // Load older messages (for infinite scroll)
     const loadMoreMessages = useCallback(async () => {
-        if (!isSupabaseConfigured || !supabase || !userAddress || state.isLoadingMore || !state.hasMore || state.messages.length === 0) {
+        if (
+            !isSupabaseConfigured ||
+            !supabase ||
+            !userAddress ||
+            state.isLoadingMore ||
+            !state.hasMore ||
+            state.messages.length === 0
+        ) {
             return;
         }
 
         const client = supabase;
-        setState(prev => ({ ...prev, isLoadingMore: true }));
+        setState((prev) => ({ ...prev, isLoadingMore: true }));
 
         try {
             // Get the oldest message's timestamp
@@ -219,14 +296,16 @@ export function useAlphaChat(userAddress: string | null) {
 
             const { data: messagesDesc, error } = await client
                 .from("shout_alpha_messages")
-                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .select(
+                    "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                )
                 .lt("created_at", before)
                 .order("created_at", { ascending: false })
                 .limit(PAGE_SIZE);
 
             if (error) {
                 console.error("[AlphaChat] Load more error:", error);
-                setState(prev => ({ ...prev, isLoadingMore: false }));
+                setState((prev) => ({ ...prev, isLoadingMore: false }));
                 return;
             }
 
@@ -234,7 +313,7 @@ export function useAlphaChat(userAddress: string | null) {
 
             if (olderMessages.length > 0) {
                 // Get reactions for these messages
-                const messageIds = olderMessages.map(m => m.id);
+                const messageIds = olderMessages.map((m) => m.id);
                 let reactionsData: AlphaReaction[] = [];
                 if (messageIds.length > 0) {
                     const { data } = await client
@@ -245,29 +324,44 @@ export function useAlphaChat(userAddress: string | null) {
                 }
 
                 // Process reactions
-                const processedReactions: Record<string, AlphaMessageReaction[]> = {};
-                messageIds.forEach(msgId => {
-                    processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(emoji => ({
-                        emoji,
-                        count: 0,
-                        hasReacted: false,
-                        users: [],
-                    }));
+                const processedReactions: Record<
+                    string,
+                    AlphaMessageReaction[]
+                > = {};
+                messageIds.forEach((msgId) => {
+                    processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(
+                        (emoji) => ({
+                            emoji,
+                            count: 0,
+                            hasReacted: false,
+                            users: [],
+                        })
+                    );
                 });
-                reactionsData.forEach(r => {
+                reactionsData.forEach((r) => {
                     if (processedReactions[r.message_id]) {
-                        const idx = processedReactions[r.message_id].findIndex(x => x.emoji === r.emoji);
+                        const idx = processedReactions[r.message_id].findIndex(
+                            (x) => x.emoji === r.emoji
+                        );
                         if (idx >= 0) {
                             processedReactions[r.message_id][idx].count++;
-                            processedReactions[r.message_id][idx].users.push(r.user_address);
-                            if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
-                                processedReactions[r.message_id][idx].hasReacted = true;
+                            processedReactions[r.message_id][idx].users.push(
+                                r.user_address
+                            );
+                            if (
+                                userAddress &&
+                                r.user_address.toLowerCase() ===
+                                    userAddress.toLowerCase()
+                            ) {
+                                processedReactions[r.message_id][
+                                    idx
+                                ].hasReacted = true;
                             }
                         }
                     }
                 });
 
-                setState(prev => ({
+                setState((prev) => ({
                     ...prev,
                     messages: [...olderMessages, ...prev.messages],
                     reactions: { ...processedReactions, ...prev.reactions },
@@ -275,19 +369,32 @@ export function useAlphaChat(userAddress: string | null) {
                     hasMore: olderMessages.length >= PAGE_SIZE,
                 }));
 
-                console.log("[AlphaChat] Loaded", olderMessages.length, "older messages");
+                console.log(
+                    "[AlphaChat] Loaded",
+                    olderMessages.length,
+                    "older messages"
+                );
             } else {
-                setState(prev => ({ ...prev, isLoadingMore: false, hasMore: false }));
+                setState((prev) => ({
+                    ...prev,
+                    isLoadingMore: false,
+                    hasMore: false,
+                }));
             }
         } catch (err) {
             console.error("[AlphaChat] Load more error:", err);
-            setState(prev => ({ ...prev, isLoadingMore: false }));
+            setState((prev) => ({ ...prev, isLoadingMore: false }));
         }
     }, [userAddress, state.isLoadingMore, state.hasMore, state.messages]);
 
     // Subscribe to realtime updates
     useEffect(() => {
-        if (!isSupabaseConfigured || !supabase || !userAddress || !state.isMember) {
+        if (
+            !isSupabaseConfigured ||
+            !supabase ||
+            !userAddress ||
+            !state.isMember
+        ) {
             return;
         }
 
@@ -306,44 +413,60 @@ export function useAlphaChat(userAddress: string | null) {
                 },
                 (payload) => {
                     const newMessage = payload.new as AlphaMessage;
-                    console.log("[AlphaChat] Realtime message received:", newMessage.id);
-                    
-                    setState(prev => {
+                    console.log(
+                        "[AlphaChat] Realtime message received:",
+                        newMessage.id
+                    );
+
+                    setState((prev) => {
                         // Check if message already exists (from optimistic update or duplicate)
-                        const exists = prev.messages.some(m => 
-                            m.id === newMessage.id || 
-                            (m.id.startsWith('temp-') && 
-                             m.sender_address === newMessage.sender_address &&
-                             m.content === newMessage.content)
+                        const exists = prev.messages.some(
+                            (m) =>
+                                m.id === newMessage.id ||
+                                (m.id.startsWith("temp-") &&
+                                    m.sender_address ===
+                                        newMessage.sender_address &&
+                                    m.content === newMessage.content)
                         );
-                        
+
                         if (exists) {
-                            console.log("[AlphaChat] Message already exists, replacing temp if needed");
+                            console.log(
+                                "[AlphaChat] Message already exists, replacing temp if needed"
+                            );
                             // Replace temp message with real one
                             return {
                                 ...prev,
-                                messages: prev.messages.map(m => 
-                                    (m.id.startsWith('temp-') && 
-                                     m.sender_address === newMessage.sender_address &&
-                                     m.content === newMessage.content) 
-                                        ? newMessage : m
+                                messages: prev.messages.map((m) =>
+                                    m.id.startsWith("temp-") &&
+                                    m.sender_address ===
+                                        newMessage.sender_address &&
+                                    m.content === newMessage.content
+                                        ? newMessage
+                                        : m
                                 ),
                             };
                         }
-                        
+
                         console.log("[AlphaChat] Adding new message to state");
                         // Only increment unread if message is from someone else
-                        const isMine = newMessage.sender_address.toLowerCase() === userAddress?.toLowerCase();
+                        const isMine =
+                            newMessage.sender_address.toLowerCase() ===
+                            userAddress?.toLowerCase();
                         return {
                             ...prev,
                             messages: [...prev.messages, newMessage],
-                            unreadCount: isMine ? prev.unreadCount : prev.unreadCount + 1,
+                            unreadCount: isMine
+                                ? prev.unreadCount
+                                : prev.unreadCount + 1,
                         };
                     });
                 }
             )
             .subscribe((status) => {
-                console.log("[AlphaChat] Realtime subscription status:", status);
+                console.log(
+                    "[AlphaChat] Realtime subscription status:",
+                    status
+                );
             });
 
         channelRef.current = channel;
@@ -364,7 +487,12 @@ export function useAlphaChat(userAddress: string | null) {
 
     // Poll for new messages every 10 seconds as a fallback for realtime
     useEffect(() => {
-        if (!isSupabaseConfigured || !supabase || !userAddress || !state.isMember) {
+        if (
+            !isSupabaseConfigured ||
+            !supabase ||
+            !userAddress ||
+            !state.isMember
+        ) {
             return;
         }
 
@@ -374,7 +502,9 @@ export function useAlphaChat(userAddress: string | null) {
                 // Fetch latest messages (newest 100, then reverse for chronological order)
                 const { data: messagesDesc, error } = await client
                     .from("shout_alpha_messages")
-                    .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                    .select(
+                        "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                    )
                     .order("created_at", { ascending: false })
                     .limit(100);
 
@@ -386,32 +516,46 @@ export function useAlphaChat(userAddress: string | null) {
                 const messages = messagesDesc?.reverse() || [];
 
                 if (messages.length > 0) {
-                    setState(prev => {
+                    setState((prev) => {
                         // Get the IDs of real messages (not temp ones)
-                        const prevRealIds = new Set(prev.messages.filter(m => !m.id.startsWith('temp-')).map(m => m.id));
-                        const newIds = new Set(messages.map(m => m.id));
-                        
+                        const prevRealIds = new Set(
+                            prev.messages
+                                .filter((m) => !m.id.startsWith("temp-"))
+                                .map((m) => m.id)
+                        );
+                        const newIds = new Set(messages.map((m) => m.id));
+
                         // Check if there are any new messages we don't have
-                        const hasNewMessages = messages.some(m => !prevRealIds.has(m.id));
-                        
-                        if (!hasNewMessages && prevRealIds.size === newIds.size) {
+                        const hasNewMessages = messages.some(
+                            (m) => !prevRealIds.has(m.id)
+                        );
+
+                        if (
+                            !hasNewMessages &&
+                            prevRealIds.size === newIds.size
+                        ) {
                             return prev; // No changes
                         }
-                        
-                        console.log("[AlphaChat] Polling found updates, syncing messages");
-                        
-                        // Keep any temp messages that aren't in the server response yet
-                        const tempMessages = prev.messages.filter(m => 
-                            m.id.startsWith('temp-') && 
-                            !messages.some(serverMsg => 
-                                serverMsg.sender_address === m.sender_address && 
-                                serverMsg.content === m.content
-                            )
+
+                        console.log(
+                            "[AlphaChat] Polling found updates, syncing messages"
                         );
-                        
-                        return { 
-                            ...prev, 
-                            messages: [...messages, ...tempMessages]
+
+                        // Keep any temp messages that aren't in the server response yet
+                        const tempMessages = prev.messages.filter(
+                            (m) =>
+                                m.id.startsWith("temp-") &&
+                                !messages.some(
+                                    (serverMsg) =>
+                                        serverMsg.sender_address ===
+                                            m.sender_address &&
+                                        serverMsg.content === m.content
+                                )
+                        );
+
+                        return {
+                            ...prev,
+                            messages: [...messages, ...tempMessages],
                         };
                     });
                 }
@@ -425,247 +569,315 @@ export function useAlphaChat(userAddress: string | null) {
 
     // Set replying to
     const setReplyingTo = useCallback((message: AlphaMessage | null) => {
-        setState(prev => ({ ...prev, replyingTo: message }));
+        setState((prev) => ({ ...prev, replyingTo: message }));
     }, []);
 
     // Send a message
-    const sendMessage = useCallback(async (content: string, messageType: "text" | "pixel_art" = "text", replyToId?: string): Promise<boolean> => {
-        if (!isSupabaseConfigured || !supabase || !userAddress || !content.trim()) {
-            return false;
-        }
+    const sendMessage = useCallback(
+        async (
+            content: string,
+            messageType: "text" | "pixel_art" = "text",
+            replyToId?: string
+        ): Promise<boolean> => {
+            if (
+                !isSupabaseConfigured ||
+                !supabase ||
+                !userAddress ||
+                !content.trim()
+            ) {
+                return false;
+            }
 
-        const client = supabase;
-        setIsSending(true);
-        
-        // Generate temporary ID for optimistic update
-        const tempId = `temp-${Date.now()}`;
-        const finalReplyToId = replyToId || state.replyingTo?.id;
-        
-        // Optimistically add message to state
-        const optimisticMessage: AlphaMessage = {
-            id: tempId,
-            sender_address: userAddress.toLowerCase(),
-            content: content.trim(),
-            message_type: messageType,
-            created_at: new Date().toISOString(),
-            reply_to_id: finalReplyToId || null,
-            reply_to: state.replyingTo || null,
-        };
-        
-        setState(prev => ({
-            ...prev,
-            messages: [...prev.messages, optimisticMessage],
-            replyingTo: null,
-        }));
-        
-        try {
-            const insertData: Record<string, unknown> = {
+            const client = supabase;
+            setIsSending(true);
+
+            // Generate temporary ID for optimistic update
+            const tempId = `temp-${Date.now()}`;
+            const finalReplyToId = replyToId || state.replyingTo?.id;
+
+            // Optimistically add message to state
+            const optimisticMessage: AlphaMessage = {
+                id: tempId,
                 sender_address: userAddress.toLowerCase(),
                 content: content.trim(),
                 message_type: messageType,
+                created_at: new Date().toISOString(),
+                reply_to_id: finalReplyToId || null,
+                reply_to: state.replyingTo || null,
             };
-            
-            // Add reply_to_id if replying
-            if (finalReplyToId) {
-                insertData.reply_to_id = finalReplyToId;
-            }
 
-            const { data, error } = await client
-                .from("shout_alpha_messages")
-                .insert(insertData)
-                .select()
-                .single();
+            setState((prev) => ({
+                ...prev,
+                messages: [...prev.messages, optimisticMessage],
+                replyingTo: null,
+            }));
 
-            if (error) {
-                console.error("[AlphaChat] Send error:", error);
+            try {
+                const insertData: Record<string, unknown> = {
+                    sender_address: userAddress.toLowerCase(),
+                    content: content.trim(),
+                    message_type: messageType,
+                };
+
+                // Add reply_to_id if replying
+                if (finalReplyToId) {
+                    insertData.reply_to_id = finalReplyToId;
+                }
+
+                const { data, error } = await client
+                    .from("shout_alpha_messages")
+                    .insert(insertData)
+                    .select()
+                    .single();
+
+                if (error) {
+                    console.error("[AlphaChat] Send error:", error);
+                    // Remove optimistic message on error
+                    setState((prev) => ({
+                        ...prev,
+                        messages: prev.messages.filter((m) => m.id !== tempId),
+                    }));
+                    return false;
+                }
+
+                console.log("[AlphaChat] Message sent:", data?.id);
+
+                // Replace optimistic message with real one
+                if (data) {
+                    setState((prev) => ({
+                        ...prev,
+                        messages: prev.messages.map((m) =>
+                            m.id === tempId
+                                ? {
+                                      ...data,
+                                      reply_to: optimisticMessage.reply_to,
+                                  }
+                                : m
+                        ),
+                    }));
+
+                    // Check for agent mentions and trigger responses (fire and forget)
+                    if (content.includes("@[") && content.includes("](")) {
+                        fetch("/api/channels/agent-response", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                messageContent: content,
+                                senderAddress: userAddress,
+                                channelType: "global",
+                                channelId: null,
+                                originalMessageId: data.id,
+                            }),
+                        }).catch((err) =>
+                            console.error(
+                                "[AlphaChat] Agent response error:",
+                                err
+                            )
+                        );
+                    }
+                }
+
+                return true;
+            } catch (err) {
+                console.error("[AlphaChat] Send error:", err);
                 // Remove optimistic message on error
-                setState(prev => ({
+                setState((prev) => ({
                     ...prev,
-                    messages: prev.messages.filter(m => m.id !== tempId),
+                    messages: prev.messages.filter((m) => m.id !== tempId),
                 }));
                 return false;
+            } finally {
+                setIsSending(false);
             }
-            
-            console.log("[AlphaChat] Message sent:", data?.id);
-            
-            // Replace optimistic message with real one
-            if (data) {
-                setState(prev => ({
-                    ...prev,
-                    messages: prev.messages.map(m => 
-                        m.id === tempId ? { ...data, reply_to: optimisticMessage.reply_to } : m
-                    ),
-                }));
-                
-                // Check for agent mentions and trigger responses (fire and forget)
-                if (content.includes("@[") && content.includes("](")) {
-                    fetch("/api/channels/agent-response", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            messageContent: content,
-                            senderAddress: userAddress,
-                            channelType: "global",
-                            channelId: null,
-                            originalMessageId: data.id,
-                        }),
-                    }).catch(err => console.error("[AlphaChat] Agent response error:", err));
-                }
-            }
-            
-            return true;
-        } catch (err) {
-            console.error("[AlphaChat] Send error:", err);
-            // Remove optimistic message on error
-            setState(prev => ({
-                ...prev,
-                messages: prev.messages.filter(m => m.id !== tempId),
-            }));
-            return false;
-        } finally {
-            setIsSending(false);
-        }
-    }, [userAddress, state.replyingTo]);
+        },
+        [userAddress, state.replyingTo]
+    );
 
     // Toggle reaction
-    const toggleReaction = useCallback(async (messageId: string, emoji: string): Promise<boolean> => {
-        if (!isSupabaseConfigured || !supabase || !userAddress) return false;
+    const toggleReaction = useCallback(
+        async (messageId: string, emoji: string): Promise<boolean> => {
+            if (!isSupabaseConfigured || !supabase || !userAddress)
+                return false;
 
-        try {
-            // Check if reaction exists
-            const { data: existing } = await supabase
-                .from("shout_alpha_reactions")
-                .select("id")
-                .eq("message_id", messageId)
-                .eq("user_address", userAddress.toLowerCase())
-                .eq("emoji", emoji)
-                .single();
-
-            if (existing) {
-                // Remove reaction
-                await supabase
+            try {
+                // Check if reaction exists
+                const { data: existing } = await supabase
                     .from("shout_alpha_reactions")
-                    .delete()
-                    .eq("id", existing.id);
+                    .select("id")
+                    .eq("message_id", messageId)
+                    .eq("user_address", userAddress.toLowerCase())
+                    .eq("emoji", emoji)
+                    .single();
 
-                // Update local state
-                setState(prev => {
-                    const updated = { ...prev.reactions };
-                    if (updated[messageId]) {
-                        const idx = updated[messageId].findIndex(r => r.emoji === emoji);
+                if (existing) {
+                    // Remove reaction
+                    await supabase
+                        .from("shout_alpha_reactions")
+                        .delete()
+                        .eq("id", existing.id);
+
+                    // Update local state
+                    setState((prev) => {
+                        const updated = { ...prev.reactions };
+                        if (updated[messageId]) {
+                            const idx = updated[messageId].findIndex(
+                                (r) => r.emoji === emoji
+                            );
+                            if (idx >= 0) {
+                                updated[messageId][idx] = {
+                                    ...updated[messageId][idx],
+                                    count: Math.max(
+                                        0,
+                                        updated[messageId][idx].count - 1
+                                    ),
+                                    hasReacted: false,
+                                    users: updated[messageId][idx].users.filter(
+                                        (u) =>
+                                            u.toLowerCase() !==
+                                            userAddress.toLowerCase()
+                                    ),
+                                };
+                            }
+                        }
+                        return { ...prev, reactions: updated };
+                    });
+                } else {
+                    // Add reaction
+                    await supabase.from("shout_alpha_reactions").insert({
+                        message_id: messageId,
+                        user_address: userAddress.toLowerCase(),
+                        emoji,
+                    });
+
+                    // Update local state
+                    setState((prev) => {
+                        const updated = { ...prev.reactions };
+                        if (!updated[messageId]) {
+                            updated[messageId] = ALPHA_REACTION_EMOJIS.map(
+                                (e) => ({
+                                    emoji: e,
+                                    count: 0,
+                                    hasReacted: false,
+                                    users: [],
+                                })
+                            );
+                        }
+                        const idx = updated[messageId].findIndex(
+                            (r) => r.emoji === emoji
+                        );
                         if (idx >= 0) {
                             updated[messageId][idx] = {
                                 ...updated[messageId][idx],
-                                count: Math.max(0, updated[messageId][idx].count - 1),
-                                hasReacted: false,
-                                users: updated[messageId][idx].users.filter(u => u.toLowerCase() !== userAddress.toLowerCase()),
+                                count: updated[messageId][idx].count + 1,
+                                hasReacted: true,
+                                users: [
+                                    ...updated[messageId][idx].users,
+                                    userAddress.toLowerCase(),
+                                ],
                             };
                         }
-                    }
-                    return { ...prev, reactions: updated };
-                });
-            } else {
-                // Add reaction
-                await supabase.from("shout_alpha_reactions").insert({
-                    message_id: messageId,
-                    user_address: userAddress.toLowerCase(),
-                    emoji,
-                });
-
-                // Update local state
-                setState(prev => {
-                    const updated = { ...prev.reactions };
-                    if (!updated[messageId]) {
-                        updated[messageId] = ALPHA_REACTION_EMOJIS.map(e => ({
-                            emoji: e,
-                            count: 0,
-                            hasReacted: false,
-                            users: [],
-                        }));
-                    }
-                    const idx = updated[messageId].findIndex(r => r.emoji === emoji);
-                    if (idx >= 0) {
-                        updated[messageId][idx] = {
-                            ...updated[messageId][idx],
-                            count: updated[messageId][idx].count + 1,
-                            hasReacted: true,
-                            users: [...updated[messageId][idx].users, userAddress.toLowerCase()],
-                        };
-                    }
-                    return { ...prev, reactions: updated };
-                });
-            }
-
-            return true;
-        } catch (err) {
-            console.error("[AlphaChat] Toggle reaction error:", err);
-            return false;
-        }
-    }, [userAddress]);
-
-    // Toggle pin on a message (admin only)
-    const togglePinMessage = useCallback(async (messageId: string, shouldPin: boolean): Promise<boolean> => {
-        if (!isSupabaseConfigured || !supabase || !userAddress) return false;
-
-        try {
-            const updateData = shouldPin
-                ? {
-                    is_pinned: true,
-                    pinned_by: userAddress.toLowerCase(),
-                    pinned_at: new Date().toISOString(),
+                        return { ...prev, reactions: updated };
+                    });
                 }
-                : {
-                    is_pinned: false,
-                    pinned_by: null,
-                    pinned_at: null,
-                };
 
-            const { error } = await supabase
-                .from("shout_alpha_messages")
-                .update(updateData)
-                .eq("id", messageId);
-
-            if (error) {
-                console.error("[AlphaChat] Toggle pin error:", error);
+                return true;
+            } catch (err) {
+                console.error("[AlphaChat] Toggle reaction error:", err);
                 return false;
             }
+        },
+        [userAddress]
+    );
 
-            // Update local state
-            setState(prev => {
-                // Update the message in messages array
-                const updatedMessages = prev.messages.map(m =>
-                    m.id === messageId
-                        ? { ...m, is_pinned: shouldPin, pinned_by: shouldPin ? userAddress.toLowerCase() : null, pinned_at: shouldPin ? new Date().toISOString() : null }
-                        : m
-                );
+    // Toggle pin on a message (admin only)
+    const togglePinMessage = useCallback(
+        async (messageId: string, shouldPin: boolean): Promise<boolean> => {
+            if (!isSupabaseConfigured || !supabase || !userAddress)
+                return false;
 
-                // Update pinned messages list
-                let updatedPinned: AlphaMessage[];
-                if (shouldPin) {
-                    const pinnedMsg = updatedMessages.find(m => m.id === messageId);
-                    if (pinnedMsg) {
-                        updatedPinned = [pinnedMsg, ...prev.pinnedMessages.filter(m => m.id !== messageId)];
-                    } else {
-                        updatedPinned = prev.pinnedMessages;
-                    }
-                } else {
-                    updatedPinned = prev.pinnedMessages.filter(m => m.id !== messageId);
+            try {
+                const updateData = shouldPin
+                    ? {
+                          is_pinned: true,
+                          pinned_by: userAddress.toLowerCase(),
+                          pinned_at: new Date().toISOString(),
+                      }
+                    : {
+                          is_pinned: false,
+                          pinned_by: null,
+                          pinned_at: null,
+                      };
+
+                const { error } = await supabase
+                    .from("shout_alpha_messages")
+                    .update(updateData)
+                    .eq("id", messageId);
+
+                if (error) {
+                    console.error("[AlphaChat] Toggle pin error:", error);
+                    return false;
                 }
 
-                return {
-                    ...prev,
-                    messages: updatedMessages,
-                    pinnedMessages: updatedPinned,
-                };
-            });
+                // Update local state
+                setState((prev) => {
+                    // Update the message in messages array
+                    const updatedMessages = prev.messages.map((m) =>
+                        m.id === messageId
+                            ? {
+                                  ...m,
+                                  is_pinned: shouldPin,
+                                  pinned_by: shouldPin
+                                      ? userAddress.toLowerCase()
+                                      : null,
+                                  pinned_at: shouldPin
+                                      ? new Date().toISOString()
+                                      : null,
+                              }
+                            : m
+                    );
 
-            console.log("[AlphaChat] Message", shouldPin ? "pinned" : "unpinned", messageId);
-            return true;
-        } catch (err) {
-            console.error("[AlphaChat] Toggle pin error:", err);
-            return false;
-        }
-    }, [userAddress]);
+                    // Update pinned messages list
+                    let updatedPinned: AlphaMessage[];
+                    if (shouldPin) {
+                        const pinnedMsg = updatedMessages.find(
+                            (m) => m.id === messageId
+                        );
+                        if (pinnedMsg) {
+                            updatedPinned = [
+                                pinnedMsg,
+                                ...prev.pinnedMessages.filter(
+                                    (m) => m.id !== messageId
+                                ),
+                            ];
+                        } else {
+                            updatedPinned = prev.pinnedMessages;
+                        }
+                    } else {
+                        updatedPinned = prev.pinnedMessages.filter(
+                            (m) => m.id !== messageId
+                        );
+                    }
+
+                    return {
+                        ...prev,
+                        messages: updatedMessages,
+                        pinnedMessages: updatedPinned,
+                    };
+                });
+
+                console.log(
+                    "[AlphaChat] Message",
+                    shouldPin ? "pinned" : "unpinned",
+                    messageId
+                );
+                return true;
+            } catch (err) {
+                console.error("[AlphaChat] Toggle pin error:", err);
+                return false;
+            }
+        },
+        [userAddress]
+    );
 
     // Mark messages as read
     const markAsRead = useCallback(async () => {
@@ -677,7 +889,7 @@ export function useAlphaChat(userAddress: string | null) {
                 .update({ last_read_at: new Date().toISOString() })
                 .eq("user_address", userAddress.toLowerCase());
 
-            setState(prev => ({ ...prev, unreadCount: 0 }));
+            setState((prev) => ({ ...prev, unreadCount: 0 }));
         } catch (err) {
             console.error("[AlphaChat] Mark read error:", err);
         }
@@ -685,7 +897,12 @@ export function useAlphaChat(userAddress: string | null) {
 
     // Toggle notifications
     const toggleNotifications = useCallback(async (): Promise<boolean> => {
-        if (!isSupabaseConfigured || !supabase || !userAddress || !state.membership) {
+        if (
+            !isSupabaseConfigured ||
+            !supabase ||
+            !userAddress ||
+            !state.membership
+        ) {
             return false;
         }
 
@@ -699,9 +916,9 @@ export function useAlphaChat(userAddress: string | null) {
 
             if (error) throw error;
 
-            setState(prev => ({
+            setState((prev) => ({
                 ...prev,
-                membership: prev.membership 
+                membership: prev.membership
                     ? { ...prev.membership, notifications_muted: newMuted }
                     : null,
             }));
@@ -744,7 +961,7 @@ export function useAlphaChat(userAddress: string | null) {
 
             if (error) throw error;
 
-            setState(prev => ({
+            setState((prev) => ({
                 ...prev,
                 isMember: false,
                 membership: null,
@@ -771,7 +988,7 @@ export function useAlphaChat(userAddress: string | null) {
             });
 
             if (typeof data === "number") {
-                setState(prev => ({ ...prev, unreadCount: data }));
+                setState((prev) => ({ ...prev, unreadCount: data }));
             }
         } catch (err) {
             console.error("[AlphaChat] Refresh unread error:", err);
@@ -780,7 +997,12 @@ export function useAlphaChat(userAddress: string | null) {
 
     // Force refresh messages (for manual refresh)
     const refreshMessages = useCallback(async () => {
-        if (!isSupabaseConfigured || !supabase || !userAddress || !state.isMember) {
+        if (
+            !isSupabaseConfigured ||
+            !supabase ||
+            !userAddress ||
+            !state.isMember
+        ) {
             return;
         }
 
@@ -791,7 +1013,9 @@ export function useAlphaChat(userAddress: string | null) {
             // Fetch newest 100, then reverse for chronological order
             const { data: messagesDesc, error } = await client
                 .from("shout_alpha_messages")
-                .select("*, reply_to:reply_to_id(id, sender_address, content, message_type)")
+                .select(
+                    "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                )
                 .order("created_at", { ascending: false })
                 .limit(100);
 
@@ -804,7 +1028,7 @@ export function useAlphaChat(userAddress: string | null) {
 
             if (messages.length > 0) {
                 // Get reactions for these messages
-                const messageIds = messages.map(m => m.id);
+                const messageIds = messages.map((m) => m.id);
                 let reactionsData: AlphaReaction[] = [];
                 if (messageIds.length > 0) {
                     const { data } = await client
@@ -815,29 +1039,44 @@ export function useAlphaChat(userAddress: string | null) {
                 }
 
                 // Process reactions
-                const processedReactions: Record<string, AlphaMessageReaction[]> = {};
-                messageIds.forEach(msgId => {
-                    processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(emoji => ({
-                        emoji,
-                        count: 0,
-                        hasReacted: false,
-                        users: [],
-                    }));
+                const processedReactions: Record<
+                    string,
+                    AlphaMessageReaction[]
+                > = {};
+                messageIds.forEach((msgId) => {
+                    processedReactions[msgId] = ALPHA_REACTION_EMOJIS.map(
+                        (emoji) => ({
+                            emoji,
+                            count: 0,
+                            hasReacted: false,
+                            users: [],
+                        })
+                    );
                 });
-                reactionsData.forEach(r => {
+                reactionsData.forEach((r) => {
                     if (processedReactions[r.message_id]) {
-                        const idx = processedReactions[r.message_id].findIndex(x => x.emoji === r.emoji);
+                        const idx = processedReactions[r.message_id].findIndex(
+                            (x) => x.emoji === r.emoji
+                        );
                         if (idx >= 0) {
                             processedReactions[r.message_id][idx].count++;
-                            processedReactions[r.message_id][idx].users.push(r.user_address);
-                            if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
-                                processedReactions[r.message_id][idx].hasReacted = true;
+                            processedReactions[r.message_id][idx].users.push(
+                                r.user_address
+                            );
+                            if (
+                                userAddress &&
+                                r.user_address.toLowerCase() ===
+                                    userAddress.toLowerCase()
+                            ) {
+                                processedReactions[r.message_id][
+                                    idx
+                                ].hasReacted = true;
                             }
                         }
                     }
                 });
 
-                setState(prev => ({
+                setState((prev) => ({
                     ...prev,
                     messages,
                     reactions: processedReactions,
@@ -866,4 +1105,3 @@ export function useAlphaChat(userAddress: string | null) {
         togglePinMessage,
     };
 }
-

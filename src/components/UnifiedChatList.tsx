@@ -243,6 +243,10 @@ type UnifiedChatListProps = {
     onPinChat?: (chat: UnifiedChatItem, pinned: boolean) => void;
     /** When true, show loading skeleton instead of chat list */
     isChatsLoading?: boolean;
+    /** When set, show error message and retry button (e.g. failed to load friends/chats) */
+    chatsError?: string | null;
+    /** Callback to retry loading chats */
+    onRetry?: () => void;
 };
 
 const formatTime = (date: Date | null, timezone: string) => {
@@ -393,38 +397,56 @@ const ChatRow = memo(
                 >
                     <div className="flex items-center gap-2.5 sm:gap-3">
                         <div className="relative shrink-0">
-                            {chat.avatar ? (
+                            {chat.avatar && (
                                 <img
                                     src={chat.avatar}
                                     alt={chat.name}
                                     loading="lazy"
-                                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ${
+                                    referrerPolicy="no-referrer"
+                                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover avatar-img ${
                                         chat.unreadCount > 0
                                             ? "ring-2 ring-[#FF5500]"
                                             : ""
                                     }`}
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                        const wrap =
+                                            e.currentTarget.closest(
+                                                ".relative"
+                                            );
+                                        const fallback = wrap?.querySelector(
+                                            ".avatar-fallback"
+                                        ) as HTMLElement | null;
+                                        if (fallback)
+                                            fallback.classList.remove(
+                                                "!hidden"
+                                            );
+                                    }}
                                 />
-                            ) : (
-                                <div
-                                    className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
-                                        chat.type === "global"
-                                            ? "bg-gradient-to-br from-orange-500 to-amber-500"
-                                            : chat.type === "channel"
-                                            ? "bg-gradient-to-br from-blue-500 to-cyan-500"
-                                            : chat.type === "group"
-                                            ? "bg-gradient-to-br from-purple-500 to-pink-500"
-                                            : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
-                                    } ${
-                                        chat.unreadCount > 0
-                                            ? "ring-2 ring-[#FF5500]"
-                                            : ""
-                                    }`}
-                                >
-                                    <span className="text-white font-bold text-base sm:text-lg">
-                                        {chat.name[0].toUpperCase()}
-                                    </span>
-                                </div>
                             )}
+                            <div
+                                className={`avatar-fallback w-11 h-11 sm:w-12 sm:h-12 rounded-full flex items-center justify-center ${
+                                    chat.avatar
+                                        ? "absolute inset-0 !hidden"
+                                        : ""
+                                } ${
+                                    chat.type === "global"
+                                        ? "bg-gradient-to-br from-orange-500 to-amber-500"
+                                        : chat.type === "channel"
+                                        ? "bg-gradient-to-br from-blue-500 to-cyan-500"
+                                        : chat.type === "group"
+                                        ? "bg-gradient-to-br from-purple-500 to-pink-500"
+                                        : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
+                                } ${
+                                    chat.unreadCount > 0
+                                        ? "ring-2 ring-[#FF5500]"
+                                        : ""
+                                }`}
+                            >
+                                <span className="text-white font-bold text-base sm:text-lg">
+                                    {chat.name[0]?.toUpperCase() ?? "?"}
+                                </span>
+                            </div>
                             {chat.type === "dm" && chat.isOnline && (
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 sm:w-4 sm:h-4 bg-emerald-500 rounded-full border-2 border-zinc-900" />
                             )}
@@ -794,6 +816,8 @@ function UnifiedChatListInner({
     onMarkFolderAsRead,
     onPinChat,
     isChatsLoading = false,
+    chatsError = null,
+    onRetry,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
@@ -1312,7 +1336,25 @@ function UnifiedChatListInner({
 
             {/* Chat List */}
             <div className="space-y-1 sm:space-y-2">
-                {isChatsLoading ? (
+                {chatsError && !isChatsLoading ? (
+                    <div className="text-center py-6 px-3 rounded-xl bg-red-500/10 border border-red-500/30">
+                        <p className="text-red-400 text-sm font-medium">
+                            Couldn&apos;t load chats
+                        </p>
+                        <p className="text-zinc-500 text-xs mt-1">
+                            {chatsError}
+                        </p>
+                        {onRetry && (
+                            <button
+                                type="button"
+                                onClick={onRetry}
+                                className="mt-3 px-4 py-2 rounded-lg bg-[#FF5500] hover:bg-[#FF5500]/90 text-white text-sm font-medium transition-colors"
+                            >
+                                Retry
+                            </button>
+                        )}
+                    </div>
+                ) : isChatsLoading ? (
                     <ChatListItemSkeleton count={5} />
                 ) : filteredChats.length === 0 ? (
                     <div className="text-center py-8 sm:py-12 px-2">

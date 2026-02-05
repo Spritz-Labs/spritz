@@ -13,9 +13,15 @@ export async function GET(request: NextRequest) {
     if (!session?.userAddress) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const subject = request.nextUrl.searchParams.get("subject")?.trim().toLowerCase();
+    const subject = request.nextUrl.searchParams
+        .get("subject")
+        ?.trim()
+        .toLowerCase();
     if (!subject) {
-        return NextResponse.json({ error: "subject query required" }, { status: 400 });
+        return NextResponse.json(
+            { error: "subject query required" },
+            { status: 400 }
+        );
     }
     const viewer = session.userAddress.toLowerCase();
     const { data, error } = await supabase
@@ -26,7 +32,10 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
     if (error) {
         console.error("[ContactNotes] GET error:", error);
-        return NextResponse.json({ error: "Failed to load notes" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to load notes" },
+            { status: 500 }
+        );
     }
     return NextResponse.json({
         notes: data?.notes ?? null,
@@ -48,7 +57,10 @@ export async function PUT(request: NextRequest) {
     }
     const subject = body.subject?.trim().toLowerCase();
     if (!subject) {
-        return NextResponse.json({ error: "subject required" }, { status: 400 });
+        return NextResponse.json(
+            { error: "subject required" },
+            { status: 400 }
+        );
     }
     const viewer = session.userAddress.toLowerCase();
     const notes = typeof body.notes === "string" ? body.notes : "";
@@ -67,7 +79,10 @@ export async function PUT(request: NextRequest) {
         .single();
     if (error) {
         console.error("[ContactNotes] PUT error:", error);
-        return NextResponse.json({ error: "Failed to save notes" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to save notes" },
+            { status: 500 }
+        );
     }
     return NextResponse.json({
         notes: data?.notes ?? null,

@@ -5679,12 +5679,15 @@ function DashboardContent({
                 }}
             />
 
-            {/* Alpha Chat Modal */}
+            {/* Alpha Chat Modal - treat admins as members so they can always talk in Global Chat */}
             <AlphaChatModal
                 isOpen={isAlphaChatOpen}
                 onClose={() => setIsAlphaChatOpen(false)}
                 userAddress={userAddress}
-                alphaChat={alphaChat}
+                alphaChat={{
+                    ...alphaChat,
+                    isMember: alphaChat.isMember || isAdmin,
+                }}
                 getUserInfo={getAlphaUserInfo}
                 onOpenUserCard={(address) => setUserCardAddress(address)}
                 onAddFriend={async (address) => {
