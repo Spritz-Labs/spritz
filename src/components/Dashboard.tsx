@@ -4291,7 +4291,7 @@ function DashboardContent({
                                     </div>
                                 )}
 
-                                <div className="px-0 sm:p-4">
+                                <div className="px-1.5 py-2 sm:px-4 sm:py-4">
                                     <FriendsList
                                         friends={friendsListData}
                                         userAddress={userAddress}
@@ -4715,7 +4715,7 @@ function DashboardContent({
                                         </div>
                                     </div>
                                 </div>
-                                <div className="px-3 py-2 sm:px-5 sm:py-4">
+                                <div className="px-1.5 py-2 sm:px-4 sm:py-4">
                                     <UnifiedChatList
                                         chats={unifiedChats}
                                         userAddress={userAddress}
