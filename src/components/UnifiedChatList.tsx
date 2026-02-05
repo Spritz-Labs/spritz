@@ -21,6 +21,7 @@ import {
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimestamp, formatDateInTimezone } from "@/lib/timezone";
 import { ChatListItemSkeleton } from "./ChatSkeleton";
+import { PullToRefresh } from "./PullToRefresh";
 
 // Create Folder Modal Component
 function CreateFolderModal({
@@ -247,6 +248,8 @@ type UnifiedChatListProps = {
     chatsError?: string | null;
     /** Callback to retry loading chats */
     onRetry?: () => void;
+    /** Callback to refresh chat list (for pull-to-refresh) */
+    onRefresh?: () => Promise<void>;
 };
 
 const formatTime = (date: Date | null, timezone: string) => {
@@ -818,6 +821,7 @@ function UnifiedChatListInner({
     isChatsLoading = false,
     chatsError = null,
     onRetry,
+    onRefresh,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
@@ -1107,7 +1111,17 @@ function UnifiedChatListInner({
         []
     );
 
-    return (
+    // Create async refresh handler
+    const handleRefresh = useCallback(async () => {
+        if (onRefresh) {
+            await onRefresh();
+        } else if (onRetry) {
+            // Fall back to onRetry if no onRefresh provided
+            await Promise.resolve(onRetry());
+        }
+    }, [onRefresh, onRetry]);
+
+    const content = (
         <div className="space-y-1.5 sm:space-y-3 select-none">
             {/* Search Section */}
             <AnimatePresence>
@@ -1549,6 +1563,21 @@ function UnifiedChatListInner({
             </AnimatePresence>
         </div>
     );
+
+    // Wrap content with PullToRefresh if onRefresh is provided
+    if (onRefresh || onRetry) {
+        return (
+            <PullToRefresh
+                onRefresh={handleRefresh}
+                disabled={isChatsLoading}
+                className="h-full"
+            >
+                {content}
+            </PullToRefresh>
+        );
+    }
+
+    return content;
 }
 
 export const UnifiedChatList = memo(UnifiedChatListInner);

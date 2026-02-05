@@ -4722,6 +4722,9 @@ function DashboardContent({
                                         isChatsLoading={isFriendsLoading}
                                         chatsError={friendsError}
                                         onRetry={refreshFriends}
+                                        onRefresh={async () => {
+                                            await refreshFriends();
+                                        }}
                                         onChatClick={handleUnifiedChatClick}
                                         onCallClick={handleUnifiedCallClick}
                                         onVideoClick={handleUnifiedVideoClick}
