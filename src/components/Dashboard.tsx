@@ -1158,10 +1158,55 @@ function DashboardContent({
                     }
                 }
             }
+
+            // Check for pending location chat join (from invite link when not logged in)
+            const pendingLocationChatId = localStorage.getItem(
+                "spritz_pending_location_chat_join"
+            );
+            if (pendingLocationChatId) {
+                localStorage.removeItem("spritz_pending_location_chat_join");
+                try {
+                    await fetch(`/api/location-chats/${pendingLocationChatId}/join`, {
+                        method: "POST",
+                    });
+                    // Fetch the chat and open it
+                    const res = await fetch(`/api/location-chats/${pendingLocationChatId}`);
+                    const data = await res.json();
+                    if (data.chat) {
+                        setSelectedLocationChat(data.chat);
+                    }
+                } catch (err) {
+                    console.error(
+                        "[Dashboard] Error joining pending location chat:",
+                        err
+                    );
+                }
+            }
+
+            // Check for location chat to open (from invite link when already logged in)
+            const openLocationChatId = localStorage.getItem("spritz_open_location_chat");
+            if (openLocationChatId) {
+                localStorage.removeItem("spritz_open_location_chat");
+                // Always fetch full chat details to get the complete LocationChat type
+                try {
+                    const res = await fetch(
+                        `/api/location-chats/${openLocationChatId}`
+                    );
+                    const data = await res.json();
+                    if (data.chat) {
+                        setSelectedLocationChat(data.chat);
+                    }
+                } catch (err) {
+                    console.error(
+                        "[Dashboard] Error opening location chat:",
+                        err
+                    );
+                }
+            }
         };
 
         handlePendingJoins();
-    }, [userAddress, joinChannel, fetchJoinedChannels, joinedChannels]);
+    }, [userAddress, joinChannel, fetchJoinedChannels, joinedChannels, joinedLocationChats]);
 
     // Screen Wake Lock - prevents screen from dimming during calls and active chats
     // This helps maintain WebSocket connections and improves PWA experience

@@ -16,6 +16,11 @@ import {
     formatLocationMessage,
     type LocationData,
 } from "./LocationMessage";
+import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { PixelArtEditor } from "./PixelArtEditor";
+import { PixelArtImage } from "./PixelArtImage";
+import { LinkPreview, detectUrls } from "./LinkPreview";
+import { MessageActionBar, type MessageActionConfig, type MessageActionCallbacks } from "./MessageActionBar";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -25,6 +30,58 @@ type LocationChatModalProps = {
     getUserInfo?: (address: string) => { name: string | null; avatar: string | null } | null;
     onOpenUserCard?: (address: string) => void;
 };
+
+// Helper to check if content is a GIF URL
+function isGifMessage(content: string): boolean {
+    return content.startsWith("https://") && (
+        content.includes("giphy.com") || 
+        content.includes("tenor.com") || 
+        content.endsWith(".gif")
+    );
+}
+
+// Helper to check if content is pixel art
+function isPixelArtMessage(content: string): boolean {
+    return content.startsWith("[PIXEL_ART]") || 
+           (content.startsWith("https://") && content.includes("pixel-art"));
+}
+
+// Extract pixel art URL from message
+function extractPixelArtUrl(content: string): string | null {
+    if (content.startsWith("[PIXEL_ART]")) {
+        const match = content.match(/\[PIXEL_ART\](.*)/);
+        return match ? match[1].trim() : null;
+    }
+    if (content.startsWith("https://") && content.includes("pixel-art")) {
+        return content;
+    }
+    return null;
+}
+
+// Toast helper
+function showToast(message: string, type: "success" | "error" = "success") {
+    const existing = document.querySelector('[data-toast]');
+    if (existing) existing.remove();
+    
+    const toast = document.createElement("div");
+    toast.setAttribute('data-toast', 'true');
+    toast.className = `fixed bottom-32 left-1/2 -translate-x-1/2 px-4 py-3 ${
+        type === "success" ? "bg-zinc-800" : "bg-red-600"
+    } text-white text-sm font-medium rounded-2xl shadow-xl z-[9999] flex items-center gap-2`;
+    toast.innerHTML = `
+        ${type === "success" 
+            ? '<svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+            : '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+        }
+        <span>${message}</span>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transition = "opacity 0.3s";
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
+}
 
 export function LocationChatModal({
     isOpen,
@@ -36,6 +93,11 @@ export function LocationChatModal({
 }: LocationChatModalProps) {
     const [newMessage, setNewMessage] = useState("");
     const [showInfo, setShowInfo] = useState(false);
+    const [showPixelArt, setShowPixelArt] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [replyingTo, setReplyingTo] = useState<LocationChatMessage | null>(null);
+    const [selectedMessage, setSelectedMessage] = useState<MessageActionConfig | null>(null);
+    const [showMessageActions, setShowMessageActions] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const timezone = useUserTimezone();
@@ -88,6 +150,104 @@ export function LocationChatModal({
             handleSend();
         }
     };
+
+    // Handle GIF sending
+    const handleSendGif = useCallback(async (gifUrl: string) => {
+        await sendMessage(gifUrl, "gif");
+    }, [sendMessage]);
+
+    // Handle pixel art sending
+    const handleSendPixelArt = useCallback(async (dataUrl: string) => {
+        setIsUploading(true);
+        try {
+            // Upload pixel art to storage
+            const response = await fetch("/api/pixel-art/upload", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: dataUrl }),
+            });
+            
+            if (!response.ok) {
+                throw new Error("Failed to upload pixel art");
+            }
+            
+            const { url } = await response.json();
+            await sendMessage(`[PIXEL_ART]${url}`, "pixel_art");
+            setShowPixelArt(false);
+        } catch (error) {
+            console.error("[LocationChat] Pixel art upload error:", error);
+            showToast("Failed to send pixel art", "error");
+        } finally {
+            setIsUploading(false);
+        }
+    }, [sendMessage]);
+
+    // Handle sharing location
+    const handleShareLocation = useCallback((location: LocationData) => {
+        const content = formatLocationMessage(location);
+        sendMessage(content, "location");
+    }, [sendMessage]);
+
+    // Handle share invite link
+    const handleShareInvite = useCallback(async () => {
+        const inviteUrl = `${window.location.origin}/location-chat/${locationChat.id}`;
+        
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: `Join ${locationChat.name} on Spritz`,
+                    text: `Chat with others at ${locationChat.google_place_name || locationChat.name}! 📍`,
+                    url: inviteUrl,
+                });
+            } catch (err) {
+                if ((err as Error).name !== "AbortError") {
+                    navigator.clipboard.writeText(inviteUrl);
+                    showToast("Invite link copied!");
+                }
+            }
+        } else {
+            navigator.clipboard.writeText(inviteUrl);
+            showToast("Invite link copied!");
+        }
+    }, [locationChat]);
+
+    // Handle message tap for actions
+    const handleMessageTap = useCallback((msg: LocationChatMessage) => {
+        const isOwn = msg.sender_address.toLowerCase() === userAddress.toLowerCase();
+        const isPixelArt = isPixelArtMessage(msg.content);
+        const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
+        
+        setSelectedMessage({
+            messageId: msg.id,
+            messageContent: msg.content,
+            isOwn,
+            hasMedia: isGifMessage(msg.content) || isPixelArt,
+            isPixelArt,
+            mediaUrl: isGifMessage(msg.content) ? msg.content : pixelArtUrl || undefined,
+        });
+        setShowMessageActions(true);
+    }, [userAddress]);
+
+    // Message action callbacks
+    const messageActionCallbacks: MessageActionCallbacks = {
+        onReply: () => {
+            const msg = messages.find(m => m.id === selectedMessage?.messageId);
+            if (msg) {
+                setReplyingTo(msg);
+                inputRef.current?.focus();
+            }
+        },
+        onCopy: () => {
+            if (selectedMessage?.messageContent) {
+                navigator.clipboard.writeText(selectedMessage.messageContent);
+            }
+        },
+    };
+
+    // Cancel reply
+    const cancelReply = useCallback(() => {
+        setReplyingTo(null);
+    }, []);
 
     const formatMessageTime = (timestamp: string) => {
         return formatTimeInTimezone(new Date(timestamp), timezone);
@@ -341,8 +501,16 @@ export function LocationChatModal({
                                                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                                                     </svg>
-                                                    Get Directions
+                                                    Directions
                                                 </a>
+                                                <button
+                                                    onClick={handleShareInvite}
+                                                    className="py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-all border border-zinc-700"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                    </svg>
+                                                </button>
                                                 <button
                                                     onClick={() => leaveChat().then(() => onClose())}
                                                     className="py-3 px-4 bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 text-sm font-medium rounded-xl transition-all border border-zinc-700 hover:border-red-500/50"
@@ -372,9 +540,13 @@ export function LocationChatModal({
                                     const showAvatar = idx === 0 || 
                                         messages[idx - 1].sender_address !== msg.sender_address;
 
-                                    // Check for location message
+                                    // Check message types
                                     const isLocation = isLocationMessage(msg.content);
                                     const locationData = isLocation ? parseLocationMessage(msg.content) : null;
+                                    const isGif = isGifMessage(msg.content);
+                                    const isPixelArt = isPixelArtMessage(msg.content);
+                                    const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
+                                    const urls = !isGif && !isPixelArt && !isLocation ? detectUrls(msg.content) : [];
 
                                     return (
                                         <div
@@ -405,25 +577,59 @@ export function LocationChatModal({
                                                     </span>
                                                 )}
 
-                                                {/* Message bubble */}
-                                                {isLocation && locationData ? (
-                                                    <LocationMessage
-                                                        location={locationData}
-                                                        isOwn={isOwn}
-                                                    />
-                                                ) : (
-                                                    <div
-                                                        className={`px-4 py-2.5 rounded-2xl ${
-                                                            isOwn
-                                                                ? "bg-[#FF5500] text-white rounded-br-md"
-                                                                : "bg-zinc-800 text-white rounded-bl-md"
-                                                        }`}
-                                                    >
-                                                        <p className="text-sm whitespace-pre-wrap break-words">
-                                                            {msg.content}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                {/* Message content - tap for actions */}
+                                                <button
+                                                    onClick={() => handleMessageTap(msg)}
+                                                    className="text-left focus:outline-none active:opacity-80 transition-opacity"
+                                                >
+                                                    {/* Location message */}
+                                                    {isLocation && locationData ? (
+                                                        <LocationMessage
+                                                            location={locationData}
+                                                            isOwn={isOwn}
+                                                        />
+                                                    ) : isGif ? (
+                                                        /* GIF message */
+                                                        <div className={`rounded-2xl overflow-hidden ${isOwn ? "rounded-br-md" : "rounded-bl-md"}`}>
+                                                            <img
+                                                                src={msg.content}
+                                                                alt="GIF"
+                                                                className="max-w-[250px] max-h-[200px] object-contain rounded-lg"
+                                                                loading="lazy"
+                                                            />
+                                                        </div>
+                                                    ) : isPixelArt && pixelArtUrl ? (
+                                                        /* Pixel Art message */
+                                                        <div className={`rounded-2xl overflow-hidden ${isOwn ? "rounded-br-md" : "rounded-bl-md"}`}>
+                                                            <PixelArtImage
+                                                                src={pixelArtUrl}
+                                                                alt="Pixel Art"
+                                                                className="max-w-[200px]"
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        /* Text message */
+                                                        <div
+                                                            className={`px-4 py-2.5 rounded-2xl ${
+                                                                isOwn
+                                                                    ? "bg-[#FF5500] text-white rounded-br-md"
+                                                                    : "bg-zinc-800 text-white rounded-bl-md"
+                                                            }`}
+                                                        >
+                                                            <p className="text-sm whitespace-pre-wrap break-words">
+                                                                {msg.content}
+                                                            </p>
+                                                            {/* Link previews */}
+                                                            {urls.length > 0 && (
+                                                                <div className="mt-2">
+                                                                    {urls.slice(0, 1).map((url) => (
+                                                                        <LinkPreview key={url} url={url} compact />
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </button>
 
                                                 {/* Time */}
                                                 <span className="text-[10px] text-zinc-600 mt-1 mx-1">
@@ -438,41 +644,80 @@ export function LocationChatModal({
                         </div>
 
                         {/* Input Area */}
-                        <div className="border-t border-zinc-800 p-4 bg-zinc-900">
-                            {!isMember ? (
-                                <button
-                                    onClick={joinChat}
-                                    className="w-full py-3 bg-[#FF5500] hover:bg-[#E64D00] text-white font-medium rounded-xl transition-colors"
-                                >
-                                    Join Chat to Send Messages
-                                </button>
-                            ) : (
-                                <div className="flex items-end gap-2">
-                                    <textarea
-                                        ref={inputRef}
-                                        value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        onKeyDown={handleKeyDown}
-                                        placeholder={`Message ${displayChat.name}...`}
-                                        rows={1}
-                                        className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
-                                        style={{ maxHeight: "120px" }}
-                                    />
-                                    <button
-                                        onClick={handleSend}
-                                        disabled={!newMessage.trim() || isSending}
-                                        className="p-3 bg-[#FF5500] hover:bg-[#E64D00] disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl transition-colors"
-                                    >
-                                        {isSending ? (
-                                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        ) : (
-                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        <div className="border-t border-zinc-800 bg-zinc-900">
+                            {/* Reply indicator */}
+                            {replyingTo && (
+                                <div className="px-4 pt-3 pb-0">
+                                    <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded-lg border-l-2 border-[#FF5500]">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs text-[#FF5500] font-medium">
+                                                Replying to {getDisplayName(replyingTo.sender_address)}
+                                            </p>
+                                            <p className="text-xs text-zinc-400 truncate">
+                                                {isGifMessage(replyingTo.content) ? "GIF" : 
+                                                 isPixelArtMessage(replyingTo.content) ? "Pixel Art" :
+                                                 isLocationMessage(replyingTo.content) ? "Location" :
+                                                 replyingTo.content}
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={cancelReply}
+                                            className="p-1 text-zinc-400 hover:text-white transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                             </svg>
-                                        )}
-                                    </button>
+                                        </button>
+                                    </div>
                                 </div>
                             )}
+                            
+                            <div className="p-4">
+                                {!isMember ? (
+                                    <button
+                                        onClick={joinChat}
+                                        className="w-full py-3 bg-[#FF5500] hover:bg-[#E64D00] text-white font-medium rounded-xl transition-colors"
+                                    >
+                                        Join Chat to Send Messages
+                                    </button>
+                                ) : (
+                                    <div className="flex items-end gap-2">
+                                        {/* Attachment menu */}
+                                        <ChatAttachmentMenu
+                                            onPixelArt={() => setShowPixelArt(true)}
+                                            onGif={handleSendGif}
+                                            onLocation={handleShareLocation}
+                                            showLocation={true}
+                                            isUploading={isUploading}
+                                            disabled={isSending}
+                                        />
+                                        
+                                        <textarea
+                                            ref={inputRef}
+                                            value={newMessage}
+                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            onKeyDown={handleKeyDown}
+                                            placeholder={replyingTo ? "Type your reply..." : `Message ${displayChat.name}...`}
+                                            rows={1}
+                                            className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
+                                            style={{ maxHeight: "120px" }}
+                                        />
+                                        <button
+                                            onClick={handleSend}
+                                            disabled={!newMessage.trim() || isSending}
+                                            className="p-3 bg-[#FF5500] hover:bg-[#E64D00] disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl transition-colors"
+                                        >
+                                            {isSending ? (
+                                                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                            ) : (
+                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                </svg>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Decentralized indicator */}
@@ -485,6 +730,26 @@ export function LocationChatModal({
                     </motion.div>
                 </motion.div>
             )}
+
+            {/* Pixel Art Editor */}
+            {showPixelArt && (
+                <PixelArtEditor
+                    isOpen={showPixelArt}
+                    onClose={() => setShowPixelArt(false)}
+                    onSend={handleSendPixelArt}
+                />
+            )}
+
+            {/* Message Action Bar */}
+            <MessageActionBar
+                isOpen={showMessageActions}
+                onClose={() => {
+                    setShowMessageActions(false);
+                    setSelectedMessage(null);
+                }}
+                config={selectedMessage}
+                callbacks={messageActionCallbacks}
+            />
         </AnimatePresence>,
         document.body
     );
