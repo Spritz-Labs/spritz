@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "motion/react";
 
 export type LocationData = {
@@ -18,29 +18,72 @@ type LocationMessageProps = {
     className?: string;
 };
 
+// 5 minute walking distance is approximately 400 meters (average walking speed ~4.8 km/h)
+const WALKING_RADIUS_METERS = 400;
+const WALKING_RADIUS_DEGREES = WALKING_RADIUS_METERS / 111320; // Approximate conversion at equator
+
 // Display a location message with a useful map preview
 export function LocationMessage({ location, isOwn = false, className = "" }: LocationMessageProps) {
     const [mapLoaded, setMapLoaded] = useState(false);
     const [mapError, setMapError] = useState(false);
 
-    // Use multiple tile providers for reliability
-    // OpenStreetMap tiles - standard map view with streets and landmarks
-    const zoom = 16; // Higher zoom for better detail
-    const tileX = Math.floor((location.lng + 180) / 360 * Math.pow(2, zoom));
-    const tileY = Math.floor((1 - Math.log(Math.tan(location.lat * Math.PI / 180) + 1 / Math.cos(location.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+    // Calculate bounding box for ~5 minute walking distance (~400m radius)
+    // Adjust for latitude (longitude degrees are smaller at higher latitudes)
+    const latRadiusDeg = WALKING_RADIUS_DEGREES;
+    const lngRadiusDeg = WALKING_RADIUS_DEGREES / Math.cos(location.lat * Math.PI / 180);
     
-    // Create a composite map image URL using multiple tiles for context
-    // We'll use an iframe embed for the best visual experience
-    const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${location.lng - 0.003},${location.lat - 0.002},${location.lng + 0.003},${location.lat + 0.002}&layer=mapnik&marker=${location.lat},${location.lng}`;
+    // Create OpenStreetMap embed with 5-minute walking radius view
+    // bbox format: left,bottom,right,top (minLng, minLat, maxLng, maxLat)
+    const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${
+        location.lng - lngRadiusDeg
+    },${
+        location.lat - latRadiusDeg
+    },${
+        location.lng + lngRadiusDeg
+    },${
+        location.lat + latRadiusDeg
+    }&layer=mapnik&marker=${location.lat},${location.lng}`;
     
-    // Fallback static image from OSM
-    const staticMapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${location.lat},${location.lng}&zoom=16&size=400x200&maptype=mapnik&markers=${location.lat},${location.lng},red`;
+    // Fallback static image from OSM with appropriate zoom for ~400m radius (zoom 15-16)
+    const staticMapUrl = `https://staticmap.openstreetmap.de/staticmap.php?center=${location.lat},${location.lng}&zoom=15&size=400x200&maptype=mapnik&markers=${location.lat},${location.lng},red`;
     
-    // Google Maps link for opening
-    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`;
+    // Smart routing link - detects platform and opens appropriate native app
+    // iOS: Apple Maps via maps:// scheme, Android/Desktop: Google Maps
+    const getNavigationUrl = useCallback(() => {
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        
+        if (isIOS) {
+            // Apple Maps URL scheme - opens in Apple Maps app
+            return `maps://maps.apple.com/?daddr=${location.lat},${location.lng}&dirflg=w`;
+        } else if (isAndroid) {
+            // Google Maps intent for Android - opens in Google Maps app
+            return `geo:${location.lat},${location.lng}?q=${location.lat},${location.lng}`;
+        } else {
+            // Desktop/fallback - Google Maps web with directions
+            return `https://www.google.com/maps/dir/?api=1&destination=${location.lat},${location.lng}&travelmode=walking`;
+        }
+    }, [location.lat, location.lng]);
     
-    // Apple Maps link (for iOS)
-    const appleMapsLink = `https://maps.apple.com/?q=${location.lat},${location.lng}`;
+    // Standard map viewing links (not navigation)
+    const googleMapsViewUrl = `https://www.google.com/maps/search/?api=1&query=${location.lat},${location.lng}`;
+    const appleMapsViewUrl = `https://maps.apple.com/?ll=${location.lat},${location.lng}&q=${encodeURIComponent(location.name || "Shared Location")}`;
+    
+    // Handle opening in native app for navigation
+    const handleNavigate = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = getNavigationUrl();
+        window.open(url, "_blank");
+    }, [getNavigationUrl]);
+    
+    // Handle viewing location (not navigating)
+    const handleViewLocation = useCallback((e: React.MouseEvent) => {
+        e.stopPropagation();
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        const url = isIOS ? appleMapsViewUrl : googleMapsViewUrl;
+        window.open(url, "_blank");
+    }, [appleMapsViewUrl, googleMapsViewUrl]);
 
     return (
         <motion.div 
@@ -49,13 +92,13 @@ export function LocationMessage({ location, isOwn = false, className = "" }: Loc
             className={`rounded-2xl overflow-hidden shadow-lg ${isOwn ? "rounded-br-md" : "rounded-bl-md"} ${className}`}
             style={{ maxWidth: "320px", minWidth: "260px" }}
         >
-            {/* Interactive Map Preview */}
+            {/* Interactive Map Preview - Shows ~5 min walking radius */}
             <div className="relative bg-zinc-900">
                 {/* Map Container */}
                 <div className="relative w-full h-[180px] overflow-hidden">
                     {!mapError ? (
                         <>
-                            {/* OpenStreetMap Embed - Shows actual map with streets */}
+                            {/* OpenStreetMap Embed - Shows map with ~5 min walking radius */}
                             <iframe
                                 src={embedUrl}
                                 className={`w-full h-full border-0 pointer-events-none transition-opacity duration-300 ${mapLoaded ? "opacity-100" : "opacity-0"}`}
@@ -88,19 +131,18 @@ export function LocationMessage({ location, isOwn = false, className = "" }: Loc
                         />
                     )}
                     
+                    {/* Walking radius indicator */}
+                    <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 bg-black/60 backdrop-blur-sm rounded-full text-[10px] text-white/80">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                        <span>~5 min walk</span>
+                    </div>
+                    
                     {/* Clickable Overlay */}
-                    <a
-                        href={mapsLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="absolute inset-0 z-10 group"
-                        onClick={(e) => {
-                            // Try Apple Maps on iOS
-                            if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-                                e.preventDefault();
-                                window.open(appleMapsLink, "_blank");
-                            }
-                        }}
+                    <button
+                        onClick={handleViewLocation}
+                        className="absolute inset-0 z-10 group cursor-pointer"
                     >
                         {/* Subtle gradient for better text readability */}
                         <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/50 to-transparent" />
@@ -111,13 +153,13 @@ export function LocationMessage({ location, isOwn = false, className = "" }: Loc
                                 <svg className="w-4 h-4 text-zinc-800" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
-                                <span className="text-sm font-medium text-zinc-800">Open in Maps</span>
+                                <span className="text-sm font-medium text-zinc-800">View in Maps</span>
                             </div>
                         </div>
                         
-                        {/* Custom pin marker overlay (shown when map fails or on top) */}
+                        {/* Custom pin marker overlay (shown when map fails) */}
                         {mapError && (
-                            <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="absolute inset-0 flex items-center justify-center bg-zinc-800">
                                 <div className="relative">
                                     {/* Pin shadow */}
                                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-1 bg-black/30 rounded-full blur-sm" />
@@ -130,7 +172,7 @@ export function LocationMessage({ location, isOwn = false, className = "" }: Loc
                                 </div>
                             </div>
                         )}
-                    </a>
+                    </button>
                 </div>
             </div>
 
@@ -175,28 +217,21 @@ export function LocationMessage({ location, isOwn = false, className = "" }: Loc
                         )}
                     </div>
                     
-                    {/* Navigation Arrow */}
-                    <a
-                        href={mapsLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    {/* Navigate Button - Opens in native maps app with directions */}
+                    <button
+                        onClick={handleNavigate}
                         className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-colors ${
                             isOwn 
                                 ? "bg-white/20 hover:bg-white/30 active:bg-white/40" 
                                 : "bg-[#FF5500] hover:bg-[#FF6600] active:bg-[#E64D00]"
                         }`}
-                        onClick={(e) => {
-                            if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-                                e.preventDefault();
-                                window.open(appleMapsLink, "_blank");
-                            }
-                        }}
+                        title="Get directions"
                     >
+                        {/* Navigation arrow icon */}
                         <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                         </svg>
-                    </a>
+                    </button>
                 </div>
             </div>
         </motion.div>
