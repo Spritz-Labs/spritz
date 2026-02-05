@@ -1862,7 +1862,7 @@ export function AlphaChatModal({
                                                                                         : "max-w-[75%]"
                                                                                 } rounded-2xl px-4 py-2.5 relative cursor-pointer ${
                                                                                     isOwn
-                                                                                        ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-br-md"
+                                                                                        ? "bg-[#FF5500] text-white rounded-br-md"
                                                                                         : isAgent
                                                                                         ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
                                                                                         : "bg-zinc-800 text-white rounded-bl-md"
@@ -2379,7 +2379,7 @@ export function AlphaChatModal({
                                                             : "Message the community..."
                                                     }
                                                     users={mentionableUsers}
-                                                    className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/20 transition-all ${
+                                                    className={`w-full bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all ${
                                                         isFullscreen
                                                             ? "py-4 px-5 text-lg"
                                                             : "py-3 px-4"
@@ -2393,7 +2393,7 @@ export function AlphaChatModal({
                                                     isSending ||
                                                     isCurrentUserMuted
                                                 }
-                                                className={`rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                className={`rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                                                     isFullscreen ? "p-4" : "p-3"
                                                 }`}
                                             >

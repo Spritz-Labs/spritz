@@ -24,7 +24,7 @@ function AgentListSkeleton({ count = 5 }: { count?: number }) {
             {Array.from({ length: count }).map((_, i) => (
                 <div
                     key={i}
-                    className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-zinc-800/30 sm:bg-zinc-800/50 border border-transparent sm:border-zinc-700/50"
+                    className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50"
                 >
                     <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-zinc-700 animate-pulse shrink-0" />
                     <div className="flex-1 min-w-0 space-y-1.5">
@@ -514,7 +514,7 @@ export function AgentsSection({
                                         key={agent.id}
                                         initial={{ opacity: 0, y: 10 }}
                                         animate={{ opacity: 1, y: 0 }}
-                                        className="group p-2.5 sm:p-3 bg-zinc-800/30 sm:bg-zinc-800/50 border border-transparent sm:border-zinc-700/50 rounded-xl cursor-pointer"
+                                        className="group p-2.5 sm:p-3 bg-zinc-800/50 border border-zinc-700/50 rounded-xl cursor-pointer hover:bg-zinc-800 transition-colors"
                                         onClick={() => handleOpenChat(agent)}
                                     >
                                         <div className="flex items-center gap-2.5 sm:gap-3">

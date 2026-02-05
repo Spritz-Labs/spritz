@@ -1768,7 +1768,7 @@ export function GroupChatModal({
                                                                 >
                                                                     <div
                                                                         data-message-bubble
-                                                                        className={`max-w-[70%] rounded-2xl px-4 py-2 relative cursor-pointer ${
+                                                                        className={`max-w-[75%] rounded-2xl px-4 py-2.5 relative cursor-pointer ${
                                                                             isOwn
                                                                                 ? "bg-[#FF5500] text-white rounded-br-md"
                                                                                 : "bg-zinc-800 text-white rounded-bl-md"
@@ -2184,7 +2184,7 @@ export function GroupChatModal({
                                         }
                                         disabled={!isInitialized}
                                         users={mentionableUsers}
-                                        className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all disabled:opacity-50"
+                                        className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50"
                                     />
                                     <button
                                         onClick={handleSend}

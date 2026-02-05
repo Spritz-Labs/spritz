@@ -173,7 +173,7 @@ const FriendCard = memo(function FriendCard({
                 className={`rounded-lg sm:rounded-xl px-2 py-2 sm:p-4 transition-all ${
                     hasUnread
                         ? "bg-[#FF5500]/10 hover:bg-[#FF5500]/15 border border-[#FF5500]/30"
-                        : "bg-zinc-800/30 sm:bg-zinc-800/50 hover:bg-zinc-800 border border-transparent sm:border-zinc-700/50"
+                        : "bg-zinc-800/50 hover:bg-zinc-800 border border-zinc-700/50"
                 }`}
             >
                 <div className="flex items-center gap-2.5 sm:gap-3">

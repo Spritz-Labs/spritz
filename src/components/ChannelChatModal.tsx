@@ -1523,7 +1523,7 @@ export function ChannelChatModal({
                                                 }
                                             }}
                                             placeholder="Reply in thread..."
-                                            className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
+                                            className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all"
                                         />
                                         <button
                                             onClick={async () => {
@@ -1544,7 +1544,7 @@ export function ChannelChatModal({
                                                 !threadInputValue.trim() ||
                                                 isSending
                                             }
-                                            className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#FF6600] disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#E04D00] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                             aria-label="Send"
                                         >
                                             <svg
@@ -3084,12 +3084,12 @@ export function ChannelChatModal({
                                 onSubmit={handleSend}
                                 placeholder={`Message #${channel.name}`}
                                 users={mentionableUsers}
-                                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
+                                className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all"
                             />
                             <button
                                 onClick={handleSend}
                                 disabled={!inputValue.trim() || isSending}
-                                className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#FF6600] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#E04D00] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 aria-label="Send message"
                             >
                                 {isSending ? (

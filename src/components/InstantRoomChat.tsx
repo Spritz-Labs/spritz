@@ -6,6 +6,7 @@ import protobuf from "protobufjs";
 import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
+import { ChatEmptyState } from "./ChatEmptyState";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { DateDivider } from "./UnreadDivider";
@@ -591,15 +592,11 @@ export function InstantRoomChat({
                         )}
 
                         {isConnected && messages.length === 0 && (
-                            <div className="flex flex-col items-center justify-center py-8 text-center">
-                                <span className="text-3xl mb-2">👋</span>
-                                <p className="text-zinc-400 text-sm">
-                                    No messages yet
-                                </p>
-                                <p className="text-zinc-500 text-xs">
-                                    Be the first to say hello!
-                                </p>
-                            </div>
+                            <ChatEmptyState
+                                icon="👋"
+                                title="No messages yet"
+                                subtitle="Be the first to say hello!"
+                            />
                         )}
 
                         {messages.map((msg) => {
@@ -645,9 +642,9 @@ export function InstantRoomChat({
                                                       }
                                             );
                                         }}
-                                        className={`max-w-[85%] rounded-2xl px-3 py-2 relative cursor-pointer ${
+                                        className={`max-w-[85%] rounded-2xl px-4 py-2.5 relative cursor-pointer ${
                                             msg.isMe
-                                                ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white"
+                                                ? "bg-[#FF5500] text-white rounded-br-md"
                                                 : "bg-zinc-800 text-white"
                                         } ${
                                             selectedMessage === msg.id
@@ -867,7 +864,7 @@ export function InstantRoomChat({
                                     }
                                     disabled={!isConnected}
                                     maxLength={10000}
-                                    className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50"
+                                    className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50"
                                 />
                                 {inputValue.length > 500 && (
                                     <p className="text-xs text-zinc-500">
@@ -880,7 +877,7 @@ export function InstantRoomChat({
                                     disabled={
                                         !inputValue.trim() || !isConnected
                                     }
-                                    className="p-2 bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-orange-500/25 transition-all"
+                                    className="p-3 bg-[#FF5500] hover:bg-[#E04D00] rounded-xl text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                 >
                                     <svg
                                         className="w-5 h-5"

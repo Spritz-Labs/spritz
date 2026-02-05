@@ -39,7 +39,17 @@ export function FriendRequests({
     };
 
     if (incomingRequests.length === 0 && outgoingRequests.length === 0) {
-        return null;
+        return (
+            <div className="text-center py-8">
+                <div className="w-14 h-14 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-7 h-7 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                    </svg>
+                </div>
+                <p className="text-zinc-400 font-medium">No pending requests</p>
+                <p className="text-zinc-500 text-sm mt-1">Friend requests will appear here</p>
+            </div>
+        );
     }
 
     return (
