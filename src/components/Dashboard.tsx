@@ -157,6 +157,8 @@ function DashboardContent({
     const { smartWallet } = useSmartWallet(
         isSolanaUser ? null : (userAddress as string)
     );
+    // Connected wallet address (for admin/alpha checks when user signed in with email etc.)
+    const { address: connectedWalletAddress } = useAccount();
     const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
     const [isUsernameModalOpen, setIsUsernameModalOpen] = useState(false);
     const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
@@ -468,12 +470,22 @@ function DashboardContent({
         trackScheduleCreated,
     } = useAnalytics(userAddress);
 
-    // Check both primary address and smart wallet so admins work when signing in with either
+    // Check primary address, smart wallet, and connected wallet so admins work with any sign-in method
+    const adminAdditionalAddresses = useMemo(() => {
+        const addrs: (string | null)[] = [];
+        if (smartWallet?.smartWalletAddress)
+            addrs.push(smartWallet.smartWalletAddress);
+        if (
+            connectedWalletAddress &&
+            connectedWalletAddress.toLowerCase() !== userAddress?.toLowerCase()
+        ) {
+            addrs.push(connectedWalletAddress);
+        }
+        return addrs.length ? addrs : undefined;
+    }, [smartWallet?.smartWalletAddress, connectedWalletAddress, userAddress]);
     const { isAdmin, isSuperAdmin } = useAdminCheck(
         userAddress,
-        smartWallet?.smartWalletAddress
-            ? [smartWallet.smartWalletAddress]
-            : undefined
+        adminAdditionalAddresses
     );
 
     // Beta access is passed from SIWE auth (or fall back to hook for non-EVM users)
@@ -642,14 +654,19 @@ function DashboardContent({
         }
     };
 
-    // Alpha Channel (check membership for both EOA and smart wallet so passkey users are recognized)
-    const alphaAdditionalAddresses = useMemo(
-        () =>
-            smartWallet?.smartWalletAddress
-                ? [smartWallet.smartWalletAddress]
-                : undefined,
-        [smartWallet?.smartWalletAddress]
-    );
+    // Alpha Channel (check membership for EOA, smart wallet, and connected wallet so any sign-in method is recognized)
+    const alphaAdditionalAddresses = useMemo(() => {
+        const addrs: (string | null)[] = [];
+        if (smartWallet?.smartWalletAddress)
+            addrs.push(smartWallet.smartWalletAddress);
+        if (
+            connectedWalletAddress &&
+            connectedWalletAddress.toLowerCase() !== userAddress?.toLowerCase()
+        ) {
+            addrs.push(connectedWalletAddress);
+        }
+        return addrs.length ? addrs : undefined;
+    }, [smartWallet?.smartWalletAddress, connectedWalletAddress, userAddress]);
     const alphaChat = useAlphaChat(userAddress, alphaAdditionalAddresses);
     const {
         unreadCount: alphaUnreadCount,
