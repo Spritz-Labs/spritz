@@ -69,57 +69,144 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
     const [locationErrorCode, setLocationErrorCode] = useState<number | null>(null);
     const [isRequestingLocation, setIsRequestingLocation] = useState(false);
     const [selectedPlace, setSelectedPlace] = useState<PlaceResult | null>(null);
+    const [locationMethod, setLocationMethod] = useState<string | null>(null);
+    const [debugInfo, setDebugInfo] = useState<string | null>(null);
     
     const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
-    // Function to request location with better error handling
-    const requestLocation = useCallback(() => {
-        if (!navigator.geolocation) {
-            setLocationError("Geolocation is not supported by your browser");
-            setLocationErrorCode(-1);
-            return;
+    // IP-based geolocation fallback
+    const getLocationFromIP = useCallback(async () => {
+        try {
+            console.log("[LocationChatPicker] Trying IP-based geolocation...");
+            setDebugInfo("Trying IP-based location...");
+            
+            // Use ipapi.co for IP-based geolocation (free, no API key needed)
+            const response = await fetch("https://ipapi.co/json/", {
+                signal: AbortSignal.timeout(10000),
+            });
+            
+            if (!response.ok) {
+                throw new Error("IP location service unavailable");
+            }
+            
+            const data = await response.json();
+            
+            if (data.latitude && data.longitude) {
+                console.log("[LocationChatPicker] Got IP location:", data.latitude, data.longitude, data.city);
+                setUserLocation({
+                    lat: data.latitude,
+                    lng: data.longitude,
+                });
+                setLocationMethod(`IP-based (${data.city || "approximate"})`);
+                setLocationError(null);
+                setLocationErrorCode(null);
+                setDebugInfo(null);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("[LocationChatPicker] IP geolocation error:", err);
+            return false;
         }
+    }, []);
 
+    // Function to request location with better error handling
+    const requestLocation = useCallback(async () => {
         setIsRequestingLocation(true);
         setLocationError(null);
         setLocationErrorCode(null);
+        setDebugInfo("Checking location permissions...");
 
-        // Try with high accuracy first, then fall back to lower accuracy
-        const tryGetLocation = (highAccuracy: boolean, timeout: number) => {
+        // First check if geolocation is available
+        if (!navigator.geolocation) {
+            console.log("[LocationChatPicker] Geolocation not supported, trying IP fallback");
+            setDebugInfo("Browser geolocation not supported, trying IP...");
+            const ipSuccess = await getLocationFromIP();
+            if (!ipSuccess) {
+                setLocationError("Geolocation is not supported. Please try a different browser.");
+                setLocationErrorCode(-1);
+            }
+            setIsRequestingLocation(false);
+            return;
+        }
+
+        // Check permissions API if available
+        if (navigator.permissions) {
+            try {
+                const permission = await navigator.permissions.query({ name: "geolocation" });
+                console.log("[LocationChatPicker] Permission state:", permission.state);
+                setDebugInfo(`Permission: ${permission.state}`);
+                
+                if (permission.state === "denied") {
+                    console.log("[LocationChatPicker] Permission denied, trying IP fallback");
+                    const ipSuccess = await getLocationFromIP();
+                    if (!ipSuccess) {
+                        setLocationError("Location access is blocked. Please enable it in your browser settings, or we'll use approximate location.");
+                        setLocationErrorCode(1);
+                    }
+                    setIsRequestingLocation(false);
+                    return;
+                }
+            } catch (permErr) {
+                console.log("[LocationChatPicker] Permissions API error:", permErr);
+            }
+        }
+
+        setDebugInfo("Requesting precise location...");
+
+        // Try with high accuracy first, then fall back to lower accuracy, then IP
+        const tryGetLocation = (highAccuracy: boolean, timeout: number, attempt: number) => {
+            console.log(`[LocationChatPicker] Attempt ${attempt}: highAccuracy=${highAccuracy}, timeout=${timeout}ms`);
+            
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    console.log("[LocationChatPicker] Got location:", position.coords);
+                    console.log("[LocationChatPicker] Got browser location:", position.coords.latitude, position.coords.longitude);
                     setUserLocation({
                         lat: position.coords.latitude,
                         lng: position.coords.longitude,
                     });
+                    setLocationMethod("GPS/WiFi");
                     setLocationError(null);
                     setLocationErrorCode(null);
                     setIsRequestingLocation(false);
+                    setDebugInfo(null);
                 },
-                (err) => {
+                async (err) => {
                     console.error("[LocationChatPicker] Geolocation error:", err.code, err.message);
                     
                     // If high accuracy failed due to timeout, try with low accuracy
-                    if (highAccuracy && err.code === 3) {
+                    if (highAccuracy && err.code === 3 && attempt < 2) {
                         console.log("[LocationChatPicker] Retrying with low accuracy...");
-                        tryGetLocation(false, 30000);
+                        setDebugInfo("Retrying with lower accuracy...");
+                        tryGetLocation(false, 30000, attempt + 1);
                         return;
                     }
 
+                    // Browser geolocation failed, try IP-based
+                    console.log("[LocationChatPicker] Browser geolocation failed, trying IP fallback");
+                    setDebugInfo("Browser location failed, trying IP...");
+                    const ipSuccess = await getLocationFromIP();
+                    
+                    if (ipSuccess) {
+                        setIsRequestingLocation(false);
+                        return;
+                    }
+
+                    // All methods failed
                     setIsRequestingLocation(false);
                     setLocationErrorCode(err.code);
+                    setDebugInfo(null);
                     
                     switch (err.code) {
                         case 1: // PERMISSION_DENIED
-                            setLocationError("Location access was denied. Please enable it in your browser settings.");
+                            setLocationError("Location access was denied. Please check both Chrome and macOS System Settings > Privacy & Security > Location Services.");
                             break;
                         case 2: // POSITION_UNAVAILABLE
-                            setLocationError("Unable to determine your location. Please try again.");
+                            setLocationError("Unable to determine your location. Please check your internet connection.");
                             break;
                         case 3: // TIMEOUT
-                            setLocationError("Location request timed out. Please check your connection and try again.");
+                            setLocationError("Location request timed out. This can happen on laptops without GPS.");
                             break;
                         default:
                             setLocationError("An error occurred while getting your location.");
@@ -128,13 +215,13 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                 { 
                     enableHighAccuracy: highAccuracy, 
                     timeout: timeout,
-                    maximumAge: 60000 // Accept cached position up to 1 minute old
+                    maximumAge: 300000 // Accept cached position up to 5 minutes old
                 }
             );
         };
 
-        tryGetLocation(true, 15000);
-    }, []);
+        tryGetLocation(true, 10000, 1);
+    }, [getLocationFromIP]);
 
     // Get user's location on mount
     useEffect(() => {
@@ -362,9 +449,29 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                                         <div>
                                             <p className="text-blue-400 text-sm font-medium">Getting your location...</p>
                                             <p className="text-blue-400/70 text-xs mt-1">
-                                                This may take a few seconds
+                                                {debugInfo || "This may take a few seconds"}
                                             </p>
                                         </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Location Success Indicator */}
+                            {userLocation && locationMethod && (
+                                <div className="px-4 pt-2 pb-1">
+                                    <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                        <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        <span>Location: {locationMethod}</span>
+                                        {locationMethod.includes("IP") && (
+                                            <button
+                                                onClick={requestLocation}
+                                                className="ml-auto text-[#FF5500] hover:underline"
+                                            >
+                                                Try precise location
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -380,15 +487,31 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                                             <p className="text-amber-400 text-sm font-medium">{locationError}</p>
                                             <p className="text-amber-400/70 text-xs mt-1">
                                                 {locationErrorCode === 1 
-                                                    ? "Check your browser's address bar for the location icon, or go to Settings > Privacy > Location Services"
+                                                    ? "On Mac: System Settings → Privacy & Security → Location Services → Enable for Chrome"
                                                     : "Location is needed to find nearby places"}
                                             </p>
-                                            <button
-                                                onClick={requestLocation}
-                                                className="mt-3 px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium rounded-lg transition-colors"
-                                            >
-                                                Try Again
-                                            </button>
+                                            <div className="flex gap-2 mt-3">
+                                                <button
+                                                    onClick={requestLocation}
+                                                    className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium rounded-lg transition-colors"
+                                                >
+                                                    Try Again
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        setIsRequestingLocation(true);
+                                                        setLocationError(null);
+                                                        const success = await getLocationFromIP();
+                                                        if (!success) {
+                                                            setLocationError("IP-based location also failed. Please check your internet connection.");
+                                                        }
+                                                        setIsRequestingLocation(false);
+                                                    }}
+                                                    className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
+                                                >
+                                                    Use Approximate Location
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
