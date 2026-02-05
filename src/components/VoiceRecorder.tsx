@@ -3,13 +3,17 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
+// Maximum recording duration in seconds (5 minutes)
+const MAX_RECORDING_DURATION = 5 * 60;
+
 type VoiceRecorderProps = {
     onSend: (audioBlob: Blob, duration: number) => void;
     onCancel: () => void;
     isOpen: boolean;
+    maxDuration?: number; // optional max duration in seconds
 };
 
-export function VoiceRecorder({ onSend, onCancel, isOpen }: VoiceRecorderProps) {
+export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECORDING_DURATION }: VoiceRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
     const [duration, setDuration] = useState(0);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -97,6 +101,13 @@ export function VoiceRecorder({ onSend, onCancel, isOpen }: VoiceRecorderProps) 
         }
     }, []);
 
+    // Auto-stop recording when max duration is reached
+    useEffect(() => {
+        if (isRecording && duration >= maxDuration) {
+            stopRecording();
+        }
+    }, [isRecording, duration, maxDuration, stopRecording]);
+
     const handleSend = useCallback(() => {
         if (audioBlob) {
             onSend(audioBlob, duration);
@@ -161,13 +172,17 @@ export function VoiceRecorder({ onSend, onCancel, isOpen }: VoiceRecorderProps) 
 
                         {/* Waveform / Duration Display */}
                         <div className="flex-1 flex items-center gap-3">
-                            {isRecording ? (
+                                {isRecording ? (
                                 <>
                                     {/* Recording indicator */}
                                     <div className="flex items-center gap-2">
                                         <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                                        <span className="text-red-400 text-sm font-medium">
-                                            Recording
+                                        <span className={`text-sm font-medium ${
+                                            duration >= maxDuration - 30 ? "text-yellow-400" : "text-red-400"
+                                        }`}>
+                                            {duration >= maxDuration - 30 
+                                                ? `${maxDuration - duration}s left` 
+                                                : "Recording"}
                                         </span>
                                     </div>
                                     {/* Animated waveform */}
@@ -296,7 +311,7 @@ export function VoiceRecorder({ onSend, onCancel, isOpen }: VoiceRecorderProps) 
     );
 }
 
-// Voice message player component
+// Voice message player component (for unencrypted audio)
 type VoiceMessageProps = {
     audioUrl: string;
     duration: number;
@@ -394,6 +409,208 @@ export function VoiceMessage({ audioUrl, duration, isOwn }: VoiceMessageProps) {
                     setProgress(0);
                 }}
             />
+        </div>
+    );
+}
+
+// Encrypted voice message player component
+type EncryptedVoiceMessageProps = {
+    encryptedUrl: string;
+    duration: number;
+    isOwn: boolean;
+    encryptionKey: Uint8Array | null; // null means still loading the key
+    onDecryptError?: (error: Error) => void;
+};
+
+export function EncryptedVoiceMessage({ 
+    encryptedUrl, 
+    duration, 
+    isOwn, 
+    encryptionKey,
+    onDecryptError 
+}: EncryptedVoiceMessageProps) {
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
+    const [isDecrypting, setIsDecrypting] = useState(false);
+    const [decryptError, setDecryptError] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const waveformHeightsRef = useRef<number[]>([]);
+
+    // Generate stable waveform heights once
+    if (waveformHeightsRef.current.length === 0) {
+        waveformHeightsRef.current = Array.from({ length: 30 }, () => Math.random() * 16 + 8);
+    }
+
+    // Cleanup blob URL on unmount
+    useEffect(() => {
+        return () => {
+            if (decryptedUrl) {
+                URL.revokeObjectURL(decryptedUrl);
+            }
+        };
+    }, [decryptedUrl]);
+
+    // Decrypt audio when key is available and user tries to play
+    const decryptAndPlay = useCallback(async () => {
+        if (!encryptionKey) {
+            setDecryptError(true);
+            return;
+        }
+
+        if (decryptedUrl) {
+            // Already decrypted, just play
+            audioRef.current?.play();
+            setIsPlaying(true);
+            return;
+        }
+
+        setIsDecrypting(true);
+        setDecryptError(false);
+
+        try {
+            // Dynamic import to avoid bundling crypto code unnecessarily
+            const { fetchAndDecryptVoice } = await import("@/lib/audioEncryption");
+            const blobUrl = await fetchAndDecryptVoice(encryptedUrl, encryptionKey);
+            setDecryptedUrl(blobUrl);
+            
+            // Wait for the audio element to update then play
+            setTimeout(() => {
+                audioRef.current?.play();
+                setIsPlaying(true);
+            }, 100);
+        } catch (error) {
+            console.error("[EncryptedVoiceMessage] Decryption failed:", error);
+            setDecryptError(true);
+            onDecryptError?.(error as Error);
+        } finally {
+            setIsDecrypting(false);
+        }
+    }, [encryptionKey, decryptedUrl, encryptedUrl, onDecryptError]);
+
+    const togglePlayback = () => {
+        if (isDecrypting) return;
+
+        if (!decryptedUrl) {
+            // Need to decrypt first
+            decryptAndPlay();
+            return;
+        }
+
+        if (!audioRef.current) return;
+
+        if (isPlaying) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+        } else {
+            audioRef.current.play();
+            setIsPlaying(true);
+        }
+    };
+
+    const formatDuration = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+    };
+
+    return (
+        <div className="flex items-center gap-3 min-w-[200px]">
+            <button
+                onClick={togglePlayback}
+                disabled={isDecrypting || !encryptionKey}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                    decryptError
+                        ? "bg-red-500/30 text-red-400"
+                        : isOwn
+                        ? "bg-white/20 hover:bg-white/30 text-white"
+                        : "bg-[#FF5500] hover:bg-[#E04D00] text-white"
+                } ${(isDecrypting || !encryptionKey) ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+                {isDecrypting ? (
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                ) : decryptError ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                ) : isPlaying ? (
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                        <rect x="6" y="4" width="4" height="16" />
+                        <rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                ) : (
+                    <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                    </svg>
+                )}
+            </button>
+
+            <div className="flex-1">
+                {/* Waveform visualization */}
+                <div className="flex items-center gap-0.5 h-6">
+                    {waveformHeightsRef.current.map((height, i) => {
+                        const isActive = i / 30 <= progress;
+                        return (
+                            <div
+                                key={i}
+                                className={`w-1 rounded-full transition-colors ${
+                                    decryptError
+                                        ? "bg-red-500/30"
+                                        : isActive
+                                        ? isOwn
+                                            ? "bg-white"
+                                            : "bg-[#FF5500]"
+                                        : isOwn
+                                        ? "bg-white/30"
+                                        : "bg-zinc-600"
+                                }`}
+                                style={{ height: `${height}px` }}
+                            />
+                        );
+                    })}
+                </div>
+                <div className="flex items-center gap-1">
+                    <span className={`text-xs ${isOwn ? "text-white/70" : "text-zinc-500"}`}>
+                        {formatDuration(duration)}
+                    </span>
+                    {!decryptedUrl && !decryptError && (
+                        <svg 
+                            className={`w-3 h-3 ${isOwn ? "text-white/50" : "text-zinc-500"}`} 
+                            fill="none" 
+                            viewBox="0 0 24 24" 
+                            stroke="currentColor"
+                        >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    )}
+                    {decryptError && (
+                        <span className="text-xs text-red-400">Decrypt failed</span>
+                    )}
+                </div>
+            </div>
+
+            {decryptedUrl && (
+                <audio
+                    ref={audioRef}
+                    src={decryptedUrl}
+                    onTimeUpdate={() => {
+                        if (audioRef.current && audioRef.current.duration) {
+                            setProgress(audioRef.current.currentTime / audioRef.current.duration);
+                        }
+                    }}
+                    onEnded={() => {
+                        setIsPlaying(false);
+                        setProgress(0);
+                    }}
+                    onError={() => {
+                        setDecryptError(true);
+                        setIsPlaying(false);
+                    }}
+                />
+            )}
         </div>
     );
 }

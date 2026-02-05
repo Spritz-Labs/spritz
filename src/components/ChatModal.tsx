@@ -24,8 +24,13 @@ import {
     useMessageReactions,
     MESSAGE_REACTION_EMOJIS,
 } from "@/hooks/useChatFeatures";
-// VoiceRecorder removed - not fully implemented yet
-// import { VoiceRecorder, VoiceMessage } from "./VoiceRecorder";
+import { VoiceRecorder, EncryptedVoiceMessage } from "./VoiceRecorder";
+import { 
+    encryptAudio, 
+    formatVoiceMessage, 
+    isVoiceMessage, 
+    parseVoiceMessage 
+} from "@/lib/audioEncryption";
 import { MessageSearch } from "./MessageSearch";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
@@ -110,6 +115,54 @@ const isEmojiOnly = (text: string): boolean => {
     return emojiCount >= 1 && emojiCount <= 3;
 };
 
+// Voice message wrapper that handles encryption key fetching
+function VoiceMessageWrapper({
+    encryptedUrl,
+    duration,
+    isOwn,
+    peerAddress,
+}: {
+    encryptedUrl: string;
+    duration: number;
+    isOwn: boolean;
+    peerAddress: string;
+}) {
+    const { getDmEncryptionKey } = useXMTPContext();
+    const [encryptionKey, setEncryptionKey] = useState<Uint8Array | null>(null);
+    const [keyError, setKeyError] = useState(false);
+
+    useEffect(() => {
+        if (getDmEncryptionKey && peerAddress) {
+            getDmEncryptionKey(peerAddress)
+                .then(setEncryptionKey)
+                .catch((err) => {
+                    console.error("[VoiceMessageWrapper] Key fetch failed:", err);
+                    setKeyError(true);
+                });
+        }
+    }, [getDmEncryptionKey, peerAddress]);
+
+    if (keyError) {
+        return (
+            <div className="flex items-center gap-2 text-red-400 text-sm">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span>Voice memo unavailable</span>
+            </div>
+        );
+    }
+
+    return (
+        <EncryptedVoiceMessage
+            encryptedUrl={encryptedUrl}
+            duration={duration}
+            isOwn={isOwn}
+            encryptionKey={encryptionKey}
+        />
+    );
+}
+
 export function ChatModal({
     isOpen,
     onClose,
@@ -153,6 +206,10 @@ export function ChatModal({
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
+
+    // Voice recording state
+    const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+    const [isUploadingVoice, setIsUploadingVoice] = useState(false);
 
     // Fetch peer online status
     useEffect(() => {
@@ -261,6 +318,7 @@ export function ChatModal({
         markAsRead,
         setActiveChatPeer,
         getConversationSecurityStatus,
+        getDmEncryptionKey,
     } = useXMTPContext();
 
     // Analytics tracking
@@ -1082,6 +1140,81 @@ export function ChatModal({
         [userAddress, peerAddress, sendMessage, trackMessageSent]
     );
 
+    // Handle sending encrypted voice memo
+    const handleSendVoice = useCallback(
+        async (audioBlob: Blob, duration: number) => {
+            if (!audioBlob || !peerAddress || !getDmEncryptionKey) {
+                log.error("Missing required params for voice upload");
+                return;
+            }
+
+            setIsUploadingVoice(true);
+            setChatError(null);
+
+            try {
+                // Get the encryption key for this conversation
+                const encryptionKey = await getDmEncryptionKey(peerAddress);
+                
+                // Encrypt the audio
+                const { encryptedBlob } = await encryptAudio(audioBlob, encryptionKey);
+                
+                // Upload encrypted audio
+                const formData = new FormData();
+                formData.append("file", encryptedBlob, "voice.enc");
+                formData.append("duration", duration.toString());
+                formData.append("conversationId", conversationId);
+                
+                const uploadResponse = await fetch("/api/upload/voice", {
+                    method: "POST",
+                    body: formData,
+                });
+                
+                if (!uploadResponse.ok) {
+                    const error = await uploadResponse.json();
+                    throw new Error(error.error || "Failed to upload voice memo");
+                }
+                
+                const uploadResult = await uploadResponse.json();
+                
+                // Format and send the voice message
+                const voiceMessage = formatVoiceMessage(duration, uploadResult.url);
+                const result = await sendMessage(peerAddress, voiceMessage);
+                
+                if (!result.success) {
+                    throw new Error(result.error || "Failed to send voice message");
+                }
+                
+                // Track for analytics
+                trackMessageSent();
+                onMessageSent?.("🎤 Voice memo");
+                
+                // Add to UI immediately
+                if (result.message && userAddress) {
+                    const sentMessage: Message = {
+                        id: result.message.id || `sent-${Date.now()}`,
+                        content: voiceMessage,
+                        senderAddress: userAddress.toLowerCase(),
+                        sentAt: new Date(),
+                    };
+                    setMessages((prev) => [...prev, sentMessage]);
+                }
+                
+                setShowVoiceRecorder(false);
+                log.info("Voice memo sent successfully");
+            } catch (error) {
+                log.error("Voice memo error:", error);
+                setChatError(
+                    `Failed to send voice memo: ${
+                        error instanceof Error ? error.message : "Unknown error"
+                    }`
+                );
+            } finally {
+                setIsUploadingVoice(false);
+            }
+        },
+        [peerAddress, getDmEncryptionKey, conversationId, sendMessage, userAddress, trackMessageSent, onMessageSent]
+    );
+
     // Check if a message is pixel art
     const isPixelArtMessage = (content: string) =>
         content.startsWith("[PIXEL_ART]");
@@ -1587,6 +1720,10 @@ export function ChatModal({
                                                       msg.content
                                                   )
                                                 : null;
+                                            const isVoice = isVoiceMessage(msg.content);
+                                            const voiceData = isVoice
+                                                ? parseVoiceMessage(msg.content)
+                                                : null;
 
                                             // Check if we need a date divider
                                             const msgDate =
@@ -1966,6 +2103,14 @@ export function ChatModal({
                                                                         isOwn={
                                                                             isOwn
                                                                         }
+                                                                    />
+                                                                ) : isVoice &&
+                                                                  voiceData ? (
+                                                                    <VoiceMessageWrapper
+                                                                        encryptedUrl={voiceData.url}
+                                                                        duration={voiceData.duration}
+                                                                        isOwn={isOwn}
+                                                                        peerAddress={peerAddress}
                                                                     />
                                                                 ) : (
                                                                     <div
@@ -2515,7 +2660,7 @@ export function ChatModal({
 
                             {/* Input - with safe area padding for bottom */}
                             <div
-                                className={`border-t border-zinc-800 ${
+                                className={`border-t border-zinc-800 relative ${
                                     isFullscreen ? "px-4 pt-4" : "p-4"
                                 }`}
                                 style={
@@ -2527,6 +2672,13 @@ export function ChatModal({
                                         : undefined
                                 }
                             >
+                                {/* Voice Recorder */}
+                                <VoiceRecorder
+                                    isOpen={showVoiceRecorder}
+                                    onSend={handleSendVoice}
+                                    onCancel={() => setShowVoiceRecorder(false)}
+                                />
+                                
                                 <div
                                     className={`flex items-center ${
                                         isFullscreen ? "gap-3" : "gap-2"
@@ -2545,8 +2697,10 @@ export function ChatModal({
                                             );
                                             onMessageSent?.("📍 Location");
                                         }}
+                                        onVoice={() => setShowVoiceRecorder(true)}
                                         showLocation={true}
-                                        isUploading={isUploadingPixelArt}
+                                        showVoice={true}
+                                        isUploading={isUploadingPixelArt || isUploadingVoice}
                                         disabled={!isInitialized || !!chatError}
                                     />
                                     <div className="flex-1 relative">

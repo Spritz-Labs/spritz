@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { GifPicker } from "./GifPicker";
 import { type LocationData } from "./LocationMessage";
 
-type AttachmentType = "image" | "pixel_art" | "gif" | "poll" | "location";
+type AttachmentType = "image" | "pixel_art" | "gif" | "poll" | "location" | "voice";
 
 type ChatAttachmentMenuProps = {
     onImageUpload?: () => void;
@@ -13,9 +13,11 @@ type ChatAttachmentMenuProps = {
     onGif?: (gifUrl: string) => void;
     onPoll?: () => void;
     onLocation?: (location: LocationData) => void;
+    onVoice?: () => void;
     isUploading?: boolean;
     showPoll?: boolean;
     showLocation?: boolean;
+    showVoice?: boolean;
     disabled?: boolean;
     className?: string;
 };
@@ -26,9 +28,11 @@ export function ChatAttachmentMenu({
     onGif,
     onPoll,
     onLocation,
+    onVoice,
     isUploading = false,
     showPoll = false,
     showLocation = true,
+    showVoice = false,
     disabled = false,
     className = "",
 }: ChatAttachmentMenuProps) {
@@ -203,6 +207,18 @@ export function ChatAttachmentMenu({
                                 >
                                     <span className="w-5 h-5 flex items-center justify-center text-red-400">📍</span>
                                     <span>Location</span>
+                                </button>
+                            )}
+                            
+                            {showVoice && onVoice && (
+                                <button
+                                    onClick={() => handleAction(onVoice)}
+                                    className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
+                                >
+                                    <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                    </svg>
+                                    <span>Voice Memo</span>
                                 </button>
                             )}
                         </div>

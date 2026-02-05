@@ -922,6 +922,8 @@ type WakuContextType = {
         passwordHash: string
     ) => Promise<{ success: boolean; error?: string }>;
     markGroupAsRead: (groupId: string) => void;
+    /** Get the encryption key for a DM conversation (for encrypting voice memos, etc.) */
+    getDmEncryptionKey: (peerAddress: string) => Promise<Uint8Array>;
 };
 
 const WakuContext = createContext<WakuContextType | null>(null);
@@ -3364,6 +3366,7 @@ export function WakuProvider({
                 joinGroupById,
                 unlockGroupWithPassword,
                 markGroupAsRead,
+                getDmEncryptionKey,
             }}
         >
             {children}
