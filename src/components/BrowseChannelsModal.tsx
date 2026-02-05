@@ -30,6 +30,8 @@ type BrowseChannelsModalProps = {
     onJoinChannel: (channel: PublicChannel) => void;
     onJoinLocationChat?: (chat: LocationChat) => void;
     initialShowCreate?: boolean; // Auto-open the create form
+    onCreateGroup?: () => void; // Handler to open create group modal
+    onCreateLocationChat?: () => void; // Handler to open location chat picker
 };
 
 const CATEGORIES = [
@@ -80,6 +82,8 @@ export function BrowseChannelsModal({
     onJoinChannel,
     onJoinLocationChat,
     initialShowCreate = false,
+    onCreateGroup,
+    onCreateLocationChat,
 }: BrowseChannelsModalProps) {
     const { channels, isLoading, joinChannel, leaveChannel, createChannel } =
         useChannels(userAddress);
@@ -115,6 +119,9 @@ export function BrowseChannelsModal({
     const [locationChatsError, setLocationChatsError] = useState<string | null>(null);
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [joiningLocationChat, setJoiningLocationChat] = useState<string | null>(null);
+    const [isRequestingLocation, setIsRequestingLocation] = useState(false);
+    const [locationMethod, setLocationMethod] = useState<string | null>(null);
+    const [showCreateMenu, setShowCreateMenu] = useState(false);
 
     // Debounce search (250ms) for smoother filtering
     useEffect(() => {
@@ -228,24 +235,77 @@ export function BrowseChannelsModal({
         }
     }, [isOpen, view, fetchPoapEvents, fetchPoapCollections]);
 
+    // IP-based geolocation fallback
+    const getLocationFromIP = useCallback(async () => {
+        try {
+            console.log("[BrowseChannels] Trying IP-based geolocation...");
+            const response = await fetch("https://ipapi.co/json/", {
+                signal: AbortSignal.timeout(10000),
+            });
+            
+            if (!response.ok) {
+                throw new Error("IP location service unavailable");
+            }
+            
+            const data = await response.json();
+            
+            if (data.latitude && data.longitude) {
+                console.log("[BrowseChannels] Got IP location:", data.latitude, data.longitude, data.city);
+                setUserLocation({
+                    lat: data.latitude,
+                    lng: data.longitude,
+                });
+                setLocationMethod(`IP-based (${data.city || "approximate"})`);
+                setLocationChatsError(null);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("[BrowseChannels] IP geolocation error:", err);
+            return false;
+        }
+    }, []);
+
     // Get user location when locations tab is selected
     useEffect(() => {
-        if (isOpen && view === "locations" && !userLocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    setUserLocation({
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                    });
-                },
-                (err) => {
-                    console.error("[BrowseChannels] Geolocation error:", err);
-                    setLocationChatsError("Enable location access to find nearby location chats");
-                },
-                { enableHighAccuracy: true, timeout: 10000 }
-            );
+        if (isOpen && view === "locations" && !userLocation && !isRequestingLocation) {
+            setIsRequestingLocation(true);
+            setLocationChatsError(null);
+
+            // Try browser geolocation first
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        console.log("[BrowseChannels] Got browser location:", position.coords);
+                        setUserLocation({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                        });
+                        setLocationMethod("GPS/WiFi");
+                        setIsRequestingLocation(false);
+                    },
+                    async (err) => {
+                        console.error("[BrowseChannels] Geolocation error:", err.code, err.message);
+                        // Try IP-based fallback
+                        const ipSuccess = await getLocationFromIP();
+                        if (!ipSuccess) {
+                            setLocationChatsError("Unable to get your location. Please enable location access or try again.");
+                        }
+                        setIsRequestingLocation(false);
+                    },
+                    { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+                );
+            } else {
+                // No browser geolocation, try IP
+                getLocationFromIP().then((success) => {
+                    if (!success) {
+                        setLocationChatsError("Location not available. Please try again.");
+                    }
+                    setIsRequestingLocation(false);
+                });
+            }
         }
-    }, [isOpen, view, userLocation]);
+    }, [isOpen, view, userLocation, isRequestingLocation, getLocationFromIP]);
 
     // Fetch location chats when we have user location
     const fetchLocationChats = useCallback(async () => {
@@ -495,15 +555,108 @@ export function BrowseChannelsModal({
                                 Browse Channels
                             </h2>
                             <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                    onClick={() => setShowCreateModal(true)}
-                                    className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#FF7700] rounded-lg text-white text-xs sm:text-sm font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center gap-1"
-                                >
-                                    <span>+</span>
-                                    <span className="hidden sm:inline">
-                                        Create
-                                    </span>
-                                </button>
+                                {/* Create Menu */}
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setShowCreateMenu(!showCreateMenu)}
+                                        className="px-2.5 py-1.5 sm:px-3 sm:py-2 bg-gradient-to-r from-[#FF5500] to-[#FF7700] rounded-lg text-white text-xs sm:text-sm font-medium hover:shadow-lg hover:shadow-orange-500/25 transition-all flex items-center gap-1"
+                                    >
+                                        <span>+</span>
+                                        <span className="hidden sm:inline">
+                                            Create
+                                        </span>
+                                        <svg className="w-3 h-3 ml-0.5 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </button>
+
+                                    {/* Create Dropdown Menu */}
+                                    <AnimatePresence>
+                                        {showCreateMenu && (
+                                            <>
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                    className="fixed inset-0 z-40"
+                                                    onClick={() => setShowCreateMenu(false)}
+                                                />
+                                                <motion.div
+                                                    initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                    exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                    className="absolute right-0 top-full mt-2 w-56 bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden z-50"
+                                                >
+                                                    <div className="p-1">
+                                                        {/* Create Channel */}
+                                                        <button
+                                                            onClick={() => {
+                                                                setShowCreateMenu(false);
+                                                                setShowCreateModal(true);
+                                                            }}
+                                                            className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                                                <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+                                                                </svg>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-white text-sm font-medium">Channel</p>
+                                                                <p className="text-zinc-500 text-xs">Public chat room</p>
+                                                            </div>
+                                                        </button>
+
+                                                        {/* Create Group */}
+                                                        {onCreateGroup && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowCreateMenu(false);
+                                                                    onClose();
+                                                                    onCreateGroup();
+                                                                }}
+                                                                className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                                                    <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-white text-sm font-medium">Group</p>
+                                                                    <p className="text-zinc-500 text-xs">Encrypted, invite only</p>
+                                                                </div>
+                                                            </button>
+                                                        )}
+
+                                                        {/* Create Location Chat */}
+                                                        {onCreateLocationChat && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowCreateMenu(false);
+                                                                    onClose();
+                                                                    onCreateLocationChat();
+                                                                }}
+                                                                className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                                                                    <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-white text-sm font-medium">Location</p>
+                                                                    <p className="text-zinc-500 text-xs">Chat at a place</p>
+                                                                </div>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </motion.div>
+                                            </>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
                                 <button
                                     onClick={onClose}
                                     className="p-2 sm:p-2.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
@@ -1194,17 +1347,65 @@ export function BrowseChannelsModal({
                             ) : view === "locations" ? (
                                 /* Location Chats View */
                                 <>
-                                    {locationChatsError && !userLocation ? (
+                                    {/* Location method indicator */}
+                                    {userLocation && locationMethod && (
+                                        <div className="px-4 pb-2">
+                                            <div className="flex items-center gap-2 text-xs text-zinc-500">
+                                                <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                </svg>
+                                                <span>Location: {locationMethod}</span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Location requesting state */}
+                                    {isRequestingLocation && !userLocation ? (
                                         <div className="text-center py-12 px-4">
-                                            <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-4">
-                                                <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center mx-auto mb-4">
+                                                <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                            </div>
+                                            <p className="text-blue-400 text-sm mb-2">Getting your location...</p>
+                                            <p className="text-zinc-500 text-xs">This may take a few seconds</p>
+                                        </div>
+                                    ) : locationChatsError && !userLocation ? (
+                                        <div className="text-center py-12 px-4">
+                                            <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                 </svg>
                                             </div>
-                                            <p className="text-zinc-400 text-sm mb-2">{locationChatsError}</p>
-                                            <p className="text-zinc-600 text-xs">
-                                                Location access is needed to find nearby chats
+                                            <p className="text-amber-400 text-sm mb-2">{locationChatsError}</p>
+                                            <p className="text-zinc-500 text-xs mb-4">
+                                                On Mac: System Settings → Privacy & Security → Location Services
                                             </p>
+                                            <div className="flex gap-2 justify-center">
+                                                <button
+                                                    onClick={() => {
+                                                        setLocationChatsError(null);
+                                                        setIsRequestingLocation(false);
+                                                        // Re-trigger the useEffect
+                                                        setUserLocation(null);
+                                                    }}
+                                                    className="px-4 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 text-sm font-medium rounded-lg transition-colors"
+                                                >
+                                                    Try Again
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        setIsRequestingLocation(true);
+                                                        setLocationChatsError(null);
+                                                        const success = await getLocationFromIP();
+                                                        if (!success) {
+                                                            setLocationChatsError("IP-based location also failed. Please check your internet connection.");
+                                                        }
+                                                        setIsRequestingLocation(false);
+                                                    }}
+                                                    className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-sm font-medium rounded-lg transition-colors"
+                                                >
+                                                    Use Approximate Location
+                                                </button>
+                                            </div>
                                         </div>
                                     ) : locationChatsLoading ? (
                                         <div className="flex items-center justify-center py-12">

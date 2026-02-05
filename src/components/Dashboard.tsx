@@ -6087,6 +6087,8 @@ function DashboardContent({
                     setSelectedLocationChat(chat);
                 }}
                 initialShowCreate={browseChannelsInitialCreate}
+                onCreateGroup={isWakuInitialized && friends.length > 0 ? () => setIsCreateGroupOpen(true) : undefined}
+                onCreateLocationChat={() => setShowLocationChatPicker(true)}
             />
 
             {/* Location Chat Picker */}
