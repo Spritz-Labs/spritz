@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         // Get all location chat memberships for this user
         const { data: memberships, error: membershipError } = await supabase
             .from("shout_location_chat_members")
-            .select("chat_id, joined_at")
+            .select("location_chat_id, joined_at")
             .eq("user_address", userAddress);
 
         if (membershipError) {
@@ -53,8 +53,8 @@ export async function GET(request: NextRequest) {
         }
 
         // Get the chat details for all joined chats
-        const chatIds = memberships.map((m) => m.chat_id);
-        const membershipMap = new Map(memberships.map((m) => [m.chat_id, m.joined_at]));
+        const chatIds = memberships.map((m) => m.location_chat_id);
+        const membershipMap = new Map(memberships.map((m) => [m.location_chat_id, m.joined_at]));
 
         const { data: chats, error: chatsError } = await supabase
             .from("shout_location_chats")
@@ -70,16 +70,16 @@ export async function GET(request: NextRequest) {
         // Get the last message for each chat
         const { data: lastMessages, error: messagesError } = await supabase
             .from("shout_location_chat_messages")
-            .select("chat_id, content, created_at")
-            .in("chat_id", chatIds)
+            .select("location_chat_id, content, created_at")
+            .in("location_chat_id", chatIds)
             .order("created_at", { ascending: false });
 
-        // Group messages by chat_id and get the most recent
+        // Group messages by location_chat_id and get the most recent
         const lastMessageMap = new Map<string, { content: string; created_at: string }>();
         if (lastMessages && !messagesError) {
             for (const msg of lastMessages) {
-                if (!lastMessageMap.has(msg.chat_id)) {
-                    lastMessageMap.set(msg.chat_id, {
+                if (!lastMessageMap.has(msg.location_chat_id)) {
+                    lastMessageMap.set(msg.location_chat_id, {
                         content: msg.content,
                         created_at: msg.created_at,
                     });
