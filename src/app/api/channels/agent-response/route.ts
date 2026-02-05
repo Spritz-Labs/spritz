@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
 import { checkRateLimit } from "@/lib/ratelimit";
+import {
+    estimateCostUsd,
+    sanitizeErrorMessage,
+    inferErrorCode,
+} from "@/lib/agent-cost";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -423,9 +428,11 @@ You can use markdown formatting:
             }
 
             // Generate response
+            const modelName = "gemini-2.0-flash";
             try {
+                const startMs = Date.now();
                 const chat = ai.chats.create({
-                    model: "gemini-2.0-flash",
+                    model: modelName,
                     config: {
                         systemInstruction: systemPrompt + ragContext,
                         maxOutputTokens: 1024,
@@ -435,8 +442,24 @@ You can use markdown formatting:
                 const response = await chat.sendMessage({
                     message: question,
                 });
+                const latencyMs = Date.now() - startMs;
 
                 const responseText = response.text?.trim();
+
+                // Extract usage metadata from chat response
+                const usage = (
+                    response as {
+                        usageMetadata?: {
+                            totalTokenCount?: number;
+                            promptTokenCount?: number;
+                            candidatesTokenCount?: number;
+                        };
+                    }
+                ).usageMetadata;
+                const inputTokens = usage?.promptTokenCount ?? null;
+                const outputTokens = usage?.candidatesTokenCount ?? null;
+                const totalTokens = usage?.totalTokenCount ?? null;
+                const estimatedCost = estimateCostUsd(inputTokens, outputTokens);
 
                 const textToPost =
                     responseText ||
@@ -547,6 +570,12 @@ You can use markdown formatting:
                             source: "channel",
                             channel_id: channelId || null,
                             channel_type: channelType || null,
+                            model: modelName,
+                            input_tokens: inputTokens,
+                            output_tokens: outputTokens,
+                            total_tokens: totalTokens,
+                            latency_ms: latencyMs,
+                            estimated_cost_usd: estimatedCost,
                         },
                     ]);
                 } catch (kgErr) {
@@ -560,6 +589,8 @@ You can use markdown formatting:
                     `[AgentResponse] Generation error for ${agent.name}:`,
                     genError,
                 );
+                const errMessage = sanitizeErrorMessage(genError);
+                const errCode = inferErrorCode(genError);
                 const fallback =
                     "Sorry, I couldn't generate a response right now. Try again in a moment.";
                 try {
@@ -626,6 +657,9 @@ You can use markdown formatting:
                                 source: "channel",
                                 channel_id: channelId || null,
                                 channel_type: channelType || null,
+                                model: modelName,
+                                error_code: errCode,
+                                error_message: errMessage,
                             },
                         ]);
                     } catch (kgErr) {

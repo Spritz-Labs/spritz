@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { GoogleGenAI } from "@google/genai";
 import { requireX402Payment, type X402Config } from "@/lib/x402";
 import { checkRateLimit } from "@/lib/ratelimit";
+import {
+    estimateCostUsd,
+    sanitizeErrorMessage,
+    inferErrorCode,
+} from "@/lib/agent-cost";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -852,6 +857,8 @@ export async function POST(
             sessionId ||
             `x402-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+        const modelName = agent.model || "gemini-2.0-flash";
+
         if (streamRequested === true) {
             // Stream response: yield chunks then persist and send done
             // Log user message at start so we track all AI interactions even on stream failure (shout_agent_chats = usage analytics)
@@ -867,6 +874,10 @@ export async function POST(
             const stream = new ReadableStream({
                 async start(controller) {
                     let fullText = "";
+                    const startMs = Date.now();
+                    let streamInputTokens: number | null = null;
+                    let streamOutputTokens: number | null = null;
+                    let streamTotalTokens: number | null = null;
                     try {
                         const streamResponse =
                             await ai.models.generateContentStream(
@@ -885,10 +896,34 @@ export async function POST(
                                     ),
                                 );
                             }
+                            // Capture usage metadata from chunk when available
+                            const usage = (
+                                chunk as {
+                                    usageMetadata?: {
+                                        promptTokenCount?: number;
+                                        candidatesTokenCount?: number;
+                                        totalTokenCount?: number;
+                                    };
+                                }
+                            ).usageMetadata;
+                            if (usage) {
+                                streamInputTokens =
+                                    usage.promptTokenCount ?? streamInputTokens;
+                                streamOutputTokens =
+                                    usage.candidatesTokenCount ??
+                                    streamOutputTokens;
+                                streamTotalTokens =
+                                    usage.totalTokenCount ?? streamTotalTokens;
+                            }
                         }
                         const assistantMessage =
                             fullText.trim() ||
                             "I'm sorry, I couldn't generate a response.";
+                        const latencyMs = Date.now() - startMs;
+                        const estimatedCost = estimateCostUsd(
+                            streamInputTokens,
+                            streamOutputTokens,
+                        );
                         await supabase.from("shout_agent_chats").insert({
                             agent_id: id,
                             user_address: payerAddress,
@@ -896,6 +931,12 @@ export async function POST(
                             role: "assistant",
                             content: assistantMessage,
                             source: "public",
+                            model: modelName,
+                            input_tokens: streamInputTokens,
+                            output_tokens: streamOutputTokens,
+                            total_tokens: streamTotalTokens,
+                            latency_ms: latencyMs,
+                            estimated_cost_usd: estimatedCost,
                         });
                         await supabase.rpc("increment_agent_messages", {
                             agent_id_param: id,
@@ -926,7 +967,9 @@ export async function POST(
                         );
                     } catch (err) {
                         console.error("[Public Agent Chat] Stream error:", err);
-                        // Log failed interaction for usage analytics
+                        const errMessage = sanitizeErrorMessage(err);
+                        const errCode = inferErrorCode(err);
+                        // Log failed interaction for usage analytics with error details
                         try {
                             await supabase.from("shout_agent_chats").insert({
                                 agent_id: id,
@@ -935,6 +978,9 @@ export async function POST(
                                 role: "assistant",
                                 content: "[Error: Failed to generate response]",
                                 source: "public",
+                                model: modelName,
+                                error_code: errCode,
+                                error_message: errMessage,
                             });
                             await supabase.rpc("increment_agent_messages", {
                                 agent_id_param: id,
@@ -967,9 +1013,26 @@ export async function POST(
         }
 
         // Non-stream: generate full response then return JSON
+        const startMs = Date.now();
         const result = await ai.models.generateContent(generateConfig);
         const assistantMessage =
             result.text || "I'm sorry, I couldn't generate a response.";
+        const latencyMs = Date.now() - startMs;
+
+        // Extract usage metadata
+        const usage = (
+            result as {
+                usageMetadata?: {
+                    totalTokenCount?: number;
+                    promptTokenCount?: number;
+                    candidatesTokenCount?: number;
+                };
+            }
+        ).usageMetadata;
+        const inputTokens = usage?.promptTokenCount ?? null;
+        const outputTokens = usage?.candidatesTokenCount ?? null;
+        const totalTokens = usage?.totalTokenCount ?? null;
+        const estimatedCost = estimateCostUsd(inputTokens, outputTokens);
 
         // shout_agent_chats = single source for AI agent usage analytics
         await supabase.from("shout_agent_chats").insert([
@@ -988,6 +1051,12 @@ export async function POST(
                 role: "assistant",
                 content: assistantMessage,
                 source: "public",
+                model: modelName,
+                input_tokens: inputTokens,
+                output_tokens: outputTokens,
+                total_tokens: totalTokens,
+                latency_ms: latencyMs,
+                estimated_cost_usd: estimatedCost,
             },
         ]);
 
