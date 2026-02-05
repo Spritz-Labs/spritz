@@ -10,6 +10,38 @@ import type { PoapEventWithChannel } from "@/app/api/poap/events-with-channels/r
 import type { PoapCollectionForUser } from "@/app/api/poap/collections-for-user/route";
 import type { LocationChat } from "@/hooks/useLocationChat";
 
+// Calculate distance between two points using Haversine formula
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// Format distance for display
+function formatDistance(meters: number): string {
+    if (meters < 1000) {
+        // Show in feet for short distances (US-friendly)
+        const feet = Math.round(meters * 3.28084);
+        return `${feet} ft`;
+    } else {
+        // Show in miles
+        const miles = meters / 1609.34;
+        if (miles < 0.1) {
+            return `${Math.round(miles * 5280)} ft`;
+        } else if (miles < 10) {
+            return `${miles.toFixed(1)} mi`;
+        } else {
+            return `${Math.round(miles)} mi`;
+        }
+    }
+}
+
 function showToast(message: string, type: "success" | "neutral" = "success") {
     const toast = document.createElement("div");
     toast.className =
@@ -1427,7 +1459,13 @@ export function BrowseChannelsModal({
                                         </div>
                                     ) : (
                                         <div className="grid gap-3 min-w-0">
-                                            {filteredLocationChats.map((chat) => (
+                                            {filteredLocationChats.map((chat) => {
+                                                // Calculate distance if we have user location and chat coordinates
+                                                const distance = userLocation && chat.latitude && chat.longitude
+                                                    ? calculateDistance(userLocation.lat, userLocation.lng, chat.latitude, chat.longitude)
+                                                    : null;
+                                                
+                                                return (
                                                 <motion.div
                                                     key={chat.id}
                                                     initial={{ opacity: 0, y: 10 }}
@@ -1439,9 +1477,16 @@ export function BrowseChannelsModal({
                                                             {chat.emoji}
                                                         </div>
                                                         <div className="flex-1 min-w-0 pr-2">
-                                                            <p className="text-white font-medium truncate text-sm sm:text-base">
-                                                                {chat.name}
-                                                            </p>
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-white font-medium truncate text-sm sm:text-base">
+                                                                    {chat.name}
+                                                                </p>
+                                                                {distance !== null && (
+                                                                    <span className="text-[10px] sm:text-xs text-[#FF5500] font-medium whitespace-nowrap shrink-0">
+                                                                        {formatDistance(distance)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                             <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1 truncate">
                                                                 {chat.google_place_address || chat.formatted_address}
                                                             </p>
@@ -1469,7 +1514,8 @@ export function BrowseChannelsModal({
                                                         </button>
                                                     </div>
                                                 </motion.div>
-                                            ))}
+                                            );
+                                            })}
                                         </div>
                                     )}
                                 </>
