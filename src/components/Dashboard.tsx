@@ -99,6 +99,8 @@ import { useWakeLock } from "@/hooks/useWakeLock";
 import { useModeration } from "@/hooks/useModeration";
 import { UserCardModal } from "./UserCardModal";
 import { LocationChatPicker } from "./LocationChatPicker";
+import { LocationChatModal } from "./LocationChatModal";
+import { type LocationChat } from "@/hooks/useLocationChat";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -1045,6 +1047,8 @@ function DashboardContent({
     const [showLocationChatPicker, setShowLocationChatPicker] = useState(false);
     const [selectedChannel, setSelectedChannel] =
         useState<PublicChannel | null>(null);
+    const [selectedLocationChat, setSelectedLocationChat] =
+        useState<LocationChat | null>(null);
 
     // Global chat icon from app settings
     const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(
@@ -5991,6 +5995,11 @@ function DashboardContent({
                     await fetchJoinedChannels(); // Refresh the list immediately
                     setSelectedChannel(channel);
                 }}
+                onJoinLocationChat={(chat) => {
+                    setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
+                    setSelectedLocationChat(chat);
+                }}
                 initialShowCreate={browseChannelsInitialCreate}
             />
 
@@ -6000,10 +6009,23 @@ function DashboardContent({
                 onClose={() => setShowLocationChatPicker(false)}
                 onChatCreated={(chat) => {
                     console.log("[Dashboard] Location chat created/joined:", chat.name);
-                    // TODO: Navigate to or open the location chat modal
                     setShowLocationChatPicker(false);
+                    setSelectedLocationChat(chat as LocationChat);
                 }}
             />
+
+            {/* Location Chat Modal */}
+            {selectedLocationChat && (
+                <LocationChatModal
+                    key={selectedLocationChat.id}
+                    isOpen={!!selectedLocationChat}
+                    onClose={() => setSelectedLocationChat(null)}
+                    locationChat={selectedLocationChat}
+                    userAddress={userAddress}
+                    getUserInfo={getAlphaUserInfo}
+                    onOpenUserCard={(address) => setUserCardAddress(address)}
+                />
+            )}
 
             {/* Channel Chat Modal */}
             {selectedChannel && (

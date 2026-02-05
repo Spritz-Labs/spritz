@@ -8,6 +8,7 @@ import { ChannelIcon } from "./ChannelIcon";
 import { ImageViewerModal } from "./ImageViewerModal";
 import type { PoapEventWithChannel } from "@/app/api/poap/events-with-channels/route";
 import type { PoapCollectionForUser } from "@/app/api/poap/collections-for-user/route";
+import type { LocationChat } from "@/hooks/useLocationChat";
 
 function showToast(message: string, type: "success" | "neutral" = "success") {
     const toast = document.createElement("div");
@@ -27,6 +28,7 @@ type BrowseChannelsModalProps = {
     /** Addresses to scan for POAPs (e.g. Smart Wallet + identity). If not set, uses userAddress only. */
     poapAddresses?: string[];
     onJoinChannel: (channel: PublicChannel) => void;
+    onJoinLocationChat?: (chat: LocationChat) => void;
     initialShowCreate?: boolean; // Auto-open the create form
 };
 
@@ -76,6 +78,7 @@ export function BrowseChannelsModal({
     userAddress,
     poapAddresses,
     onJoinChannel,
+    onJoinLocationChat,
     initialShowCreate = false,
 }: BrowseChannelsModalProps) {
     const { channels, isLoading, joinChannel, leaveChannel, createChannel } =
@@ -84,7 +87,7 @@ export function BrowseChannelsModal({
     const [searchQuery, setSearchQuery] = useState("");
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(initialShowCreate);
-    const [view, setView] = useState<"all" | "poap">("all");
+    const [view, setView] = useState<"all" | "poap" | "locations">("all");
     /** When view is "poap": All = both, Collections = only collections, POAPs = only events */
     const [poapSubView, setPoapSubView] = useState<
         "all" | "collections" | "poaps"
@@ -105,6 +108,13 @@ export function BrowseChannelsModal({
     const [viewerImage, setViewerImage] = useState<string | null>(null);
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    
+    // Location chats state
+    const [locationChats, setLocationChats] = useState<LocationChat[]>([]);
+    const [locationChatsLoading, setLocationChatsLoading] = useState(false);
+    const [locationChatsError, setLocationChatsError] = useState<string | null>(null);
+    const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+    const [joiningLocationChat, setJoiningLocationChat] = useState<string | null>(null);
 
     // Debounce search (250ms) for smoother filtering
     useEffect(() => {
@@ -217,6 +227,90 @@ export function BrowseChannelsModal({
             fetchPoapCollections();
         }
     }, [isOpen, view, fetchPoapEvents, fetchPoapCollections]);
+
+    // Get user location when locations tab is selected
+    useEffect(() => {
+        if (isOpen && view === "locations" && !userLocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    setUserLocation({
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude,
+                    });
+                },
+                (err) => {
+                    console.error("[BrowseChannels] Geolocation error:", err);
+                    setLocationChatsError("Enable location access to find nearby location chats");
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+    }, [isOpen, view, userLocation]);
+
+    // Fetch location chats when we have user location
+    const fetchLocationChats = useCallback(async () => {
+        if (!userLocation) return;
+        
+        setLocationChatsLoading(true);
+        setLocationChatsError(null);
+        
+        try {
+            const response = await fetch(
+                `/api/location-chats?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=10000&limit=50`
+            );
+            
+            if (!response.ok) {
+                throw new Error("Failed to fetch location chats");
+            }
+            
+            const data = await response.json();
+            setLocationChats(data.chats || []);
+        } catch (err) {
+            console.error("[BrowseChannels] Location chats error:", err);
+            setLocationChatsError("Failed to load location chats");
+        } finally {
+            setLocationChatsLoading(false);
+        }
+    }, [userLocation]);
+
+    useEffect(() => {
+        if (isOpen && view === "locations" && userLocation) {
+            fetchLocationChats();
+        }
+    }, [isOpen, view, userLocation, fetchLocationChats]);
+
+    // Filter location chats by search
+    const filteredLocationChats = useMemo(() => {
+        if (!debouncedSearch.trim()) return locationChats;
+        const q = debouncedSearch.trim().toLowerCase();
+        return locationChats.filter(
+            (c) =>
+                c.name.toLowerCase().includes(q) ||
+                c.google_place_name?.toLowerCase().includes(q) ||
+                c.google_place_address?.toLowerCase().includes(q)
+        );
+    }, [locationChats, debouncedSearch]);
+
+    // Handle joining a location chat
+    const handleJoinLocationChat = async (chat: LocationChat) => {
+        setJoiningLocationChat(chat.id);
+        
+        try {
+            const response = await fetch(`/api/location-chats/${chat.id}/join`, {
+                method: "POST",
+            });
+            
+            if (!response.ok) {
+                throw new Error("Failed to join");
+            }
+            
+            onJoinLocationChat?.(chat);
+        } catch (err) {
+            console.error("[BrowseChannels] Join location chat error:", err);
+        } finally {
+            setJoiningLocationChat(null);
+        }
+    };
 
     const filteredPoapEvents = useMemo(() => {
         if (!debouncedSearch.trim()) return poapEvents;
@@ -486,30 +580,43 @@ export function BrowseChannelsModal({
                             </div>
                         </div>
 
-                        {/* View tabs: All channels | From my POAPs */}
+                        {/* View tabs: All | POAPs | Locations */}
                         <div className="flex gap-1 p-1 bg-zinc-800/50 rounded-lg">
                             <button
                                 type="button"
                                 onClick={() => setView("all")}
-                                className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                                className={`flex-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                                     view === "all"
                                         ? "bg-zinc-700 text-white"
                                         : "text-zinc-400 hover:text-white"
                                 }`}
                             >
-                                All channels
+                                All
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setView("poap")}
-                                className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                                className={`flex-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
                                     view === "poap"
                                         ? "bg-zinc-700 text-white"
                                         : "text-zinc-400 hover:text-white"
                                 }`}
                             >
                                 <span aria-hidden>🎫</span>
-                                From my POAPs
+                                <span className="hidden sm:inline">POAPs</span>
+                                <span className="sm:hidden">POAP</span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setView("locations")}
+                                className={`flex-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                                    view === "locations"
+                                        ? "bg-zinc-700 text-white"
+                                        : "text-zinc-400 hover:text-white"
+                                }`}
+                            >
+                                <span aria-hidden>📍</span>
+                                <span>Locations</span>
                             </button>
                         </div>
                         {/* POAP sub-tabs: All | Collections | POAPs (only when "From my POAPs" is selected) */}
@@ -573,10 +680,18 @@ export function BrowseChannelsModal({
                         )}
                     </div>
 
-                    {/* Channel List or POAP List */}
+                    {/* Channel List or POAP List or Locations */}
                     <div className="flex flex-col min-h-0 flex-1">
                         <p className="px-3 py-1.5 text-xs text-zinc-500 border-b border-zinc-800/50 shrink-0">
-                            {view === "poap"
+                            {view === "locations"
+                                ? locationChatsLoading
+                                    ? "Finding nearby location chats..."
+                                    : locationChatsError
+                                    ? "Enable location to browse"
+                                    : `${filteredLocationChats.length} location chat${
+                                          filteredLocationChats.length !== 1 ? "s" : ""
+                                      } nearby`
+                                : view === "poap"
                                 ? (() => {
                                       if (poapSubView === "collections") {
                                           if (poapCollectionsLoading)
@@ -1074,6 +1189,87 @@ export function BrowseChannelsModal({
                                                 </div>
                                             )}
                                         </>
+                                    )}
+                                </>
+                            ) : view === "locations" ? (
+                                /* Location Chats View */
+                                <>
+                                    {locationChatsError && !userLocation ? (
+                                        <div className="text-center py-12 px-4">
+                                            <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-4">
+                                                <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                </svg>
+                                            </div>
+                                            <p className="text-zinc-400 text-sm mb-2">{locationChatsError}</p>
+                                            <p className="text-zinc-600 text-xs">
+                                                Location access is needed to find nearby chats
+                                            </p>
+                                        </div>
+                                    ) : locationChatsLoading ? (
+                                        <div className="flex items-center justify-center py-12">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
+                                        </div>
+                                    ) : filteredLocationChats.length === 0 ? (
+                                        <div className="text-center py-12 px-4">
+                                            <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mx-auto mb-4">
+                                                <span className="text-3xl">📍</span>
+                                            </div>
+                                            <p className="text-zinc-400 text-sm mb-2">
+                                                {locationChats.length === 0
+                                                    ? "No location chats nearby yet"
+                                                    : "No location chats match your search"}
+                                            </p>
+                                            <p className="text-zinc-600 text-xs">
+                                                Create a location chat from the &quot;+&quot; menu in Chats
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-3 min-w-0">
+                                            {filteredLocationChats.map((chat) => (
+                                                <motion.div
+                                                    key={chat.id}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
+                                                >
+                                                    <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
+                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center text-xl sm:text-2xl shrink-0">
+                                                            {chat.emoji}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0 pr-2">
+                                                            <p className="text-white font-medium truncate text-sm sm:text-base">
+                                                                {chat.name}
+                                                            </p>
+                                                            <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1 truncate">
+                                                                {chat.google_place_address || chat.formatted_address}
+                                                            </p>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <p className="text-zinc-600 text-[10px] sm:text-xs">
+                                                                    {chat.member_count} members • {chat.message_count} msgs
+                                                                </p>
+                                                                {chat.google_place_rating && (
+                                                                    <span className="text-[10px] sm:text-xs text-amber-400 flex items-center gap-0.5">
+                                                                        ⭐ {chat.google_place_rating.toFixed(1)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleJoinLocationChat(chat)}
+                                                            disabled={joiningLocationChat === chat.id}
+                                                            className="shrink-0 self-start px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 bg-[#FF5500] text-white hover:bg-[#FF6600]"
+                                                        >
+                                                            {joiningLocationChat === chat.id ? (
+                                                                <span className="animate-pulse">...</span>
+                                                            ) : (
+                                                                "Join"
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
                                     )}
                                 </>
                             ) : isLoading ? (

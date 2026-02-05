@@ -1,59 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-import { checkRateLimit } from "@/lib/ratelimit";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/location-chats/[id] - Get a specific location chat with details
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const rateLimitResponse = await checkRateLimit(request, "general");
-    if (rateLimitResponse) return rateLimitResponse;
-
     try {
+        const session = await getAuthenticatedUser(request);
+        const userAddress = session?.userAddress;
+
         const { id } = await params;
 
-        const { data: chat, error } = await supabase
+        // Fetch the location chat
+        const { data: chat, error: chatError } = await supabase
             .from("shout_location_chats")
             .select("*")
             .eq("id", id)
+            .eq("is_active", true)
             .single();
 
-        if (error || !chat) {
+        if (chatError || !chat) {
             return NextResponse.json(
                 { error: "Location chat not found" },
                 { status: 404 }
             );
         }
 
-        // Check if current user is a member
-        const session = await getAuthenticatedUser(request);
+        // Check if user is a member
         let isMember = false;
-        
-        if (session?.userAddress) {
+        if (userAddress) {
             const { data: membership } = await supabase
                 .from("shout_location_chat_members")
                 .select("id")
                 .eq("location_chat_id", id)
-                .eq("user_address", session.userAddress)
+                .eq("user_address", userAddress.toLowerCase())
                 .single();
             
             isMember = !!membership;
         }
 
-        // Get recent members (for display)
+        // Fetch members
         const { data: members } = await supabase
             .from("shout_location_chat_members")
-            .select("user_address, joined_at")
+            .select("*")
             .eq("location_chat_id", id)
-            .order("joined_at", { ascending: false })
-            .limit(10);
+            .order("joined_at", { ascending: true })
+            .limit(50);
 
         return NextResponse.json({
             chat,
@@ -61,7 +59,7 @@ export async function GET(
             members: members || [],
         });
     } catch (error) {
-        console.error("[LocationChat] GET error:", error);
+        console.error("[location-chats/[id]] Error:", error);
         return NextResponse.json(
             { error: "Failed to fetch location chat" },
             { status: 500 }

@@ -4,27 +4,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import type { PlaceResult } from "@/app/api/places/search/route";
+import type { LocationChat } from "@/hooks/useLocationChat";
 
 type LocationChatPickerProps = {
     isOpen: boolean;
     onClose: () => void;
     onChatCreated?: (chat: LocationChat) => void;
-};
-
-type LocationChat = {
-    id: string;
-    name: string;
-    description?: string;
-    emoji: string;
-    google_place_name: string;
-    google_place_address?: string;
-    google_place_rating?: number;
-    google_place_types?: string[];
-    latitude: number;
-    longitude: number;
-    member_count: number;
-    message_count: number;
-    waku_content_topic: string;
 };
 
 // Place type to emoji mapping
