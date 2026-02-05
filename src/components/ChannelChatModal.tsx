@@ -2366,31 +2366,113 @@ export function ChannelChatModal({
                                                             )}
                                                         {isPixelArt ? (
                                                             <div
-                                                                className={`rounded-2xl overflow-hidden relative group ${
+                                                                onClick={() => {
+                                                                    setSelectedMessage(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : msg.id
+                                                                    );
+                                                                    setSelectedMessageConfig(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : {
+                                                                                  messageId:
+                                                                                      msg.id,
+                                                                                  messageContent:
+                                                                                      msg.content,
+                                                                                  isOwn,
+                                                                                  isPinned:
+                                                                                      msg.is_pinned,
+                                                                                  isStarred:
+                                                                                      isStarred(
+                                                                                          msg.id
+                                                                                      ),
+                                                                                  canEdit:
+                                                                                      false,
+                                                                                  hasMedia:
+                                                                                      true,
+                                                                                  isPixelArt:
+                                                                                      true,
+                                                                                  mediaUrl:
+                                                                                      msg.content,
+                                                                              }
+                                                                    );
+                                                                }}
+                                                                className={`rounded-2xl overflow-hidden relative group cursor-pointer ${
                                                                     isOwn
                                                                         ? "rounded-br-md"
                                                                         : "rounded-bl-md"
+                                                                } ${
+                                                                    selectedMessage ===
+                                                                    msg.id
+                                                                        ? "ring-2 ring-orange-400/50"
+                                                                        : ""
                                                                 }`}
                                                             >
-                                                                <PixelArtImage
-                                                                    src={
-                                                                        msg.content
-                                                                    }
-                                                                    size="lg"
-                                                                    className="cursor-pointer hover:opacity-90 transition-opacity"
-                                                                    onClick={() =>
+                                                                <div
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
                                                                         setPreviewImage(
                                                                             msg.content
-                                                                        )
-                                                                    }
-                                                                />
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    <PixelArtImage
+                                                                        src={
+                                                                            msg.content
+                                                                        }
+                                                                        size="lg"
+                                                                        className="cursor-pointer hover:opacity-90 transition-opacity"
+                                                                    />
+                                                                </div>
                                                             </div>
                                                         ) : isImage ? (
                                                             <div
-                                                                className={`rounded-2xl overflow-hidden relative group ${
+                                                                onClick={() => {
+                                                                    setSelectedMessage(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : msg.id
+                                                                    );
+                                                                    setSelectedMessageConfig(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : {
+                                                                                  messageId:
+                                                                                      msg.id,
+                                                                                  messageContent:
+                                                                                      msg.content,
+                                                                                  isOwn,
+                                                                                  isPinned:
+                                                                                      msg.is_pinned,
+                                                                                  isStarred:
+                                                                                      isStarred(
+                                                                                          msg.id
+                                                                                      ),
+                                                                                  canEdit:
+                                                                                      false,
+                                                                                  hasMedia:
+                                                                                      true,
+                                                                                  isPixelArt:
+                                                                                      false,
+                                                                                  mediaUrl:
+                                                                                      msg.content,
+                                                                              }
+                                                                    );
+                                                                }}
+                                                                className={`rounded-2xl overflow-hidden relative group cursor-pointer ${
                                                                     isOwn
                                                                         ? "rounded-br-md"
                                                                         : "rounded-bl-md"
+                                                                } ${
+                                                                    selectedMessage ===
+                                                                    msg.id
+                                                                        ? "ring-2 ring-orange-400/50"
+                                                                        : ""
                                                                 }`}
                                                             >
                                                                 <img
@@ -2400,11 +2482,12 @@ export function ChannelChatModal({
                                                                     alt="Shared image"
                                                                     loading="lazy"
                                                                     className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                                                    onClick={() =>
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
                                                                         setPreviewImage(
                                                                             msg.content
-                                                                        )
-                                                                    }
+                                                                        );
+                                                                    }}
                                                                     onError={(
                                                                         e
                                                                     ) => {
@@ -2460,10 +2543,52 @@ export function ChannelChatModal({
                                                             </div>
                                                         ) : isGif ? (
                                                             <div
-                                                                className={`rounded-2xl overflow-hidden relative ${
+                                                                onClick={() => {
+                                                                    setSelectedMessage(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : msg.id
+                                                                    );
+                                                                    setSelectedMessageConfig(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : {
+                                                                                  messageId:
+                                                                                      msg.id,
+                                                                                  messageContent:
+                                                                                      msg.content,
+                                                                                  isOwn,
+                                                                                  isPinned:
+                                                                                      msg.is_pinned,
+                                                                                  isStarred:
+                                                                                      isStarred(
+                                                                                          msg.id
+                                                                                      ),
+                                                                                  canEdit:
+                                                                                      false,
+                                                                                  hasMedia:
+                                                                                      true,
+                                                                                  isPixelArt:
+                                                                                      false,
+                                                                                  mediaUrl:
+                                                                                      msg.content.replace(
+                                                                                          "[GIF]",
+                                                                                          ""
+                                                                                      ),
+                                                                              }
+                                                                    );
+                                                                }}
+                                                                className={`rounded-2xl overflow-hidden relative cursor-pointer ${
                                                                     isOwn
                                                                         ? "rounded-br-md"
                                                                         : "rounded-bl-md"
+                                                                } ${
+                                                                    selectedMessage ===
+                                                                    msg.id
+                                                                        ? "ring-2 ring-orange-400/50"
+                                                                        : ""
                                                                 }`}
                                                             >
                                                                 <img
@@ -2478,13 +2603,54 @@ export function ChannelChatModal({
                                                             </div>
                                                         ) : isLocation &&
                                                           locationData ? (
-                                                            <LocationMessage
-                                                                location={
-                                                                    locationData
-                                                                }
-                                                                isOwn={isOwn}
-                                                                className="max-w-[280px]"
-                                                            />
+                                                            <div
+                                                                onClick={() => {
+                                                                    setSelectedMessage(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : msg.id
+                                                                    );
+                                                                    setSelectedMessageConfig(
+                                                                        selectedMessage ===
+                                                                            msg.id
+                                                                            ? null
+                                                                            : {
+                                                                                  messageId:
+                                                                                      msg.id,
+                                                                                  messageContent:
+                                                                                      msg.content,
+                                                                                  isOwn,
+                                                                                  isPinned:
+                                                                                      msg.is_pinned,
+                                                                                  isStarred:
+                                                                                      isStarred(
+                                                                                          msg.id
+                                                                                      ),
+                                                                                  canEdit:
+                                                                                      false,
+                                                                                  hasMedia:
+                                                                                      false,
+                                                                                  isPixelArt:
+                                                                                      false,
+                                                                              }
+                                                                    );
+                                                                }}
+                                                                className={`cursor-pointer ${
+                                                                    selectedMessage ===
+                                                                    msg.id
+                                                                        ? "ring-2 ring-orange-400/50 rounded-2xl"
+                                                                        : ""
+                                                                }`}
+                                                            >
+                                                                <LocationMessage
+                                                                    location={
+                                                                        locationData
+                                                                    }
+                                                                    isOwn={isOwn}
+                                                                    className="max-w-[280px]"
+                                                                />
+                                                            </div>
                                                         ) : (
                                                             <div
                                                                 onClick={() => {
@@ -3305,67 +3471,13 @@ export function ChannelChatModal({
                     isSending={isUploadingPixelArt}
                 />
 
-                {/* Image Preview Modal */}
-                <AnimatePresence>
-                    {previewImage && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/90 z-60 flex items-center justify-center p-4"
-                            onClick={() => setPreviewImage(null)}
-                        >
-                            <div className="absolute top-4 right-4 flex gap-2">
-                                <a
-                                    href={previewImage}
-                                    download="image.png"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-                                    title="Download"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <svg
-                                        className="w-6 h-6"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                                        />
-                                    </svg>
-                                </a>
-                                <button
-                                    className="p-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-                                    onClick={() => setPreviewImage(null)}
-                                >
-                                    <svg
-                                        className="w-6 h-6"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M6 18L18 6M6 6l12 12"
-                                        />
-                                    </svg>
-                                </button>
-                            </div>
-                            <img
-                                src={previewImage}
-                                alt="Preview"
-                                className="max-w-full max-h-full object-contain"
-                            />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+                {/* Image Preview Modal with zoom support */}
+                <ImageViewerModal
+                    isOpen={!!previewImage}
+                    onClose={() => setPreviewImage(null)}
+                    imageUrl={previewImage ?? ""}
+                    alt="Shared image"
+                />
 
                 {/* Poll Creator Modal */}
                 <PollCreator

@@ -127,9 +127,12 @@ export function MessageSearch({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
                     className="absolute inset-0 bg-zinc-900 z-20 flex flex-col"
+                    style={{
+                        paddingTop: "env(safe-area-inset-top, 0px)",
+                    }}
                 >
                     {/* Search Header */}
-                    <div className="flex items-center gap-3 p-4 border-b border-zinc-800">
+                    <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800">
                         <button
                             onClick={onClose}
                             className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
