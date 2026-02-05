@@ -9,6 +9,7 @@ type EncryptedImageProps = {
     isOwn: boolean;
     encryptionKey: Uint8Array | null;
     onDecryptError?: (error: Error) => void;
+    onDecrypted?: (decryptedUrl: string) => void; // Callback when decryption succeeds
     onClick?: () => void; // For opening in a lightbox
 };
 
@@ -18,6 +19,7 @@ export function EncryptedImage({
     isOwn,
     encryptionKey,
     onDecryptError,
+    onDecrypted,
     onClick,
 }: EncryptedImageProps) {
     const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export function EncryptedImage({
             const { fetchAndDecryptImage } = await import("@/lib/audioEncryption");
             const blobUrl = await fetchAndDecryptImage(encryptedUrl, encryptionKey, mimeType);
             setDecryptedUrl(blobUrl);
+            onDecrypted?.(blobUrl);
         } catch (error) {
             console.error("[EncryptedImage] Decryption failed:", error);
             setDecryptError(true);
@@ -55,7 +58,7 @@ export function EncryptedImage({
         } finally {
             setIsDecrypting(false);
         }
-    }, [encryptionKey, encryptedUrl, mimeType, onDecryptError]);
+    }, [encryptionKey, encryptedUrl, mimeType, onDecryptError, onDecrypted]);
 
     // Start decryption when key is available
     useEffect(() => {
@@ -72,6 +75,31 @@ export function EncryptedImage({
         setIsLoading(false);
         setDecryptError(true);
     };
+
+    const handleDownload = useCallback(async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!decryptedUrl) return;
+        
+        try {
+            // Fetch the blob from the object URL
+            const response = await fetch(decryptedUrl);
+            const blob = await response.blob();
+            
+            // Determine file extension from MIME type
+            const ext = mimeType.split("/")[1]?.split(";")[0] || "jpg";
+            const filename = `decrypted-image-${Date.now()}.${ext}`;
+            
+            // Create download link
+            const a = document.createElement("a");
+            a.href = decryptedUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error("[EncryptedImage] Download failed:", error);
+        }
+    }, [decryptedUrl, mimeType]);
 
     // Show placeholder while waiting for key or decrypting
     if (!encryptionKey || isDecrypting) {
@@ -156,12 +184,33 @@ export function EncryptedImage({
                 />
             )}
             
-            {/* Encrypted badge */}
-            <div className="absolute bottom-1 right-1 flex items-center gap-1 px-1.5 py-0.5 bg-black/50 rounded text-[10px] text-zinc-300 opacity-0 group-hover:opacity-100 transition-opacity">
-                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            {/* Action buttons overlay - download and expand hint */}
+            <div className="absolute bottom-1 right-1 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                {/* Download button */}
+                <button
+                    onClick={handleDownload}
+                    className="p-1.5 bg-black/60 hover:bg-black/80 rounded text-white/90 hover:text-white transition-colors"
+                    title="Download decrypted image"
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                </button>
+                
+                {/* Encrypted badge */}
+                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-black/50 rounded text-[10px] text-zinc-300">
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                    <span>Encrypted</span>
+                </div>
+            </div>
+            
+            {/* Tap to expand hint */}
+            <div className="absolute top-1 right-1 p-1 bg-black/50 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg className="w-3.5 h-3.5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                 </svg>
-                <span>Encrypted</span>
             </div>
         </div>
     );

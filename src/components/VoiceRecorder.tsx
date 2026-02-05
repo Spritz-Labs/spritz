@@ -508,6 +508,42 @@ export function EncryptedVoiceMessage({
         }
     };
 
+    const handleDownload = useCallback(async () => {
+        // If not decrypted yet, decrypt first
+        if (!decryptedUrl && encryptionKey) {
+            setIsDecrypting(true);
+            try {
+                const { fetchAndDecryptVoice } = await import("@/lib/audioEncryption");
+                const blobUrl = await fetchAndDecryptVoice(encryptedUrl, encryptionKey);
+                setDecryptedUrl(blobUrl);
+                
+                // Download after decryption
+                const filename = `voice-memo-${Date.now()}.webm`;
+                const a = document.createElement("a");
+                a.href = blobUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            } catch (error) {
+                console.error("[EncryptedVoiceMessage] Download failed:", error);
+            } finally {
+                setIsDecrypting(false);
+            }
+            return;
+        }
+        
+        if (!decryptedUrl) return;
+        
+        const filename = `voice-memo-${Date.now()}.webm`;
+        const a = document.createElement("a");
+        a.href = decryptedUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }, [decryptedUrl, encryptedUrl, encryptionKey]);
+
     const formatDuration = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
         const secs = Math.floor(seconds % 60);
@@ -591,6 +627,22 @@ export function EncryptedVoiceMessage({
                     )}
                 </div>
             </div>
+
+            {/* Download button */}
+            <button
+                onClick={handleDownload}
+                disabled={isDecrypting || !encryptionKey}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                    isOwn
+                        ? "bg-white/10 hover:bg-white/20 text-white/70 hover:text-white"
+                        : "bg-zinc-700/50 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200"
+                } ${(isDecrypting || !encryptionKey) ? "opacity-50 cursor-not-allowed" : ""}`}
+                title="Download voice memo"
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+            </button>
 
             {decryptedUrl && (
                 <audio

@@ -174,17 +174,18 @@ function EncryptedImageMessageWrapper({
     mimeType,
     isOwn,
     peerAddress,
-    onClick,
+    onViewImage,
 }: {
     encryptedUrl: string;
     mimeType: string;
     isOwn: boolean;
     peerAddress: string;
-    onClick?: () => void;
+    onViewImage?: (decryptedUrl: string) => void;
 }) {
     const { getDmEncryptionKey } = useXMTPContext();
     const [encryptionKey, setEncryptionKey] = useState<Uint8Array | null>(null);
     const [keyError, setKeyError] = useState(false);
+    const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
 
     useEffect(() => {
         if (getDmEncryptionKey && peerAddress) {
@@ -196,6 +197,16 @@ function EncryptedImageMessageWrapper({
                 });
         }
     }, [getDmEncryptionKey, peerAddress]);
+
+    const handleClick = useCallback(() => {
+        if (decryptedUrl && onViewImage) {
+            onViewImage(decryptedUrl);
+        }
+    }, [decryptedUrl, onViewImage]);
+
+    const handleDecrypted = useCallback((url: string) => {
+        setDecryptedUrl(url);
+    }, []);
 
     if (keyError) {
         return (
@@ -214,7 +225,8 @@ function EncryptedImageMessageWrapper({
             mimeType={mimeType}
             isOwn={isOwn}
             encryptionKey={encryptionKey}
-            onClick={onClick}
+            onDecrypted={handleDecrypted}
+            onClick={handleClick}
         />
     );
 }
@@ -2282,9 +2294,7 @@ export function ChatModal({
                                                                         mimeType={encryptedImageData.mimeType}
                                                                         isOwn={isOwn}
                                                                         peerAddress={peerAddress}
-                                                                        onClick={() => {
-                                                                            // Can add lightbox support here in the future
-                                                                        }}
+                                                                        onViewImage={(url) => setViewerImage(url)}
                                                                     />
                                                                 ) : (
                                                                     <div
