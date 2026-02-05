@@ -14,6 +14,22 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// Calculate distance between two points using Haversine formula (returns meters)
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// 1 mile in meters
+const ONE_MILE_METERS = 1609.34;
+
 // Generate a Waku content topic for a location chat
 function generateWakuContentTopic(placeId: string): string {
     const hash = crypto.createHash("sha256").update(placeId).digest("hex").substring(0, 16);
@@ -156,11 +172,19 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { placeId, name, description, emoji } = body;
+        const { placeId, name, description, emoji, userLat, userLng } = body;
 
         if (!placeId) {
             return NextResponse.json(
                 { error: "Google Place ID is required" },
+                { status: 400 }
+            );
+        }
+
+        // Require user location for creating a chat
+        if (typeof userLat !== "number" || typeof userLng !== "number") {
+            return NextResponse.json(
+                { error: "Your location is required to create a location chat" },
                 { status: 400 }
             );
         }
@@ -208,6 +232,33 @@ export async function POST(request: NextRequest) {
         }
 
         const place = await placeResponse.json();
+
+        // Validate user is within 1 mile of the location
+        const placeLat = place.location?.latitude;
+        const placeLng = place.location?.longitude;
+        
+        if (typeof placeLat !== "number" || typeof placeLng !== "number") {
+            return NextResponse.json(
+                { error: "Could not determine place location" },
+                { status: 400 }
+            );
+        }
+
+        const distanceMeters = calculateDistance(userLat, userLng, placeLat, placeLng);
+        const distanceMiles = distanceMeters / ONE_MILE_METERS;
+        
+        if (distanceMeters > ONE_MILE_METERS) {
+            console.log(`[LocationChat] User too far: ${distanceMiles.toFixed(2)} miles from ${place.displayName?.text}`);
+            return NextResponse.json(
+                { 
+                    error: `You must be within 1 mile of this location to create a chat. You are currently ${distanceMiles.toFixed(1)} miles away.`,
+                    distance: distanceMiles,
+                },
+                { status: 403 }
+            );
+        }
+
+        console.log(`[LocationChat] User is ${distanceMiles.toFixed(2)} miles from ${place.displayName?.text}`);
 
         // Prepare data for IPFS storage (full Google Places data)
         const ipfsData = {

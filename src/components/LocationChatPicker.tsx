@@ -317,6 +317,11 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
 
     // Create a location chat
     const handleCreateChat = async (place: PlaceResult) => {
+        if (!userLocation) {
+            setError("Location is required to create a chat. Please enable location access.");
+            return;
+        }
+
         setIsCreating(place.placeId);
         setError(null);
 
@@ -328,11 +333,14 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                     placeId: place.placeId,
                     name: place.name,
                     emoji: getPlaceEmoji(place.types),
+                    userLat: userLocation.lat,
+                    userLng: userLocation.lng,
                 }),
             });
 
             if (!response.ok) {
-                throw new Error("Failed to create chat");
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Failed to create chat");
             }
 
             const data = await response.json();
@@ -348,7 +356,7 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
             onClose();
         } catch (err) {
             console.error("[LocationChatPicker] Create error:", err);
-            setError("Failed to create chat. Try again.");
+            setError(err instanceof Error ? err.message : "Failed to create chat. Try again.");
         } finally {
             setIsCreating(null);
         }
