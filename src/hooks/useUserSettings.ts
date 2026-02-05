@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS: UserSettings = {
     statusText: "Available to chat",
     isDnd: false,
     soundEnabled: true,
-    decentralizedCalls: false, // Default to Agora until Huddle01 is fully integrated
+    decentralizedCalls: true, // Default to Huddle01 (censorship resistant) for Web3 values
     publicLandingEnabled: false, // Default to off for privacy
     publicBio: "",
     customAvatarUrl: null,
@@ -78,7 +78,7 @@ export function useUserSettings(userAddress: string | null) {
                     statusText: data.status_text || "",
                     isDnd: data.is_dnd || false,
                     soundEnabled: data.sound_enabled ?? true,
-                    decentralizedCalls: data.decentralized_calls ?? false, // Default to Agora
+                    decentralizedCalls: data.decentralized_calls ?? true, // Default to Huddle01 (censorship resistant)
                     publicLandingEnabled: data.public_landing_enabled ?? false,
                     publicBio: data.public_bio || "",
                     customAvatarUrl: data.custom_avatar_url || null,
