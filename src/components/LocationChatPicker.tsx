@@ -57,6 +57,38 @@ function formatPlaceType(types: string[]): string {
     return readable ? readable.charAt(0).toUpperCase() + readable.slice(1) : "Place";
 }
 
+// Calculate distance between two points using Haversine formula
+function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// Format distance for display
+function formatDistance(meters: number): string {
+    if (meters < 1000) {
+        // Show in feet for short distances (US-friendly)
+        const feet = Math.round(meters * 3.28084);
+        return `${feet} ft`;
+    } else {
+        // Show in miles
+        const miles = meters / 1609.34;
+        if (miles < 0.1) {
+            return `${Math.round(miles * 5280)} ft`;
+        } else if (miles < 10) {
+            return `${miles.toFixed(1)} mi`;
+        } else {
+            return `${Math.round(miles)} mi`;
+        }
+    }
+}
+
 export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationChatPickerProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [places, setPlaces] = useState<PlaceResult[]>([]);
@@ -539,41 +571,55 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                                         Active Nearby Chats
                                     </h3>
                                     <div className="space-y-2">
-                                        {existingChats.map((chat) => (
-                                            <button
-                                                key={chat.id}
-                                                onClick={() => handleJoinChat(chat)}
-                                                disabled={isCreating === chat.id}
-                                                className="w-full p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors text-left flex items-center gap-3 disabled:opacity-50"
-                                            >
-                                                <div className="w-12 h-12 rounded-xl bg-[#FF5500]/20 flex items-center justify-center text-2xl">
-                                                    {chat.emoji}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-white truncate">{chat.name}</p>
-                                                    <p className="text-xs text-zinc-500 truncate">
-                                                        {chat.google_place_address}
-                                                    </p>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-xs text-zinc-500">
-                                                            {chat.member_count} members
-                                                        </span>
-                                                        {chat.google_place_rating && (
-                                                            <span className="text-xs text-amber-400 flex items-center gap-0.5">
-                                                                ⭐ {chat.google_place_rating.toFixed(1)}
-                                                            </span>
-                                                        )}
+                                        {existingChats.map((chat) => {
+                                            // Calculate distance if we have user location
+                                            const distance = userLocation && chat.latitude && chat.longitude
+                                                ? calculateDistance(userLocation.lat, userLocation.lng, chat.latitude, chat.longitude)
+                                                : null;
+                                            
+                                            return (
+                                                <button
+                                                    key={chat.id}
+                                                    onClick={() => handleJoinChat(chat)}
+                                                    disabled={isCreating === chat.id}
+                                                    className="w-full p-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors text-left flex items-center gap-3 disabled:opacity-50"
+                                                >
+                                                    <div className="w-12 h-12 rounded-xl bg-[#FF5500]/20 flex items-center justify-center text-2xl">
+                                                        {chat.emoji}
                                                     </div>
-                                                </div>
-                                                {isCreating === chat.id ? (
-                                                    <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
-                                                ) : (
-                                                    <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                    </svg>
-                                                )}
-                                            </button>
-                                        ))}
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-medium text-white truncate">{chat.name}</p>
+                                                            {distance !== null && (
+                                                                <span className="text-xs text-[#FF5500] font-medium whitespace-nowrap">
+                                                                    {formatDistance(distance)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <p className="text-xs text-zinc-500 truncate">
+                                                            {chat.google_place_address}
+                                                        </p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            <span className="text-xs text-zinc-500">
+                                                                {chat.member_count} members
+                                                            </span>
+                                                            {chat.google_place_rating && (
+                                                                <span className="text-xs text-amber-400 flex items-center gap-0.5">
+                                                                    ⭐ {chat.google_place_rating.toFixed(1)}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    {isCreating === chat.id ? (
+                                                        <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        <svg className="w-5 h-5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -597,6 +643,11 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                                                 (c) => c.google_place_name === place.name
                                             );
                                             
+                                            // Calculate distance if we have user location
+                                            const distance = userLocation && place.location
+                                                ? calculateDistance(userLocation.lat, userLocation.lng, place.location.lat, place.location.lng)
+                                                : null;
+                                            
                                             return (
                                                 <button
                                                     key={place.placeId}
@@ -611,7 +662,14 @@ export function LocationChatPicker({ isOpen, onClose, onChatCreated }: LocationC
                                                         {getPlaceEmoji(place.types)}
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="font-medium text-white truncate">{place.name}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="font-medium text-white truncate">{place.name}</p>
+                                                            {distance !== null && (
+                                                                <span className="text-xs text-[#FF5500] font-medium whitespace-nowrap">
+                                                                    {formatDistance(distance)}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         <p className="text-xs text-zinc-500 truncate">
                                                             {place.vicinity || place.address}
                                                         </p>

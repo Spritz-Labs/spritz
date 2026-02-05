@@ -15,6 +15,7 @@
         "vercel:preview": "vercel"
     },
     "dependencies": {
+        "@alien_org/bridge": "^0.2.2",
         "@alien_org/sso-sdk-react": "^1.0.39",
         "@coinbase/onchainkit": "^1.1.2",
         "@coinbase/wallet-sdk": "^4.3.7",

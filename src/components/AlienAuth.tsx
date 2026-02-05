@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import dynamic from "next/dynamic";
 import { useAlienAuthContext } from "@/context/AlienAuthProvider";
 import { useWorldIdContext } from "@/context/WorldIdProvider";
+import { useAlienMiniApp } from "@/hooks/useAlienMiniApp";
 import {
     IDKitWidget,
     VerificationLevel,
@@ -22,13 +23,77 @@ const SignInButton = dynamic(
     }
 );
 
-export function AlienAuth() {
+interface AlienAuthProps {
+    /** If true, only show Alien ID option (hide World ID). Used when in Alien Mini App */
+    alienOnly?: boolean;
+}
+
+export function AlienAuth({ alienOnly = false }: AlienAuthProps) {
     const {
         isAuthenticated: isAlienAuthenticated,
         alienAddress,
         isLoading: isAlienLoading,
         logout: alienLogout,
     } = useAlienAuthContext();
+    
+    // Detect if running inside Alien app
+    const { isInsideAlienApp, authToken, isLoading: isBridgeLoading } = useAlienMiniApp();
+    const [autoAuthenticating, setAutoAuthenticating] = useState(false);
+    const [autoAuthError, setAutoAuthError] = useState<string | null>(null);
+
+    // Auto-authenticate when inside Alien app with a token
+    useEffect(() => {
+        if (
+            isInsideAlienApp && 
+            authToken && 
+            !isAlienAuthenticated && 
+            !isAlienLoading && 
+            !autoAuthenticating &&
+            !autoAuthError
+        ) {
+            const autoAuth = async () => {
+                setAutoAuthenticating(true);
+                setAutoAuthError(null);
+                
+                try {
+                    console.log("[AlienAuth] Auto-authenticating with Mini App token...");
+                    
+                    // Call our API to verify and create session with the token
+                    const res = await fetch("/api/auth/alien-id", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ 
+                            token: authToken,
+                            isMiniApp: true,
+                        }),
+                        credentials: "include",
+                    });
+                    
+                    if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.error || "Failed to authenticate");
+                    }
+                    
+                    console.log("[AlienAuth] Mini App auto-authentication successful");
+                    
+                    // Reload to pick up the new session
+                    window.location.reload();
+                } catch (err) {
+                    console.error("[AlienAuth] Mini App auto-auth error:", err);
+                    setAutoAuthError(err instanceof Error ? err.message : "Auto-authentication failed");
+                } finally {
+                    setAutoAuthenticating(false);
+                }
+            };
+            
+            // Small delay to ensure everything is initialized
+            const timer = setTimeout(autoAuth, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [isInsideAlienApp, authToken, isAlienAuthenticated, isAlienLoading, autoAuthenticating, autoAuthError]);
+
+    // When inside Alien app, force alienOnly mode
+    const showAlienOnly = alienOnly || isInsideAlienApp;
 
     const {
         isAuthenticated: isWorldIdAuthenticated,
@@ -84,7 +149,7 @@ export function AlienAuth() {
     };
 
     // Combined loading state
-    const isLoading = isAlienLoading || isWorldIdLoading;
+    const isLoading = isAlienLoading || isWorldIdLoading || isBridgeLoading || autoAuthenticating;
     
     // Check if either is authenticated
     const isAuthenticated = isAlienAuthenticated || isWorldIdAuthenticated;
@@ -169,7 +234,13 @@ export function AlienAuth() {
         return (
             <div className="w-full flex flex-col items-center justify-center gap-4 py-8">
                 <div className="w-8 h-8 border-2 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
-                <p className="text-zinc-400 text-sm">Loading...</p>
+                <p className="text-zinc-400 text-sm">
+                    {autoAuthenticating 
+                        ? "Signing in with Alien..." 
+                        : isBridgeLoading 
+                        ? "Detecting Alien app..."
+                        : "Loading..."}
+                </p>
             </div>
         );
     }
@@ -183,20 +254,24 @@ export function AlienAuth() {
             className="w-full flex flex-col items-center justify-center gap-4"
         >
             <div className="text-center mb-2">
-                <h3 className="text-white font-semibold mb-1">Sign in with Digital ID</h3>
+                <h3 className="text-white font-semibold mb-1">
+                    {showAlienOnly ? "Sign in with Alien" : "Sign in with Digital ID"}
+                </h3>
                 <p className="text-zinc-500 text-sm">
-                    Verify your identity with World ID or Alien ID
+                    {showAlienOnly 
+                        ? "Continue with your Alien identity"
+                        : "Verify your identity with World ID or Alien ID"}
                 </p>
             </div>
 
-            {error && (
+            {(error || autoAuthError) && (
                 <div className="w-full p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm text-center">
-                    {error}
+                    {error || autoAuthError}
                 </div>
             )}
 
-            {/* World ID Button */}
-            {worldIdAppId && worldIdAction && (
+            {/* World ID Button - hide when in Alien Mini App */}
+            {!showAlienOnly && worldIdAppId && worldIdAction && (
                 <div className="w-full flex items-center justify-center min-h-[48px]">
                     <IDKitWidget
                         app_id={worldIdAppId}
@@ -223,8 +298,8 @@ export function AlienAuth() {
                 </div>
             )}
 
-            {/* Divider - only show if both options are available */}
-            {worldIdAppId && worldIdAction && (
+            {/* Divider - only show if both options are available and not in Alien app */}
+            {!showAlienOnly && worldIdAppId && worldIdAction && (
                 <div className="flex items-center gap-3 w-full my-1">
                     <div className="flex-1 h-px bg-zinc-800"></div>
                     <span className="text-zinc-600 text-xs">OR</span>
@@ -243,7 +318,11 @@ export function AlienAuth() {
             </div>
 
             <p className="text-center text-zinc-600 text-xs mt-2">
-                {worldIdAppId && worldIdAction ? "World ID • Alien ID" : "Powered by Alien ID"}
+                {showAlienOnly 
+                    ? "Powered by Alien" 
+                    : worldIdAppId && worldIdAction 
+                    ? "World ID • Alien ID" 
+                    : "Powered by Alien ID"}
             </p>
         </motion.div>
     );

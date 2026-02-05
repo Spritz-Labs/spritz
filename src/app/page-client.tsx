@@ -22,6 +22,7 @@ import { useAlienAuthContext } from "@/context/AlienAuthProvider";
 import { useWorldIdContext } from "@/context/WorldIdProvider";
 import { useWalletType, type WalletType } from "@/hooks/useWalletType";
 import { useAuth } from "@/context/AuthProvider";
+import { useAlienMiniApp } from "@/hooks/useAlienMiniApp";
 import {
     AUTH_CREDENTIALS_KEY,
     SOLANA_AUTH_CREDENTIALS_KEY,
@@ -315,6 +316,9 @@ export default function Home() {
         isLoading: isWorldIdLoading,
         logout: worldIdLogout,
     } = useWorldIdContext();
+
+    // Detect if running inside Alien Mini App
+    const { isInsideAlienApp, isLoading: isAlienBridgeLoading } = useAlienMiniApp();
 
     // SIWE Authentication
     const {
@@ -1075,100 +1079,117 @@ export default function Home() {
                                 </div>
                             )}
 
-                        {/* Tabs */}
-                        <div className="flex bg-zinc-900/50 rounded-xl p-1 mb-6">
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab("wallet")}
-                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-                                    activeTab === "wallet"
-                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
-                                        : "text-zinc-400 hover:text-white"
-                                }`}
-                            >
-                                Wallet
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab("email")}
-                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-                                    activeTab === "email"
-                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
-                                        : "text-zinc-400 hover:text-white"
-                                }`}
-                            >
-                                Email
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab("passkey")}
-                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-                                    activeTab === "passkey"
-                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
-                                        : "text-zinc-400 hover:text-white"
-                                }`}
-                            >
-                                Passkey
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setActiveTab("digitalid")}
-                                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
-                                    activeTab === "digitalid"
-                                        ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
-                                        : "text-zinc-400 hover:text-white"
-                                }`}
-                            >
-                                Digital ID
-                            </button>
-                        </div>
+                        {/* Tabs - hide when inside Alien Mini App (only show Alien login) */}
+                        {!isInsideAlienApp && (
+                            <div className="flex bg-zinc-900/50 rounded-xl p-1 mb-6">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab("wallet")}
+                                    className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === "wallet"
+                                            ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    Wallet
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab("email")}
+                                    className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === "email"
+                                            ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    Email
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab("passkey")}
+                                    className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === "passkey"
+                                            ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    Passkey
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveTab("digitalid")}
+                                    className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                                        activeTab === "digitalid"
+                                            ? "bg-[#FF5500] text-white shadow-lg shadow-[#FB8D22]/25"
+                                            : "text-zinc-400 hover:text-white"
+                                    }`}
+                                >
+                                    Digital ID
+                                </button>
+                            </div>
+                        )}
 
                         {/* Tab Content */}
                         <div className="min-h-[200px]">
                             <AnimatePresence mode="wait">
-                                {activeTab === "wallet" && (
+                                {/* When inside Alien Mini App, only show AlienAuth */}
+                                {isInsideAlienApp ? (
                                     <motion.div
-                                        key="wallet"
+                                        key="alien-mini-app"
                                         initial={{ opacity: 0, x: -10 }}
                                         animate={{ opacity: 1, x: 0 }}
                                         exit={{ opacity: 0, x: 10 }}
                                         transition={{ duration: 0.2 }}
                                     >
-                                        <WalletConnect />
+                                        <AlienAuth alienOnly />
                                     </motion.div>
-                                )}
-                                {activeTab === "email" && (
-                                    <motion.div
-                                        key="email"
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 10 }}
-                                        transition={{ duration: 0.2 }}
-                                    >
-                                        <EmailAuth />
-                                    </motion.div>
-                                )}
-                                {activeTab === "passkey" && (
-                                    <motion.div
-                                        key="passkey"
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 10 }}
-                                        transition={{ duration: 0.2 }}
-                                    >
-                                        <PasskeyAuth />
-                                    </motion.div>
-                                )}
-                                {activeTab === "digitalid" && (
-                                    <motion.div
-                                        key="digitalid"
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 10 }}
-                                        transition={{ duration: 0.2 }}
-                                    >
-                                        <AlienAuth />
-                                    </motion.div>
+                                ) : (
+                                    <>
+                                        {activeTab === "wallet" && (
+                                            <motion.div
+                                                key="wallet"
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 10 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <WalletConnect />
+                                            </motion.div>
+                                        )}
+                                        {activeTab === "email" && (
+                                            <motion.div
+                                                key="email"
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 10 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <EmailAuth />
+                                            </motion.div>
+                                        )}
+                                        {activeTab === "passkey" && (
+                                            <motion.div
+                                                key="passkey"
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 10 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <PasskeyAuth />
+                                            </motion.div>
+                                        )}
+                                        {activeTab === "digitalid" && (
+                                            <motion.div
+                                                key="digitalid"
+                                                initial={{ opacity: 0, x: -10 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                exit={{ opacity: 0, x: 10 }}
+                                                transition={{ duration: 0.2 }}
+                                            >
+                                                <AlienAuth />
+                                            </motion.div>
+                                        )}
+                                    </>
                                 )}
                             </AnimatePresence>
                         </div>

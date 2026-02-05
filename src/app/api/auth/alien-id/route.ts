@@ -11,21 +11,17 @@ const supabase = supabaseUrl && supabaseKey
     : null;
 
 // POST: Create session for Alien ID user
+// Supports two flows:
+// 1. SSO Flow: alienAddress + token (from Alien SSO SDK)
+// 2. Mini App Flow: token + isMiniApp (from Alien Mini App with injected token)
 export async function POST(request: NextRequest) {
     // Rate limit: 10 requests per minute for auth
     const rateLimitResponse = await checkRateLimit(request, "auth");
     if (rateLimitResponse) return rateLimitResponse;
 
     try {
-        const { alienAddress, token } = await request.json();
+        const { alienAddress: providedAddress, token, isMiniApp } = await request.json();
         
-        if (!alienAddress) {
-            return NextResponse.json(
-                { success: false, error: "Alien address required" },
-                { status: 400 }
-            );
-        }
-
         if (!token) {
             return NextResponse.json(
                 { success: false, error: "Token required for verification" },
@@ -36,6 +32,8 @@ export async function POST(request: NextRequest) {
         // SECURITY: Verify the Alien ID token
         // The token is a JWT that should be verified with Alien's public key
         // For now, we do basic validation - the token must exist and contain the claimed address
+        let alienAddress: string;
+        
         try {
             // Decode JWT payload (base64url encoded middle part)
             const parts = token.split(".");
@@ -63,17 +61,35 @@ export async function POST(request: NextRequest) {
                 );
             }
             
-            // CRITICAL: Verify the token's address matches the claimed address
-            // This prevents an attacker from using their valid token to claim someone else's address
-            if (tokenAddress.toLowerCase() !== alienAddress.toLowerCase()) {
-                console.error("[AlienId] SECURITY: Token address mismatch!", {
-                    claimed: alienAddress.slice(0, 15),
-                    inToken: tokenAddress.slice(0, 15),
-                });
-                return NextResponse.json(
-                    { success: false, error: "Token does not match claimed address" },
-                    { status: 401 }
-                );
+            // For Mini App flow: extract address from token (no separate alienAddress provided)
+            // For SSO flow: verify the provided address matches the token
+            if (isMiniApp) {
+                // Mini App flow - use the address from the token directly
+                alienAddress = tokenAddress;
+                console.log("[AlienId] Mini App auth - using address from token:", alienAddress.slice(0, 20) + "...");
+            } else {
+                // SSO flow - verify the provided address matches the token
+                if (!providedAddress) {
+                    return NextResponse.json(
+                        { success: false, error: "Alien address required" },
+                        { status: 400 }
+                    );
+                }
+                
+                // CRITICAL: Verify the token's address matches the claimed address
+                // This prevents an attacker from using their valid token to claim someone else's address
+                if (tokenAddress.toLowerCase() !== providedAddress.toLowerCase()) {
+                    console.error("[AlienId] SECURITY: Token address mismatch!", {
+                        claimed: providedAddress.slice(0, 15),
+                        inToken: tokenAddress.slice(0, 15),
+                    });
+                    return NextResponse.json(
+                        { success: false, error: "Token does not match claimed address" },
+                        { status: 401 }
+                    );
+                }
+                
+                alienAddress = providedAddress;
             }
             
             // Check token expiration if present
@@ -85,7 +101,7 @@ export async function POST(request: NextRequest) {
                 );
             }
             
-            console.log("[AlienId] Token validated for:", alienAddress.slice(0, 20) + "...");
+            console.log("[AlienId] Token validated for:", alienAddress.slice(0, 20) + "...", isMiniApp ? "(Mini App)" : "(SSO)");
         } catch (tokenError) {
             console.error("[AlienId] Token validation error:", tokenError);
             return NextResponse.json(
