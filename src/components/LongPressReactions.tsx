@@ -372,7 +372,7 @@ export function LongPressReactions({
                                     <button
                                         key={emoji}
                                         onClick={() => handleReactionSelect(emoji)}
-                                        className="w-11 h-11 flex items-center justify-center text-[22px] hover:bg-zinc-700 hover:scale-110 active:scale-115 active:bg-zinc-600 rounded-full transition-all duration-100"
+                                        className="w-12 h-12 flex items-center justify-center text-2xl hover:bg-zinc-700 hover:scale-110 active:scale-115 active:bg-zinc-600 rounded-full transition-all duration-100"
                                     >
                                         {emoji}
                                     </button>

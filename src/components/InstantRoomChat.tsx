@@ -525,7 +525,7 @@ export function InstantRoomChat({
                         </div>
                         <button
                             onClick={onClose}
-                            className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"
+                            className="p-2.5 hover:bg-zinc-800 rounded-lg transition-colors"
                         >
                             <svg
                                 className="w-5 h-5 text-zinc-400"

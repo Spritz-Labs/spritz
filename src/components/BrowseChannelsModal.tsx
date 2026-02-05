@@ -412,7 +412,7 @@ export function BrowseChannelsModal({
                                 </button>
                                 <button
                                     onClick={onClose}
-                                    className="p-1.5 sm:p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                    className="p-2 sm:p-2.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
                                     aria-label="Close"
                                 >
                                     <svg

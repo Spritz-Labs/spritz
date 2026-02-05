@@ -362,7 +362,7 @@ export function MessageActionBar({
                                             e.stopPropagation();
                                             handleReaction(emoji);
                                         }}
-                                        className={`w-11 h-11 flex items-center justify-center text-2xl rounded-full transition-all touch-manipulation active:scale-90 ${
+                                        className={`w-12 h-12 flex items-center justify-center text-2xl rounded-full transition-all touch-manipulation active:scale-90 ${
                                             selectedEmoji === emoji
                                                 ? "bg-[#FF5500]/30 scale-110"
                                                 : "hover:bg-zinc-800 active:bg-zinc-700"
