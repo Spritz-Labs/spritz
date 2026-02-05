@@ -180,64 +180,176 @@ export function LocationChatModal({
                                     exit={{ height: 0, opacity: 0 }}
                                     className="border-b border-zinc-800 overflow-hidden"
                                 >
-                                    <div className="p-4 space-y-3 bg-zinc-800/50">
-                                        {displayChat.description && (
-                                            <p className="text-sm text-zinc-400">{displayChat.description}</p>
-                                        )}
-                                        
-                                        <div className="flex flex-wrap gap-2 text-xs">
-                                            <span className="px-2 py-1 bg-zinc-700 rounded-full text-zinc-300">
-                                                👥 {displayChat.member_count} members
-                                            </span>
-                                            <span className="px-2 py-1 bg-zinc-700 rounded-full text-zinc-300">
-                                                💬 {displayChat.message_count} messages
-                                            </span>
-                                            {displayChat.google_place_types?.slice(0, 2).map((type) => (
-                                                <span key={type} className="px-2 py-1 bg-zinc-700 rounded-full text-zinc-300">
-                                                    {type.replace(/_/g, " ")}
-                                                </span>
-                                            ))}
-                                        </div>
-
-                                        {displayChat.google_place_website && (
-                                            <a
-                                                href={displayChat.google_place_website}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-sm text-[#FF5500] hover:underline flex items-center gap-1"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                                </svg>
-                                                Visit website
-                                            </a>
-                                        )}
-
-                                        {/* Map Preview */}
-                                        <div className="rounded-lg overflow-hidden h-32">
+                                    <div className="bg-gradient-to-b from-zinc-800/80 to-zinc-900/80">
+                                        {/* Hero Section with Map */}
+                                        <div className="relative h-44 sm:h-52">
                                             <iframe
-                                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${displayChat.longitude - 0.005},${displayChat.latitude - 0.003},${displayChat.longitude + 0.005},${displayChat.latitude + 0.003}&layer=mapnik&marker=${displayChat.latitude},${displayChat.longitude}`}
+                                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${displayChat.longitude - 0.008},${displayChat.latitude - 0.005},${displayChat.longitude + 0.008},${displayChat.latitude + 0.005}&layer=mapnik&marker=${displayChat.latitude},${displayChat.longitude}`}
                                                 className="w-full h-full border-0"
                                                 title="Location Map"
                                                 loading="lazy"
                                             />
+                                            {/* Gradient overlay at bottom */}
+                                            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-zinc-900/90 to-transparent" />
+                                            
+                                            {/* Place badge overlay */}
+                                            <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-red-500 to-orange-600 shadow-lg shadow-orange-500/20 flex items-center justify-center text-2xl border-2 border-zinc-900">
+                                                        {displayChat.emoji}
+                                                    </div>
+                                                    <div>
+                                                        <h3 className="font-bold text-white text-lg drop-shadow-lg">
+                                                            {displayChat.google_place_name || displayChat.name}
+                                                        </h3>
+                                                        {displayChat.google_place_types?.[0] && (
+                                                            <span className="text-xs text-zinc-300 capitalize">
+                                                                {displayChat.google_place_types[0].replace(/_/g, " ")}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {displayChat.google_place_rating && (
+                                                    <div className="bg-black/60 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+                                                        <span className="text-amber-400">★</span>
+                                                        <span className="text-white font-semibold text-sm">
+                                                            {displayChat.google_place_rating.toFixed(1)}
+                                                        </span>
+                                                        {displayChat.google_place_user_ratings_total && (
+                                                            <span className="text-zinc-400 text-xs">
+                                                                ({displayChat.google_place_user_ratings_total > 999 
+                                                                    ? `${(displayChat.google_place_user_ratings_total / 1000).toFixed(1)}k`
+                                                                    : displayChat.google_place_user_ratings_total})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
 
-                                        <div className="flex gap-2 pt-2">
-                                            <a
-                                                href={`https://www.google.com/maps/dir/?api=1&destination=${displayChat.latitude},${displayChat.longitude}&travelmode=walking`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex-1 py-2 px-3 bg-[#FF5500] hover:bg-[#E64D00] text-white text-sm font-medium rounded-lg text-center transition-colors"
-                                            >
-                                                Get Directions
-                                            </a>
-                                            <button
-                                                onClick={() => leaveChat().then(() => onClose())}
-                                                className="py-2 px-3 bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium rounded-lg transition-colors"
-                                            >
-                                                Leave Chat
-                                            </button>
+                                        {/* Info Content */}
+                                        <div className="p-4 space-y-4">
+                                            {/* Address */}
+                                            {(displayChat.google_place_address || displayChat.formatted_address) && (
+                                                <div className="flex items-start gap-3">
+                                                    <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                                                        <svg className="w-4.5 h-4.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs text-zinc-500 uppercase tracking-wide mb-0.5">Address</p>
+                                                        <p className="text-sm text-zinc-200">
+                                                            {displayChat.google_place_address || displayChat.formatted_address}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Phone & Website Row */}
+                                            {(displayChat.google_place_phone || displayChat.google_place_website) && (
+                                                <div className="flex gap-3">
+                                                    {displayChat.google_place_phone && (
+                                                        <a
+                                                            href={`tel:${displayChat.google_place_phone}`}
+                                                            className="flex-1 flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors group"
+                                                        >
+                                                            <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center">
+                                                                <svg className="w-4.5 h-4.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                                </svg>
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs text-zinc-500">Call</p>
+                                                                <p className="text-sm text-zinc-200 truncate group-hover:text-green-400 transition-colors">
+                                                                    {displayChat.google_place_phone}
+                                                                </p>
+                                                            </div>
+                                                        </a>
+                                                    )}
+                                                    {displayChat.google_place_website && (
+                                                        <a
+                                                            href={displayChat.google_place_website}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="flex-1 flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors group"
+                                                        >
+                                                            <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                                                                <svg className="w-4.5 h-4.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                                                </svg>
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <p className="text-xs text-zinc-500">Website</p>
+                                                                <p className="text-sm text-zinc-200 truncate group-hover:text-blue-400 transition-colors">
+                                                                    {new URL(displayChat.google_place_website).hostname.replace('www.', '')}
+                                                                </p>
+                                                            </div>
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Description */}
+                                            {displayChat.description && (
+                                                <div className="p-3 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
+                                                    <p className="text-sm text-zinc-300 leading-relaxed">{displayChat.description}</p>
+                                                </div>
+                                            )}
+
+                                            {/* Stats */}
+                                            <div className="flex gap-3">
+                                                <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                    <p className="text-2xl font-bold text-white">{displayChat.member_count}</p>
+                                                    <p className="text-xs text-zinc-500">Members</p>
+                                                </div>
+                                                <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                    <p className="text-2xl font-bold text-white">{displayChat.message_count}</p>
+                                                    <p className="text-xs text-zinc-500">Messages</p>
+                                                </div>
+                                                {displayChat.google_place_types && displayChat.google_place_types.length > 0 && (
+                                                    <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                        <p className="text-2xl">{
+                                                            displayChat.google_place_types[0]?.includes('restaurant') ? '🍽️' :
+                                                            displayChat.google_place_types[0]?.includes('cafe') ? '☕' :
+                                                            displayChat.google_place_types[0]?.includes('bar') ? '🍺' :
+                                                            displayChat.google_place_types[0]?.includes('hotel') ? '🏨' :
+                                                            displayChat.google_place_types[0]?.includes('park') ? '🌳' :
+                                                            displayChat.google_place_types[0]?.includes('museum') ? '🏛️' :
+                                                            displayChat.google_place_types[0]?.includes('store') ? '🛍️' :
+                                                            displayChat.google_place_types[0]?.includes('gym') ? '💪' :
+                                                            displayChat.google_place_types[0]?.includes('airport') ? '✈️' :
+                                                            displayChat.google_place_types[0]?.includes('hospital') ? '🏥' :
+                                                            '📍'
+                                                        }</p>
+                                                        <p className="text-xs text-zinc-500 capitalize truncate">
+                                                            {displayChat.google_place_types[0]?.replace(/_/g, " ")}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Action Buttons */}
+                                            <div className="flex gap-3 pt-1">
+                                                <a
+                                                    href={`https://www.google.com/maps/dir/?api=1&destination=${displayChat.latitude},${displayChat.longitude}&travelmode=walking`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-[#FF5500] to-[#FF7722] hover:from-[#E64D00] hover:to-[#FF5500] text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-orange-500/20"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                                    </svg>
+                                                    Get Directions
+                                                </a>
+                                                <button
+                                                    onClick={() => leaveChat().then(() => onClose())}
+                                                    className="py-3 px-4 bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 text-sm font-medium rounded-xl transition-all border border-zinc-700 hover:border-red-500/50"
+                                                >
+                                                    Leave
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </motion.div>
