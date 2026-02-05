@@ -25,11 +25,16 @@ import {
     MESSAGE_REACTION_EMOJIS,
 } from "@/hooks/useChatFeatures";
 import { VoiceRecorder, EncryptedVoiceMessage } from "./VoiceRecorder";
+import { EncryptedImage } from "./EncryptedImage";
 import { 
     encryptAudio, 
     formatVoiceMessage, 
     isVoiceMessage, 
-    parseVoiceMessage 
+    parseVoiceMessage,
+    encryptImage,
+    formatEncryptedImageMessage,
+    isEncryptedImageMessage,
+    parseEncryptedImageMessage,
 } from "@/lib/audioEncryption";
 import { MessageSearch } from "./MessageSearch";
 import { useAnalytics } from "@/hooks/useAnalytics";
@@ -163,6 +168,57 @@ function VoiceMessageWrapper({
     );
 }
 
+// Encrypted image wrapper that handles encryption key fetching
+function EncryptedImageMessageWrapper({
+    encryptedUrl,
+    mimeType,
+    isOwn,
+    peerAddress,
+    onClick,
+}: {
+    encryptedUrl: string;
+    mimeType: string;
+    isOwn: boolean;
+    peerAddress: string;
+    onClick?: () => void;
+}) {
+    const { getDmEncryptionKey } = useXMTPContext();
+    const [encryptionKey, setEncryptionKey] = useState<Uint8Array | null>(null);
+    const [keyError, setKeyError] = useState(false);
+
+    useEffect(() => {
+        if (getDmEncryptionKey && peerAddress) {
+            getDmEncryptionKey(peerAddress)
+                .then(setEncryptionKey)
+                .catch((err) => {
+                    console.error("[EncryptedImageMessageWrapper] Key fetch failed:", err);
+                    setKeyError(true);
+                });
+        }
+    }, [getDmEncryptionKey, peerAddress]);
+
+    if (keyError) {
+        return (
+            <div className="flex items-center gap-2 text-red-400 text-sm p-4 bg-red-500/10 rounded-lg">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span>Image unavailable</span>
+            </div>
+        );
+    }
+
+    return (
+        <EncryptedImage
+            encryptedUrl={encryptedUrl}
+            mimeType={mimeType}
+            isOwn={isOwn}
+            encryptionKey={encryptionKey}
+            onClick={onClick}
+        />
+    );
+}
+
 export function ChatModal({
     isOpen,
     onClose,
@@ -210,6 +266,10 @@ export function ChatModal({
     // Voice recording state
     const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
     const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+
+    // Image upload state
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     // Fetch peer online status
     useEffect(() => {
@@ -1215,6 +1275,105 @@ export function ChatModal({
         [peerAddress, getDmEncryptionKey, conversationId, sendMessage, userAddress, trackMessageSent, onMessageSent]
     );
 
+    // Handle encrypted image upload
+    const handleImageUpload = useCallback(async () => {
+        // Trigger file input click
+        imageInputRef.current?.click();
+    }, []);
+
+    const handleImageSelected = useCallback(
+        async (event: React.ChangeEvent<HTMLInputElement>) => {
+            const file = event.target.files?.[0];
+            if (!file || !peerAddress || !getDmEncryptionKey) {
+                log.error("Missing required params for image upload");
+                return;
+            }
+
+            // Validate file type
+            if (!file.type.startsWith("image/")) {
+                setChatError("Please select a valid image file");
+                return;
+            }
+
+            // Validate file size (max 5MB before encryption)
+            if (file.size > 5 * 1024 * 1024) {
+                setChatError("Image must be less than 5MB");
+                return;
+            }
+
+            setIsUploadingImage(true);
+            setChatError(null);
+
+            try {
+                // Get the encryption key for this conversation
+                const encryptionKey = await getDmEncryptionKey(peerAddress);
+                
+                // Convert file to blob
+                const imageBlob = new Blob([await file.arrayBuffer()], { type: file.type });
+                
+                // Encrypt the image
+                const { encryptedBlob } = await encryptImage(imageBlob, encryptionKey);
+                
+                // Upload encrypted image
+                const formData = new FormData();
+                formData.append("file", encryptedBlob, "image.enc");
+                formData.append("conversationId", conversationId);
+                formData.append("originalType", file.type);
+                
+                const uploadResponse = await fetch("/api/upload/image", {
+                    method: "POST",
+                    body: formData,
+                });
+                
+                if (!uploadResponse.ok) {
+                    const error = await uploadResponse.json();
+                    throw new Error(error.error || "Failed to upload image");
+                }
+                
+                const uploadResult = await uploadResponse.json();
+                
+                // Format and send the image message
+                const imageMessage = formatEncryptedImageMessage(file.type, uploadResult.url);
+                const result = await sendMessage(peerAddress, imageMessage);
+                
+                if (!result.success) {
+                    throw new Error(result.error || "Failed to send image");
+                }
+                
+                // Track for analytics
+                trackMessageSent();
+                onMessageSent?.("📷 Photo");
+                
+                // Add to UI immediately
+                if (result.message && userAddress) {
+                    const sentMessage: Message = {
+                        id: result.message.id || `sent-${Date.now()}`,
+                        content: imageMessage,
+                        senderAddress: userAddress.toLowerCase(),
+                        sentAt: new Date(),
+                    };
+                    setMessages((prev) => [...prev, sentMessage]);
+                }
+                
+                log.info("Encrypted image sent successfully");
+            } catch (error) {
+                log.error("Image upload error:", error);
+                setChatError(
+                    `Failed to send image: ${
+                        error instanceof Error ? error.message : "Unknown error"
+                    }`
+                );
+            } finally {
+                setIsUploadingImage(false);
+                // Reset the input so the same file can be selected again
+                if (imageInputRef.current) {
+                    imageInputRef.current.value = "";
+                }
+            }
+        },
+        [peerAddress, getDmEncryptionKey, conversationId, sendMessage, userAddress, trackMessageSent, onMessageSent]
+    );
+
     // Check if a message is pixel art
     const isPixelArtMessage = (content: string) =>
         content.startsWith("[PIXEL_ART]");
@@ -1724,6 +1883,10 @@ export function ChatModal({
                                             const voiceData = isVoice
                                                 ? parseVoiceMessage(msg.content)
                                                 : null;
+                                            const isEncryptedImage = isEncryptedImageMessage(msg.content);
+                                            const encryptedImageData = isEncryptedImage
+                                                ? parseEncryptedImageMessage(msg.content)
+                                                : null;
 
                                             // Check if we need a date divider
                                             const msgDate =
@@ -2111,6 +2274,17 @@ export function ChatModal({
                                                                         duration={voiceData.duration}
                                                                         isOwn={isOwn}
                                                                         peerAddress={peerAddress}
+                                                                    />
+                                                                ) : isEncryptedImage &&
+                                                                  encryptedImageData ? (
+                                                                    <EncryptedImageMessageWrapper
+                                                                        encryptedUrl={encryptedImageData.url}
+                                                                        mimeType={encryptedImageData.mimeType}
+                                                                        isOwn={isOwn}
+                                                                        peerAddress={peerAddress}
+                                                                        onClick={() => {
+                                                                            // Can add lightbox support here in the future
+                                                                        }}
                                                                     />
                                                                 ) : (
                                                                     <div
@@ -2672,6 +2846,15 @@ export function ChatModal({
                                         : undefined
                                 }
                             >
+                                {/* Hidden image input */}
+                                <input
+                                    type="file"
+                                    ref={imageInputRef}
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleImageSelected}
+                                />
+                                
                                 {/* Voice Recorder */}
                                 <VoiceRecorder
                                     isOpen={showVoiceRecorder}
@@ -2686,6 +2869,7 @@ export function ChatModal({
                                 >
                                     {/* Consolidated attachment menu */}
                                     <ChatAttachmentMenu
+                                        onImageUpload={handleImageUpload}
                                         onPixelArt={() => setShowPixelArt(true)}
                                         onGif={handleSendGif}
                                         onLocation={async (location) => {
@@ -2700,7 +2884,7 @@ export function ChatModal({
                                         onVoice={() => setShowVoiceRecorder(true)}
                                         showLocation={true}
                                         showVoice={true}
-                                        isUploading={isUploadingPixelArt || isUploadingVoice}
+                                        isUploading={isUploadingPixelArt || isUploadingVoice || isUploadingImage}
                                         disabled={!isInitialized || !!chatError}
                                     />
                                     <div className="flex-1 relative">
