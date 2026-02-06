@@ -26,6 +26,8 @@ export interface UserCardModalProps {
     onCall?: (friend: UserCardFriend) => void;
     /** Build friend object and start video call */
     onVideoCall?: (friend: UserCardFriend) => void;
+    /** Open DM with user */
+    onMessage?: (friend: UserCardFriend) => void;
     onMute?: () => void;
     isMuted?: boolean;
     onAddFriend?: (address: string) => Promise<boolean>;
@@ -55,6 +57,7 @@ export function UserCardModal({
     username,
     onCall,
     onVideoCall,
+    onMessage,
     onMute,
     isMuted = false,
     onAddFriend,
@@ -380,129 +383,116 @@ export function UserCardModal({
                         )}
                     </div>
 
-                    {/* Action buttons grid - larger for mobile */}
-                    <div className="grid grid-cols-3 gap-3 px-5 pb-5">
-                        {onCall && (
-                            <button
-                                type="button"
-                                onClick={() => onCall(friendForCall)}
-                                className="flex flex-col items-center justify-center gap-2 py-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/30 transition-colors touch-manipulation"
-                            >
-                                <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                                    <svg
-                                        className="w-6 h-6 text-emerald-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                                        />
-                                    </svg>
-                                </div>
-                                <span className="text-sm font-medium text-emerald-400">
-                                    Call
-                                </span>
-                            </button>
-                        )}
-                        {onVideoCall && (
-                            <button
-                                type="button"
-                                onClick={() => onVideoCall(friendForCall)}
-                                className="flex flex-col items-center justify-center gap-2 py-4 rounded-2xl bg-blue-500/15 hover:bg-blue-500/25 active:bg-blue-500/30 transition-colors touch-manipulation"
-                            >
-                                <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                    <svg
-                                        className="w-6 h-6 text-blue-400"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                        />
-                                    </svg>
-                                </div>
-                                <span className="text-sm font-medium text-blue-400">
-                                    Video
-                                </span>
-                            </button>
-                        )}
-                        {onMute ? (
-                            <button
-                                type="button"
-                                onClick={onMute}
-                                className={`flex flex-col items-center justify-center gap-2 py-4 rounded-2xl transition-colors touch-manipulation ${
-                                    isMuted
-                                        ? "bg-zinc-700/50"
-                                        : "bg-zinc-800/80 hover:bg-zinc-700/60 active:bg-zinc-700"
-                                }`}
-                            >
-                                <div
-                                    className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                                        isMuted ? "bg-zinc-600" : "bg-zinc-700"
-                                    }`}
+                    {/* Action buttons - different based on friend status */}
+                    {isFriend ? (
+                        /* Friends: Show Message, Call, Video, and optionally Mute */
+                        <div className="px-5 pb-5 space-y-3">
+                            {/* Primary: Message button */}
+                            {onMessage && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        onMessage(friendForCall);
+                                        onClose();
+                                    }}
+                                    className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] hover:from-[#FF6600] hover:to-[#FF8800] active:from-[#E84D00] active:to-[#FF6600] text-white font-semibold text-base transition-all flex items-center justify-center gap-3 shadow-lg shadow-orange-500/20"
                                 >
-                                    <svg
-                                        className="w-6 h-6 text-zinc-300"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        {isMuted ? (
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                                            />
-                                        ) : (
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                                            />
-                                        )}
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                                     </svg>
-                                </div>
-                                <span className="text-sm font-medium text-zinc-400">
-                                    {isMuted ? "Unmute" : "Mute"}
-                                </span>
-                            </button>
-                        ) : (
+                                    Message
+                                </button>
+                            )}
+                            
+                            {/* Secondary: Call buttons grid */}
+                            <div className="grid grid-cols-3 gap-3">
+                                {onCall && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onCall(friendForCall)}
+                                        className="flex flex-col items-center justify-center gap-2 py-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 active:bg-emerald-500/30 transition-colors touch-manipulation"
+                                    >
+                                        <div className="w-11 h-11 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                            </svg>
+                                        </div>
+                                        <span className="text-xs font-medium text-emerald-400">Call</span>
+                                    </button>
+                                )}
+                                {onVideoCall && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onVideoCall(friendForCall)}
+                                        className="flex flex-col items-center justify-center gap-2 py-4 rounded-2xl bg-blue-500/15 hover:bg-blue-500/25 active:bg-blue-500/30 transition-colors touch-manipulation"
+                                    >
+                                        <div className="w-11 h-11 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                        </div>
+                                        <span className="text-xs font-medium text-blue-400">Video</span>
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowQR((q) => !q)}
+                                    className="flex flex-col items-center justify-center gap-2 py-4 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700/60 active:bg-zinc-700 transition-colors touch-manipulation"
+                                >
+                                    <div className="w-11 h-11 rounded-full bg-zinc-700 flex items-center justify-center">
+                                        <svg className="w-5 h-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                        </svg>
+                                    </div>
+                                    <span className="text-xs font-medium text-zinc-400">Share</span>
+                                </button>
+                            </div>
+                            
+                            {/* Friend badge */}
+                            <div className="flex items-center justify-center gap-2 py-2 text-emerald-400/80">
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                </svg>
+                                <span className="text-sm font-medium">Friends</span>
+                            </div>
+                        </div>
+                    ) : (
+                        /* Not friends: Show prominent Add Friend button */
+                        <div className="px-5 pb-5 space-y-4">
+                            {/* Add Friend - primary action */}
+                            {onAddFriend && (
+                                <button
+                                    type="button"
+                                    onClick={handleAddFriend}
+                                    disabled={addingFriend}
+                                    className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] hover:from-[#FF6600] hover:to-[#FF8800] active:from-[#E84D00] active:to-[#FF6600] text-white font-semibold text-base transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-lg shadow-orange-500/20"
+                                >
+                                    {addingFriend ? (
+                                        <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <>
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                            </svg>
+                                            Add Friend
+                                        </>
+                                    )}
+                                </button>
+                            )}
+                            
+                            {/* Secondary action: Share profile */}
                             <button
                                 type="button"
                                 onClick={() => setShowQR((q) => !q)}
-                                className="flex flex-col items-center justify-center gap-2 py-4 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700/60 active:bg-zinc-700 transition-colors touch-manipulation"
+                                className="w-full py-3 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-700/60 active:bg-zinc-700 text-zinc-300 font-medium text-sm transition-colors flex items-center justify-center gap-2"
                             >
-                                <div className="w-12 h-12 rounded-full bg-zinc-700 flex items-center justify-center">
-                                    <svg
-                                        className="w-6 h-6 text-zinc-300"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                    >
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-                                        />
-                                    </svg>
-                                </div>
-                                <span className="text-sm font-medium text-zinc-400">
-                                    QR Code
-                                </span>
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                </svg>
+                                Share Profile
                             </button>
-                        )}
-                    </div>
+                        </div>
+                    )}
 
                     {/* QR Code (collapsible) */}
                     <AnimatePresence>
@@ -553,38 +543,6 @@ export function UserCardModal({
                         )}
                     </div>
 
-                    {/* Add to contacts CTA */}
-                    {onAddFriend && !isFriend && (
-                        <div className="px-5 pb-6 pt-2">
-                            <button
-                                type="button"
-                                onClick={handleAddFriend}
-                                disabled={addingFriend}
-                                className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] hover:from-[#FF6600] hover:to-[#FF8800] active:from-[#E84D00] active:to-[#FF6600] text-white font-semibold text-base transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20"
-                            >
-                                {addingFriend ? (
-                                    <span className="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                    <>
-                                        <svg
-                                            className="w-5 h-5"
-                                            fill="none"
-                                            viewBox="0 0 24 24"
-                                            stroke="currentColor"
-                                        >
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth={2}
-                                                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-                                            />
-                                        </svg>
-                                        Add to Contacts
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    )}
                 </div>
             </motion.div>
         </AnimatePresence>

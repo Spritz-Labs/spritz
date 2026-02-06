@@ -5953,6 +5953,9 @@ function DashboardContent({
                     onVideoCall={(friend) =>
                         handleVideoCall(friend as FriendsListFriend)
                     }
+                    onMessage={(friend) => {
+                        openDMByAddress(friend.address);
+                    }}
                     onMute={
                         moderation.permissions.canMute
                             ? () => {
