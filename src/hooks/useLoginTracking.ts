@@ -62,14 +62,30 @@ export function useLoginTracking({
         }
     }, [walletAddress]);
 
-    // Mark welcome as seen
-    const dismissWelcome = useCallback(() => {
+    // Mark welcome as seen (both locally and in database)
+    const dismissWelcome = useCallback(async () => {
         if (!walletAddress) return;
+        
+        // Update local storage immediately for instant UI feedback
         localStorage.setItem(WELCOME_SEEN_KEY, JSON.stringify({
             address: walletAddress.toLowerCase(),
             timestamp: Date.now(),
         }));
         setShowWelcome(false);
+        
+        // Also persist in database so welcome won't show even after localStorage clear
+        try {
+            await fetch("/api/admin/welcome-shown", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ walletAddress }),
+                credentials: "include",
+            });
+            console.log("[Login] Welcome shown marked in database");
+        } catch (error) {
+            console.error("[Login] Failed to mark welcome as shown in database:", error);
+            // Don't throw - local storage still updated
+        }
     }, [walletAddress]);
 
     const trackLogin = useCallback(async () => {

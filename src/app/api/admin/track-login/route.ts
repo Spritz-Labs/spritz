@@ -54,11 +54,10 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (existingUser) {
-            // Check if this is the user's first actual login (login_count is 0, 1, or null)
-            // Auth flows (passkey, email, etc.) may set login_count to 1 when creating the user
-            // So we treat login_count <= 1 as "first login" for welcome message purposes
-            const isFirstLogin = !existingUser.login_count || existingUser.login_count <= 1;
-            console.log("[Login] Existing user found:", normalizedAddress, "login_count:", existingUser.login_count, "isFirstLogin:", isFirstLogin);
+            // Check if welcome modal has been shown using the dedicated welcome_shown_at field
+            // This is more reliable than login_count which can be incremented by auth flows
+            const welcomeNotYetShown = existingUser.welcome_shown_at === null;
+            console.log("[Login] Existing user found:", normalizedAddress, "login_count:", existingUser.login_count, "welcome_shown_at:", existingUser.welcome_shown_at, "welcomeNotYetShown:", welcomeNotYetShown);
             
             // Update existing user
             const updates: Record<string, unknown> = {
@@ -108,7 +107,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json({ 
                 success: true, 
-                isNewUser: isFirstLogin, // Show welcome for first-time logins
+                isNewUser: welcomeNotYetShown, // Show welcome if welcome_shown_at is null
                 isBanned: existingUser.is_banned,
                 banReason: existingUser.ban_reason,
                 dailyBonusAvailable,
