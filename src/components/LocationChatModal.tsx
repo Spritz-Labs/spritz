@@ -21,6 +21,8 @@ import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { LinkPreview, detectUrls } from "./LinkPreview";
 import { MessageActionBar, type MessageActionConfig, type MessageActionCallbacks } from "./MessageActionBar";
+import { useMessageReactions, MESSAGE_REACTION_EMOJIS } from "@/hooks/useChatFeatures";
+import { ReactionDisplay } from "./EmojiPicker";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -114,6 +116,21 @@ export function LocationChatModal({
         joinChat,
         leaveChat,
     } = useLocationChat(isOpen ? locationChat.id : null, userAddress);
+
+    // Message reactions hook (using location chat id as conversation_id)
+    const {
+        reactions: msgReactions,
+        fetchReactions: fetchMsgReactions,
+        toggleReaction: toggleMsgReaction,
+    } = useMessageReactions(userAddress, isOpen ? locationChat.id : null);
+
+    // Fetch reactions for all messages
+    useEffect(() => {
+        const messageIds = messages.map((msg) => msg.id);
+        if (messageIds.length > 0) {
+            fetchMsgReactions(messageIds);
+        }
+    }, [messages, fetchMsgReactions]);
 
     // Auto-join when opening if not a member
     useEffect(() => {
@@ -230,6 +247,9 @@ export function LocationChatModal({
 
     // Message action callbacks
     const messageActionCallbacks: MessageActionCallbacks = {
+        onReaction: selectedMessage
+            ? (emoji) => toggleMsgReaction(selectedMessage.messageId, emoji)
+            : undefined,
         onReply: () => {
             const msg = messages.find(m => m.id === selectedMessage?.messageId);
             if (msg) {
@@ -631,6 +651,15 @@ export function LocationChatModal({
                                                     )}
                                                 </button>
 
+                                                {/* Reactions Display */}
+                                                <ReactionDisplay
+                                                    reactions={msgReactions[msg.id] || []}
+                                                    onReaction={(emoji) => {
+                                                        toggleMsgReaction(msg.id, emoji);
+                                                    }}
+                                                    isOwnMessage={isOwn}
+                                                />
+
                                                 {/* Time */}
                                                 <span className="text-[10px] text-zinc-600 mt-1 mx-1">
                                                     {formatMessageTime(msg.created_at)}
@@ -749,6 +778,7 @@ export function LocationChatModal({
                 }}
                 config={selectedMessage}
                 callbacks={messageActionCallbacks}
+                reactions={MESSAGE_REACTION_EMOJIS}
             />
         </AnimatePresence>,
         document.body
