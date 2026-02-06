@@ -54,9 +54,10 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (existingUser) {
-            // Check if this is the user's first actual login (login_count is 0 or null)
-            // This handles the case where user record was created during auth but hasn't "logged in" yet
-            const isFirstLogin = !existingUser.login_count || existingUser.login_count === 0;
+            // Check if this is the user's first actual login (login_count is 0, 1, or null)
+            // Auth flows (passkey, email, etc.) may set login_count to 1 when creating the user
+            // So we treat login_count <= 1 as "first login" for welcome message purposes
+            const isFirstLogin = !existingUser.login_count || existingUser.login_count <= 1;
             console.log("[Login] Existing user found:", normalizedAddress, "login_count:", existingUser.login_count, "isFirstLogin:", isFirstLogin);
             
             // Update existing user
