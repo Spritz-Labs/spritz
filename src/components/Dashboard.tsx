@@ -78,7 +78,7 @@ import { usePoints } from "@/hooks/usePoints";
 import { useUserInvites } from "@/hooks/useUserInvites";
 import { EmailVerificationModal } from "./EmailVerificationModal";
 import { InvitesModal } from "./InvitesModal";
-import { WelcomeModal } from "./WelcomeModal";
+// WelcomeModal removed - now using real DM message from Kevin instead
 import { AlphaChatModal } from "./AlphaChatModal";
 import { useAlphaChat } from "@/hooks/useAlphaChat";
 import { Leaderboard } from "./Leaderboard";
@@ -421,8 +421,7 @@ function DashboardContent({
         claimDailyBonus,
         isClaimingBonus,
         dismissDailyBonus,
-        showWelcome,
-        dismissWelcome,
+        // showWelcome, dismissWelcome removed - now using real DM instead
     } = useLoginTracking({
         walletAddress: userAddress,
         walletType: actualAuthMethod,
@@ -6333,13 +6332,7 @@ function DashboardContent({
                 )}
             </AnimatePresence>
 
-            {/* Welcome Modal for New Users */}
-            <WelcomeModal
-                isOpen={showWelcome}
-                onClose={dismissWelcome}
-                onSendFriendRequest={sendFriendRequest}
-                userAddress={userAddress}
-            />
+            {/* Welcome message is now sent as a real DM from Kevin */}
 
             {/* Toast Notification for New Messages */}
             <AnimatePresence>

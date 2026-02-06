@@ -700,7 +700,10 @@ async function fetchMessagesFromSupabase(
                 let content: string;
                 let usedLegacyKey = false;
 
-                if (isDualKey(keys)) {
+                // Welcome/system messages are stored as plain text (not encrypted)
+                if (msg.message_type === 'welcome' || msg.message_type === 'system') {
+                    content = msg.encrypted_content; // It's actually plain text for these types
+                } else if (isDualKey(keys)) {
                     // Use dual-key decryption with fallback
                     const result = await decryptWithFallback(
                         msg.encrypted_content,

@@ -232,6 +232,27 @@ export async function POST(request: NextRequest) {
                 console.error("[Login] Failed to join Alpha channel:", err);
             }
 
+            // Send welcome message from Kevin
+            try {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL 
+                    ? `https://${process.env.VERCEL_URL}` 
+                    : "http://localhost:3000";
+                const internalKey = process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+                
+                await fetch(`${baseUrl}/api/dm/welcome`, {
+                    method: "POST",
+                    headers: { 
+                        "Content-Type": "application/json",
+                        "x-internal-key": internalKey || "",
+                    },
+                    body: JSON.stringify({ recipientAddress: normalizedAddress }),
+                });
+                console.log("[Login] Welcome message sent to:", normalizedAddress);
+            } catch (err) {
+                console.error("[Login] Failed to send welcome message:", err);
+                // Don't fail the login if welcome message fails
+            }
+
             // Award points to new user if they used a valid invite code
             if (inviteCodeRedeemed && referredBy) {
                 try {
