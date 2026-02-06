@@ -270,6 +270,7 @@ export function ChatModal({
 
     // Mute/Block/Report state
     const [showActionsMenu, setShowActionsMenu] = useState(false);
+    const [showDMMembers, setShowDMMembers] = useState(false);
     const [showMuteModal, setShowMuteModal] = useState(false);
     const [showBlockModal, setShowBlockModal] = useState(false);
     const [showReportModal, setShowReportModal] = useState(false);
@@ -466,12 +467,14 @@ export function ChatModal({
                 return;
             }
             if (
+                showDMMembers ||
                 showSearch ||
                 showActionsMenu ||
                 showMuteModal ||
                 showBlockModal ||
                 showReportModal
             ) {
+                setShowDMMembers(false);
                 setShowSearch(false);
                 setShowActionsMenu(false);
                 setShowMuteModal(false);
@@ -487,6 +490,7 @@ export function ChatModal({
         isOpen,
         onClose,
         replyingTo,
+        showDMMembers,
         showSearch,
         showActionsMenu,
         showMuteModal,
@@ -1637,19 +1641,28 @@ export function ChatModal({
                                 </div>
 
                                 {/* Title area - clickable to open profile/schedule tray (same as Friends) */}
-                                <button
-                                    type="button"
-                                    onClick={() => setShowActionsMenu(true)}
-                                    className="flex-1 min-w-0 pr-1 text-left cursor-pointer rounded-lg -ml-1 pl-1 hover:bg-zinc-800/50 active:bg-zinc-800 transition-colors"
-                                    aria-label={`Actions for ${displayName}`}
-                                >
-                                    <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
-                                        {displayName}
-                                    </h2>
-                                    <p className="text-zinc-500 text-xs font-mono truncate">
-                                        {formatAddress(peerAddress)}
-                                    </p>
-                                </button>
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowActionsMenu(true)}
+                                        className="w-full text-left cursor-pointer rounded-lg -ml-1 pl-1 hover:bg-zinc-800/50 active:bg-zinc-800 transition-colors"
+                                        aria-label={`Actions for ${displayName}`}
+                                    >
+                                        <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
+                                            {displayName}
+                                        </h2>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowDMMembers(true)}
+                                        className="text-zinc-500 text-xs font-mono truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
+                                    >
+                                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        </svg>
+                                        2 members
+                                    </button>
+                                </div>
 
                                 {/* Action buttons - compact on mobile */}
                                 <div className="shrink-0 flex items-center">
@@ -2488,7 +2501,6 @@ export function ChatModal({
                                                                                         url={
                                                                                             url
                                                                                         }
-                                                                                        compact
                                                                                     />
                                                                                 )
                                                                             )}
@@ -3282,6 +3294,68 @@ export function ChatModal({
                 imageUrl={viewerImage ?? ""}
                 alt={displayName}
             />
+
+            {/* DM Participants list - same pattern as ChatMembersList */}
+            <AnimatePresence>
+                {showDMMembers && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 z-[100]"
+                            onClick={() => setShowDMMembers(false)}
+                        />
+                        <motion.div
+                            initial={{ x: "100%" }}
+                            animate={{ x: 0 }}
+                            exit={{ x: "100%" }}
+                            transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                            className="fixed right-0 top-0 bottom-0 w-full max-w-sm bg-zinc-900 border-l border-zinc-800 z-[101] flex flex-col"
+                            style={{ paddingTop: "env(safe-area-inset-top)" }}
+                        >
+                            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+                                <div>
+                                    <h3 className="font-semibold text-white">Participants</h3>
+                                    <p className="text-xs text-zinc-500">2 members</p>
+                                </div>
+                                <button
+                                    onClick={() => setShowDMMembers(false)}
+                                    className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-[#FB8D22]/20">
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                        Y
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-[#FFF0E0]">You</p>
+                                        <p className="text-xs text-zinc-500 font-mono truncate">{formatAddress(userAddress)}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-800/50">
+                                    {peerAvatar ? (
+                                        <img src={peerAvatar} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                                    ) : (
+                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                                            {displayName[0].toUpperCase()}
+                                        </div>
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-zinc-300 truncate">{displayName}</p>
+                                        <p className="text-xs text-zinc-500 font-mono truncate">{formatAddress(peerAddress)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </AnimatePresence>
     );
 }

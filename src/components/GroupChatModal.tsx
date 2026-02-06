@@ -1989,7 +1989,6 @@ export function GroupChatModal({
                                                                                                         url={
                                                                                                             url
                                                                                                         }
-                                                                                                        compact
                                                                                                     />
                                                                                                 )
                                                                                             )}

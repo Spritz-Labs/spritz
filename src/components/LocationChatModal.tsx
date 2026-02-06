@@ -23,6 +23,7 @@ import { LinkPreview, detectUrls } from "./LinkPreview";
 import { MessageActionBar, type MessageActionConfig, type MessageActionCallbacks } from "./MessageActionBar";
 import { useMessageReactions, MESSAGE_REACTION_EMOJIS } from "@/hooks/useChatFeatures";
 import { ReactionDisplay } from "./EmojiPicker";
+import { ChatMembersList } from "./ChatMembersList";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -95,6 +96,7 @@ export function LocationChatModal({
 }: LocationChatModalProps) {
     const [newMessage, setNewMessage] = useState("");
     const [showInfo, setShowInfo] = useState(false);
+    const [showMembersList, setShowMembersList] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [replyingTo, setReplyingTo] = useState<LocationChatMessage | null>(null);
@@ -305,58 +307,67 @@ export function LocationChatModal({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                    style={{
+                        paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 100px, 120px)",
+                    }}
                 >
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.95, opacity: 0 }}
-                        className="w-full h-full sm:w-[95%] sm:max-w-2xl sm:h-[90vh] sm:rounded-2xl bg-zinc-900 flex flex-col overflow-hidden"
-                        style={{
-                            paddingTop: "env(safe-area-inset-top, 0px)",
-                            paddingBottom: "env(safe-area-inset-bottom, 0px)",
-                        }}
+                        className="w-full max-w-2xl max-h-[70vh] h-[600px] border border-zinc-800 rounded-2xl bg-zinc-900 flex flex-col overflow-hidden"
                     >
-                        {/* Header */}
-                        <div className="flex items-center gap-3 p-4 border-b border-zinc-800 bg-zinc-900/95 backdrop-blur-sm">
-                            <button
-                                onClick={onClose}
-                                className="p-2 -ml-2 text-zinc-400 hover:text-white transition-colors"
-                            >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                </svg>
-                            </button>
-
+                        {/* Header - same layout as ChannelChatModal: icon + title left, actions + X right */}
+                        <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800 shrink-0">
                             <div
                                 className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
                                 onClick={() => setShowInfo(!showInfo)}
                             >
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center text-xl">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center text-xl shrink-0">
                                     {displayChat.emoji}
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="font-semibold text-white truncate">
+                                <div className="flex-1 min-w-0 pr-1">
+                                    <h2 className="font-semibold text-white text-[15px] truncate leading-tight">
                                         {displayChat.name}
                                     </h2>
-                                    <p className="text-xs text-zinc-500 truncate">
-                                        {displayChat.google_place_address || displayChat.formatted_address}
-                                    </p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowMembersList(true)}
+                                        className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1 text-left w-full"
+                                    >
+                                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        </svg>
+                                        {typeof displayChat.member_count === "number"
+                                            ? `${displayChat.member_count} ${displayChat.member_count === 1 ? "member" : "members"}`
+                                            : "Members"}
+                                    </button>
                                 </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 shrink-0">
                                 {displayChat.google_place_rating && (
-                                    <span className="text-xs text-amber-400 flex items-center gap-1">
+                                    <span className="text-xs text-amber-400 flex items-center gap-1 px-1">
                                         ⭐ {displayChat.google_place_rating.toFixed(1)}
                                     </span>
                                 )}
                                 <button
                                     onClick={() => setShowInfo(!showInfo)}
-                                    className="p-2 text-zinc-400 hover:text-white transition-colors"
+                                    className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                                    aria-label="Place info"
                                 >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                                <button
+                                    onClick={onClose}
+                                    className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
+                                    aria-label="Close chat"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
                                 </button>
                             </div>
@@ -677,7 +688,7 @@ export function LocationChatModal({
                                                             {urls.length > 0 && (
                                                                 <div className="mt-2">
                                                                     {urls.slice(0, 1).map((url) => (
-                                                                        <LinkPreview key={url} url={url} compact />
+                                                                        <LinkPreview key={url} url={url} />
                                                                     ))}
                                                                 </div>
                                                             )}
@@ -813,6 +824,17 @@ export function LocationChatModal({
                 config={selectedMessage}
                 callbacks={messageActionCallbacks}
                 reactions={MESSAGE_REACTION_EMOJIS}
+            />
+
+            {/* Members List Panel - same as global/channel chat */}
+            <ChatMembersList
+                channelId={displayChat.id}
+                locationChatId={displayChat.id}
+                isOpen={showMembersList}
+                onClose={() => setShowMembersList(false)}
+                onUserClick={onOpenUserCard}
+                getUserInfo={getUserInfo}
+                currentUserAddress={userAddress}
             />
         </AnimatePresence>,
         document.body

@@ -2989,7 +2989,6 @@ export function ChannelChatModal({
                                                                                             url={
                                                                                                 url
                                                                                             }
-                                                                                            compact
                                                                                         />
                                                                                     )
                                                                                 )}

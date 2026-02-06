@@ -18,6 +18,8 @@ export type ChatMember = {
 
 type ChatMembersListProps = {
     channelId: string;
+    /** When set, fetch from location-chats members API instead of channels (for location chats) */
+    locationChatId?: string;
     isGlobal?: boolean;
     isOpen: boolean;
     onClose: () => void;
@@ -28,6 +30,7 @@ type ChatMembersListProps = {
 
 export function ChatMembersList({
     channelId,
+    locationChatId,
     isGlobal = false,
     isOpen,
     onClose,
@@ -41,11 +44,15 @@ export function ChatMembersList({
     const [hasMore, setHasMore] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
 
+    const membersEndpoint = locationChatId
+        ? `/api/location-chats/${locationChatId}/members`
+        : `/api/channels/${channelId}/members`;
+
     const fetchMembers = useCallback(async (offset = 0) => {
         setIsLoading(true);
         try {
             const res = await fetch(
-                `/api/channels/${channelId}/members?limit=100&offset=${offset}`
+                `${membersEndpoint}?limit=100&offset=${offset}`
             );
             if (res.ok) {
                 const data = await res.json();
@@ -65,7 +72,7 @@ export function ChatMembersList({
         } finally {
             setIsLoading(false);
         }
-    }, [channelId]);
+    }, [membersEndpoint]);
 
     useEffect(() => {
         if (isOpen) {

@@ -256,7 +256,21 @@ export function AlphaChatModal({
         Record<string, boolean>
     >({});
     const [showMembersList, setShowMembersList] = useState(false);
+    const [globalMemberCount, setGlobalMemberCount] = useState<number | null>(null);
     const userTimezone = useUserTimezone();
+
+    // Fetch global chat member count when modal opens (for "X members" in header)
+    useEffect(() => {
+        if (!isOpen) return;
+        fetch("/api/channels/global/members?limit=1&offset=0")
+            .then((res) => res.ok ? res.json() : null)
+            .then((data) => {
+                if (data && typeof data.total === "number") {
+                    setGlobalMemberCount(data.total);
+                }
+            })
+            .catch(() => {});
+    }, [isOpen]);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Fetch online statuses for message senders
@@ -990,8 +1004,10 @@ export function AlphaChatModal({
         return null;
     };
 
-    // Get member count (we don't have this easily, so we'll show a placeholder)
-    const memberCountDisplay = "Community";
+    const memberCountDisplay =
+        globalMemberCount != null
+            ? `${globalMemberCount} ${globalMemberCount === 1 ? "member" : "members"}`
+            : "Community";
 
     return (
         <AnimatePresence>
@@ -2158,7 +2174,6 @@ export function AlphaChatModal({
                                                                                                         url={
                                                                                                             url
                                                                                                         }
-                                                                                                        compact
                                                                                                     />
                                                                                                 )
                                                                                             )}
