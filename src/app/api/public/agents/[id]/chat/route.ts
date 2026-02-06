@@ -139,6 +139,7 @@ async function generateQueryEmbedding(query: string): Promise<number[] | null> {
         const result = await ai.models.embedContent({
             model: "gemini-embedding-001",
             contents: query,
+            config: { outputDimensionality: 768 },
         });
 
         return result.embeddings?.[0]?.values || null;

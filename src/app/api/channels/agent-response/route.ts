@@ -392,6 +392,7 @@ You can use markdown formatting:
                     const embeddingResult = await ai.models.embedContent({
                         model: "gemini-embedding-001",
                         contents: question,
+                        config: { outputDimensionality: 768 },
                     });
                     const queryEmbedding =
                         embeddingResult.embeddings?.[0]?.values;

@@ -191,6 +191,7 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
         const result = await ai.models.embedContent({
             model: "gemini-embedding-001",
             contents: toEmbed,
+            config: { outputDimensionality: 768 },
         });
         return result.embeddings?.[0]?.values || null;
     } catch (error) {
