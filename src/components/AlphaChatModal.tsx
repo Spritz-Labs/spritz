@@ -26,6 +26,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { LinkPreview, detectUrls } from "./LinkPreview";
+import {
+    LocationMessage,
+    isLocationMessage,
+    parseLocationMessage,
+    formatLocationMessage,
+    type LocationData,
+} from "./LocationMessage";
 import { ChannelIcon } from "./ChannelIcon";
 import { TypingIndicator } from "./TypingIndicator";
 import { AvatarWithStatus } from "./OnlineStatus";
@@ -1582,6 +1589,10 @@ export function AlphaChatModal({
                                                                                           "[GIF]"
                                                                                       )
                                                                                     ? "🎬 GIF"
+                                                                                    : msg.content.startsWith(
+                                                                                          "[LOCATION]"
+                                                                                      )
+                                                                                    ? "📍 Location"
                                                                                     : msg.content}
                                                                             </p>
                                                                         </div>
@@ -2086,6 +2097,13 @@ export function AlphaChatModal({
                                                                                             loading="lazy"
                                                                                         />
                                                                                     </div>
+                                                                                ) : isLocationMessage(
+                                                                                      msg.content
+                                                                                  ) ? (
+                                                                                    <LocationMessage
+                                                                                        location={parseLocationMessage(msg.content)!}
+                                                                                        isOwn={isOwn}
+                                                                                    />
                                                                                 ) : hasMarkdown(
                                                                                       msg.content
                                                                                   ) ? (
@@ -2308,6 +2326,10 @@ export function AlphaChatModal({
                                                     setShowPixelArt(true)
                                                 }
                                                 onGif={handleSendGif}
+                                                onLocation={async (location: LocationData) => {
+                                                    const locationMsg = formatLocationMessage(location);
+                                                    await alphaChat.sendMessage(locationMsg, "text");
+                                                }}
                                                 onPoll={
                                                     canCreatePoll
                                                         ? () =>
@@ -2317,6 +2339,7 @@ export function AlphaChatModal({
                                                         : undefined
                                                 }
                                                 showPoll={canCreatePoll}
+                                                showLocation={true}
                                                 isUploading={
                                                     isUploadingPixelArt
                                                 }

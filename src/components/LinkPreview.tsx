@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 type LinkPreviewProps = {
     url: string;
@@ -15,58 +15,82 @@ type PreviewData = {
     favicon: string | null;
 };
 
+// Simple in-memory cache for link previews
+const previewCache = new Map<string, PreviewData>();
+
 export function LinkPreview({ url, compact = false }: LinkPreviewProps) {
     const [preview, setPreview] = useState<PreviewData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(false);
+    const fetchedRef = useRef(false);
 
     useEffect(() => {
+        // Reset state when URL changes
+        fetchedRef.current = false;
+        
         const fetchPreview = async () => {
+            // Check cache first
+            const cached = previewCache.get(url);
+            if (cached) {
+                setPreview(cached);
+                setLoading(false);
+                return;
+            }
+
             try {
                 setLoading(true);
                 setError(false);
 
-                // Parse URL for basic info
-                const urlObj = new URL(url);
-                const hostname = urlObj.hostname.replace("www.", "");
-
-                // For now, just show basic info from URL
-                // In production, you'd call an API to fetch metadata
-                const basicPreview: PreviewData = {
-                    title: null,
-                    description: null,
-                    image: null,
-                    siteName: hostname,
-                    favicon: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
-                };
-
-                // Try to get better preview data for known sites
-                if (hostname.includes("twitter.com") || hostname.includes("x.com")) {
-                    basicPreview.siteName = "X (Twitter)";
-                } else if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
-                    basicPreview.siteName = "YouTube";
-                    // Extract video ID and use thumbnail
-                    const videoId = extractYouTubeId(url);
-                    if (videoId) {
-                        basicPreview.image = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-                    }
-                } else if (hostname.includes("github.com")) {
-                    basicPreview.siteName = "GitHub";
-                } else if (hostname.includes("linkedin.com")) {
-                    basicPreview.siteName = "LinkedIn";
-                } else if (hostname.includes("instagram.com")) {
-                    basicPreview.siteName = "Instagram";
+                // Fetch metadata from our API
+                const response = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
+                
+                if (!response.ok) {
+                    throw new Error("Failed to fetch preview");
                 }
 
-                setPreview(basicPreview);
+                const data: PreviewData = await response.json();
+                
+                // Cache the result
+                previewCache.set(url, data);
+                
+                setPreview(data);
             } catch {
-                setError(true);
+                // Fallback to basic preview on error
+                try {
+                    const urlObj = new URL(url);
+                    const hostname = urlObj.hostname.replace("www.", "");
+                    const fallback: PreviewData = {
+                        title: null,
+                        description: null,
+                        image: null,
+                        siteName: hostname,
+                        favicon: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+                    };
+                    
+                    // Special handling for YouTube
+                    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
+                        fallback.siteName = "YouTube";
+                        const videoId = extractYouTubeId(url);
+                        if (videoId) {
+                            fallback.image = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                        }
+                    }
+                    
+                    previewCache.set(url, fallback);
+                    setPreview(fallback);
+                } catch {
+                    setError(true);
+                }
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchPreview();
+        // Prevent double fetching in strict mode
+        if (!fetchedRef.current) {
+            fetchedRef.current = true;
+            fetchPreview();
+        }
     }, [url]);
 
     // Minimal loading placeholder to avoid layout shift / flashing in chat
