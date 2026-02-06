@@ -37,6 +37,12 @@ export type LocationChatMessage = {
     content: string;
     message_type: "text" | "image" | "pixel_art" | "gif" | "location" | "voice";
     waku_message_id?: string;
+    reply_to?: string; // ID of the message being replied to
+    reply_to_message?: { // Populated reply data
+        id: string;
+        sender_address: string;
+        content: string;
+    };
     created_at: string;
 };
 
@@ -133,7 +139,7 @@ export function useLocationChat(chatId: string | null, userAddress: string) {
     }, [chatId]);
 
     // Send a message
-    const sendMessage = useCallback(async (content: string, messageType: string = "text") => {
+    const sendMessage = useCallback(async (content: string, messageType: string = "text", replyToId?: string) => {
         if (!chatId || !content.trim()) return false;
 
         setIsSending(true);
@@ -141,7 +147,7 @@ export function useLocationChat(chatId: string | null, userAddress: string) {
             const response = await fetch(`/api/location-chats/${chatId}/messages`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ content, messageType }),
+                body: JSON.stringify({ content, messageType, replyToId }),
             });
             
             if (!response.ok) throw new Error("Failed to send");
@@ -159,6 +165,27 @@ export function useLocationChat(chatId: string | null, userAddress: string) {
             return false;
         } finally {
             setIsSending(false);
+        }
+    }, [chatId]);
+
+    // Delete a message
+    const deleteMessage = useCallback(async (messageId: string) => {
+        if (!chatId || !messageId) return false;
+
+        try {
+            const response = await fetch(`/api/location-chats/${chatId}/messages?messageId=${messageId}`, {
+                method: "DELETE",
+            });
+            
+            if (!response.ok) throw new Error("Failed to delete");
+            
+            // Optimistically remove message from local state
+            setMessages(prev => prev.filter(m => m.id !== messageId));
+            
+            return true;
+        } catch (err) {
+            console.error("[useLocationChat] Delete error:", err);
+            return false;
         }
     }, [chatId]);
 
@@ -223,6 +250,7 @@ export function useLocationChat(chatId: string | null, userAddress: string) {
         error,
         isSending,
         sendMessage,
+        deleteMessage,
         joinChat,
         leaveChat,
         refreshMessages: fetchMessages,

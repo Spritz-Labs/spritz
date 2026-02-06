@@ -113,6 +113,7 @@ export function LocationChatModal({
         error,
         isSending,
         sendMessage,
+        deleteMessage,
         joinChat,
         leaveChat,
     } = useLocationChat(isOpen ? locationChat.id : null, userAddress);
@@ -157,9 +158,11 @@ export function LocationChatModal({
         if (!newMessage.trim() || isSending) return;
 
         const content = newMessage.trim();
+        const replyId = replyingTo?.id;
         setNewMessage("");
-        await sendMessage(content);
-    }, [newMessage, isSending, sendMessage]);
+        setReplyingTo(null);
+        await sendMessage(content, "text", replyId);
+    }, [newMessage, isSending, sendMessage, replyingTo]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -262,6 +265,14 @@ export function LocationChatModal({
                 navigator.clipboard.writeText(selectedMessage.messageContent);
             }
         },
+        onDelete: selectedMessage?.isOwn
+            ? async () => {
+                if (selectedMessage?.messageId) {
+                    await deleteMessage(selectedMessage.messageId);
+                    showToast("Message deleted");
+                }
+            }
+            : undefined,
     };
 
     // Cancel reply
@@ -595,6 +606,29 @@ export function LocationChatModal({
                                                     <span className="text-xs text-zinc-500 mb-1 ml-1">
                                                         {getDisplayName(msg.sender_address)}
                                                     </span>
+                                                )}
+
+                                                {/* Reply Preview */}
+                                                {msg.reply_to_message && (
+                                                    <div
+                                                        className={`mb-1 p-2 rounded-lg text-xs max-w-full ${
+                                                            isOwn
+                                                                ? "bg-white/10 border-l-2 border-white/40"
+                                                                : "bg-zinc-700/50 border-l-2 border-orange-500"
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-1.5 font-medium">
+                                                            <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                            </svg>
+                                                            <span className={isOwn ? "text-white/80" : "text-orange-400"}>
+                                                                {getDisplayName(msg.reply_to_message.sender_address)}
+                                                            </span>
+                                                        </div>
+                                                        <p className={`mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}>
+                                                            {msg.reply_to_message.content}
+                                                        </p>
+                                                    </div>
                                                 )}
 
                                                 {/* Message content - tap for actions */}
