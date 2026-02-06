@@ -11,7 +11,9 @@ ON shout_location_chat_messages(reply_to)
 WHERE reply_to IS NOT NULL;
 
 -- Add delete policy for messages (users can delete their own messages)
-CREATE POLICY IF NOT EXISTS "Users can delete their own messages"
+-- Drop first if exists, then create
+DROP POLICY IF EXISTS "Users can delete their own messages" ON shout_location_chat_messages;
+CREATE POLICY "Users can delete their own messages"
 ON shout_location_chat_messages FOR DELETE USING (true);
 
 COMMENT ON COLUMN shout_location_chat_messages.reply_to IS 'Reference to the message being replied to';
