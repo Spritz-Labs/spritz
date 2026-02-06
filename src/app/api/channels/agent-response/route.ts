@@ -198,8 +198,8 @@ export async function POST(request: NextRequest) {
             messageContent,
             senderAddress,
             senderName,
-            channelType, // 'global' or 'channel'
-            channelId, // null for global, UUID for channels
+            channelType, // 'global', 'channel', or 'location'
+            channelId, // null for global, UUID for channels/locations
             originalMessageId, // The ID of the message that mentioned the agent
         } = body;
 
@@ -488,6 +488,27 @@ You can use markdown formatting:
                     } else {
                         insertedMessage = msg;
                     }
+                } else if (channelType === "location" && channelId) {
+                    const { data: msg, error: insertError } = await supabase
+                        .from("shout_location_chat_messages")
+                        .insert({
+                            location_chat_id: channelId,
+                            sender_address: `agent:${agent.id}`,
+                            content: textToPost,
+                            message_type: "text",
+                            reply_to: originalMessageId || null,
+                        })
+                        .select()
+                        .single();
+
+                    if (insertError) {
+                        console.error(
+                            "[AgentResponse] Error inserting location chat message:",
+                            insertError,
+                        );
+                    } else {
+                        insertedMessage = msg;
+                    }
                 } else if (channelId) {
                     const { data: channel, error: channelError } =
                         await supabase
@@ -602,6 +623,16 @@ You can use markdown formatting:
                             message_type: "text",
                             reply_to_id: originalMessageId || null,
                         });
+                    } else if (channelType === "location" && channelId) {
+                        await supabase
+                            .from("shout_location_chat_messages")
+                            .insert({
+                                location_chat_id: channelId,
+                                sender_address: `agent:${agent.id}`,
+                                content: fallback,
+                                message_type: "text",
+                                reply_to: originalMessageId || null,
+                            });
                     } else if (channelId) {
                         const { data: ch } = await supabase
                             .from("shout_public_channels")
