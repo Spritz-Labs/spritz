@@ -61,7 +61,7 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
     
     try {
         const result = await ai.models.embedContent({
-            model: "text-embedding-004",
+            model: "gemini-embedding-001",
             contents: text,
         });
         

@@ -180,7 +180,7 @@ async function fetchAndCleanContent(
     };
 }
 
-// Gemini text-embedding-004 supports up to 2048 tokens (~8k chars); keep chunks well under
+// Gemini gemini-embedding-001 supports up to 2048 tokens (~8k chars); keep chunks well under
 const MAX_CHARS_FOR_EMBEDDING = 2000;
 
 // Generate embedding using Gemini
@@ -189,7 +189,7 @@ async function generateEmbedding(text: string): Promise<number[] | null> {
     const toEmbed = text.length > MAX_CHARS_FOR_EMBEDDING ? text.slice(0, MAX_CHARS_FOR_EMBEDDING) : text;
     try {
         const result = await ai.models.embedContent({
-            model: "text-embedding-004",
+            model: "gemini-embedding-001",
             contents: toEmbed,
         });
         return result.embeddings?.[0]?.values || null;

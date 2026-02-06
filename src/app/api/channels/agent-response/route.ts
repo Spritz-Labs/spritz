@@ -390,7 +390,7 @@ You can use markdown formatting:
                 try {
                     // Generate embedding for the question
                     const embeddingResult = await ai.models.embedContent({
-                        model: "text-embedding-004",
+                        model: "gemini-embedding-001",
                         contents: question,
                     });
                     const queryEmbedding =
