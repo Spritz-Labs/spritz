@@ -3,7 +3,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
-import { useLocationChat, type LocationChat, type LocationChatMessage } from "@/hooks/useLocationChat";
+import {
+    useLocationChat,
+    type LocationChat,
+    type LocationChatMessage,
+} from "@/hooks/useLocationChat";
 import { AvatarWithStatus } from "./OnlineStatus";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -20,8 +24,15 @@ import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { LinkPreview, detectUrls } from "./LinkPreview";
-import { MessageActionBar, type MessageActionConfig, type MessageActionCallbacks } from "./MessageActionBar";
-import { useMessageReactions, MESSAGE_REACTION_EMOJIS } from "@/hooks/useChatFeatures";
+import {
+    MessageActionBar,
+    type MessageActionConfig,
+    type MessageActionCallbacks,
+} from "./MessageActionBar";
+import {
+    useMessageReactions,
+    MESSAGE_REACTION_EMOJIS,
+} from "@/hooks/useChatFeatures";
 import { ReactionDisplay } from "./EmojiPicker";
 import { ChatMembersList } from "./ChatMembersList";
 
@@ -30,23 +41,28 @@ type LocationChatModalProps = {
     onClose: () => void;
     locationChat: LocationChat;
     userAddress: string;
-    getUserInfo?: (address: string) => { name: string | null; avatar: string | null } | null;
+    getUserInfo?: (
+        address: string
+    ) => { name: string | null; avatar: string | null } | null;
     onOpenUserCard?: (address: string) => void;
 };
 
 // Helper to check if content is a GIF URL
 function isGifMessage(content: string): boolean {
-    return content.startsWith("https://") && (
-        content.includes("giphy.com") || 
-        content.includes("tenor.com") || 
-        content.endsWith(".gif")
+    return (
+        content.startsWith("https://") &&
+        (content.includes("giphy.com") ||
+            content.includes("tenor.com") ||
+            content.endsWith(".gif"))
     );
 }
 
 // Helper to check if content is pixel art
 function isPixelArtMessage(content: string): boolean {
-    return content.startsWith("[PIXEL_ART]") || 
-           (content.startsWith("https://") && content.includes("pixel-art"));
+    return (
+        content.startsWith("[PIXEL_ART]") ||
+        (content.startsWith("https://") && content.includes("pixel-art"))
+    );
 }
 
 // Extract pixel art URL from message
@@ -63,18 +79,19 @@ function extractPixelArtUrl(content: string): string | null {
 
 // Toast helper
 function showToast(message: string, type: "success" | "error" = "success") {
-    const existing = document.querySelector('[data-toast]');
+    const existing = document.querySelector("[data-toast]");
     if (existing) existing.remove();
-    
+
     const toast = document.createElement("div");
-    toast.setAttribute('data-toast', 'true');
+    toast.setAttribute("data-toast", "true");
     toast.className = `fixed bottom-32 left-1/2 -translate-x-1/2 px-4 py-3 ${
         type === "success" ? "bg-zinc-800" : "bg-red-600"
     } text-white text-sm font-medium rounded-2xl shadow-xl z-[9999] flex items-center gap-2`;
     toast.innerHTML = `
-        ${type === "success" 
-            ? '<svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
-            : '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+        ${
+            type === "success"
+                ? '<svg class="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+                : '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
         }
         <span>${message}</span>
     `;
@@ -99,8 +116,11 @@ export function LocationChatModal({
     const [showMembersList, setShowMembersList] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    const [replyingTo, setReplyingTo] = useState<LocationChatMessage | null>(null);
-    const [selectedMessage, setSelectedMessage] = useState<MessageActionConfig | null>(null);
+    const [replyingTo, setReplyingTo] = useState<LocationChatMessage | null>(
+        null
+    );
+    const [selectedMessage, setSelectedMessage] =
+        useState<MessageActionConfig | null>(null);
     const [showMessageActions, setShowMessageActions] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -174,51 +194,62 @@ export function LocationChatModal({
     };
 
     // Handle GIF sending
-    const handleSendGif = useCallback(async (gifUrl: string) => {
-        await sendMessage(gifUrl, "gif");
-    }, [sendMessage]);
+    const handleSendGif = useCallback(
+        async (gifUrl: string) => {
+            await sendMessage(gifUrl, "gif");
+        },
+        [sendMessage]
+    );
 
     // Handle pixel art sending
-    const handleSendPixelArt = useCallback(async (dataUrl: string) => {
-        setIsUploading(true);
-        try {
-            // Upload pixel art to storage
-            const response = await fetch("/api/pixel-art/upload", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ image: dataUrl }),
-            });
-            
-            if (!response.ok) {
-                throw new Error("Failed to upload pixel art");
+    const handleSendPixelArt = useCallback(
+        async (dataUrl: string) => {
+            setIsUploading(true);
+            try {
+                // Upload pixel art to storage
+                const response = await fetch("/api/pixel-art/upload", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ image: dataUrl }),
+                });
+
+                if (!response.ok) {
+                    throw new Error("Failed to upload pixel art");
+                }
+
+                const { url } = await response.json();
+                await sendMessage(`[PIXEL_ART]${url}`, "pixel_art");
+                setShowPixelArt(false);
+            } catch (error) {
+                console.error("[LocationChat] Pixel art upload error:", error);
+                showToast("Failed to send pixel art", "error");
+            } finally {
+                setIsUploading(false);
             }
-            
-            const { url } = await response.json();
-            await sendMessage(`[PIXEL_ART]${url}`, "pixel_art");
-            setShowPixelArt(false);
-        } catch (error) {
-            console.error("[LocationChat] Pixel art upload error:", error);
-            showToast("Failed to send pixel art", "error");
-        } finally {
-            setIsUploading(false);
-        }
-    }, [sendMessage]);
+        },
+        [sendMessage]
+    );
 
     // Handle sharing location
-    const handleShareLocation = useCallback((location: LocationData) => {
-        const content = formatLocationMessage(location);
-        sendMessage(content, "location");
-    }, [sendMessage]);
+    const handleShareLocation = useCallback(
+        (location: LocationData) => {
+            const content = formatLocationMessage(location);
+            sendMessage(content, "location");
+        },
+        [sendMessage]
+    );
 
     // Handle share invite link
     const handleShareInvite = useCallback(async () => {
         const inviteUrl = `${window.location.origin}/location-chat/${locationChat.id}`;
-        
+
         if (navigator.share) {
             try {
                 await navigator.share({
                     title: `Join ${locationChat.name} on Spritz`,
-                    text: `Chat with others at ${locationChat.google_place_name || locationChat.name}! 📍`,
+                    text: `Chat with others at ${
+                        locationChat.google_place_name || locationChat.name
+                    }! 📍`,
                     url: inviteUrl,
                 });
             } catch (err) {
@@ -234,21 +265,29 @@ export function LocationChatModal({
     }, [locationChat]);
 
     // Handle message tap for actions
-    const handleMessageTap = useCallback((msg: LocationChatMessage) => {
-        const isOwn = msg.sender_address.toLowerCase() === userAddress.toLowerCase();
-        const isPixelArt = isPixelArtMessage(msg.content);
-        const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
-        
-        setSelectedMessage({
-            messageId: msg.id,
-            messageContent: msg.content,
-            isOwn,
-            hasMedia: isGifMessage(msg.content) || isPixelArt,
-            isPixelArt,
-            mediaUrl: isGifMessage(msg.content) ? msg.content : pixelArtUrl || undefined,
-        });
-        setShowMessageActions(true);
-    }, [userAddress]);
+    const handleMessageTap = useCallback(
+        (msg: LocationChatMessage) => {
+            const isOwn =
+                msg.sender_address.toLowerCase() === userAddress.toLowerCase();
+            const isPixelArt = isPixelArtMessage(msg.content);
+            const pixelArtUrl = isPixelArt
+                ? extractPixelArtUrl(msg.content)
+                : null;
+
+            setSelectedMessage({
+                messageId: msg.id,
+                messageContent: msg.content,
+                isOwn,
+                hasMedia: isGifMessage(msg.content) || isPixelArt,
+                isPixelArt,
+                mediaUrl: isGifMessage(msg.content)
+                    ? msg.content
+                    : pixelArtUrl || undefined,
+            });
+            setShowMessageActions(true);
+        },
+        [userAddress]
+    );
 
     // Message action callbacks
     const messageActionCallbacks: MessageActionCallbacks = {
@@ -256,7 +295,9 @@ export function LocationChatModal({
             ? (emoji) => toggleMsgReaction(selectedMessage.messageId, emoji)
             : undefined,
         onReply: () => {
-            const msg = messages.find(m => m.id === selectedMessage?.messageId);
+            const msg = messages.find(
+                (m) => m.id === selectedMessage?.messageId
+            );
             if (msg) {
                 setReplyingTo(msg);
                 inputRef.current?.focus();
@@ -269,11 +310,11 @@ export function LocationChatModal({
         },
         onDelete: selectedMessage?.isOwn
             ? async () => {
-                if (selectedMessage?.messageId) {
-                    await deleteMessage(selectedMessage.messageId);
-                    showToast("Message deleted");
-                }
-            }
+                  if (selectedMessage?.messageId) {
+                      await deleteMessage(selectedMessage.messageId);
+                      showToast("Message deleted");
+                  }
+              }
             : undefined,
     };
 
@@ -307,16 +348,20 @@ export function LocationChatModal({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4"
                     style={{
-                        paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 100px, 120px)",
+                        paddingBottom: "env(safe-area-inset-bottom, 0px)",
                     }}
                 >
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.95, opacity: 0 }}
-                        className="w-full max-w-2xl max-h-[70vh] h-[600px] border border-zinc-800 rounded-2xl bg-zinc-900 flex flex-col overflow-hidden"
+                        className="w-full h-full max-w-none max-h-none rounded-none border-0 bg-zinc-900 flex flex-col overflow-hidden sm:w-full sm:max-w-2xl sm:max-h-[70vh] sm:h-[600px] sm:rounded-2xl sm:border sm:border-zinc-800"
+                        style={{
+                            paddingTop: "env(safe-area-inset-top, 0px)",
+                            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+                        }}
                     >
                         {/* Header - same layout as ChannelChatModal: icon + title left, actions + X right */}
                         <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800 shrink-0">
@@ -336,11 +381,26 @@ export function LocationChatModal({
                                         onClick={() => setShowMembersList(true)}
                                         className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1 text-left w-full"
                                     >
-                                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                        <svg
+                                            className="w-3.5 h-3.5 shrink-0"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                            />
                                         </svg>
-                                        {typeof displayChat.member_count === "number"
-                                            ? `${displayChat.member_count} ${displayChat.member_count === 1 ? "member" : "members"}`
+                                        {typeof displayChat.member_count ===
+                                        "number"
+                                            ? `${displayChat.member_count} ${
+                                                  displayChat.member_count === 1
+                                                      ? "member"
+                                                      : "members"
+                                              }`
                                             : "Members"}
                                     </button>
                                 </div>
@@ -349,7 +409,10 @@ export function LocationChatModal({
                             <div className="flex items-center gap-1 shrink-0">
                                 {displayChat.google_place_rating && (
                                     <span className="text-xs text-amber-400 flex items-center gap-1 px-1">
-                                        ⭐ {displayChat.google_place_rating.toFixed(1)}
+                                        ⭐{" "}
+                                        {displayChat.google_place_rating.toFixed(
+                                            1
+                                        )}
                                     </span>
                                 )}
                                 <button
@@ -357,8 +420,18 @@ export function LocationChatModal({
                                     className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                                     aria-label="Place info"
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                        />
                                     </svg>
                                 </button>
                                 <button
@@ -366,8 +439,18 @@ export function LocationChatModal({
                                     className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
                                     aria-label="Close chat"
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
@@ -386,14 +469,26 @@ export function LocationChatModal({
                                         {/* Hero Section with Map */}
                                         <div className="relative h-44 sm:h-52">
                                             <iframe
-                                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${displayChat.longitude - 0.008},${displayChat.latitude - 0.005},${displayChat.longitude + 0.008},${displayChat.latitude + 0.005}&layer=mapnik&marker=${displayChat.latitude},${displayChat.longitude}`}
+                                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+                                                    displayChat.longitude -
+                                                    0.008
+                                                },${
+                                                    displayChat.latitude - 0.005
+                                                },${
+                                                    displayChat.longitude +
+                                                    0.008
+                                                },${
+                                                    displayChat.latitude + 0.005
+                                                }&layer=mapnik&marker=${
+                                                    displayChat.latitude
+                                                },${displayChat.longitude}`}
                                                 className="w-full h-full border-0"
                                                 title="Location Map"
                                                 loading="lazy"
                                             />
                                             {/* Gradient overlay at bottom */}
                                             <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-zinc-900/90 to-transparent" />
-                                            
+
                                             {/* Place badge overlay */}
                                             <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
                                                 <div className="flex items-center gap-3">
@@ -402,26 +497,43 @@ export function LocationChatModal({
                                                     </div>
                                                     <div>
                                                         <h3 className="font-bold text-white text-lg drop-shadow-lg">
-                                                            {displayChat.google_place_name || displayChat.name}
+                                                            {displayChat.google_place_name ||
+                                                                displayChat.name}
                                                         </h3>
-                                                        {displayChat.google_place_types?.[0] && (
+                                                        {displayChat
+                                                            .google_place_types?.[0] && (
                                                             <span className="text-xs text-zinc-300 capitalize">
-                                                                {displayChat.google_place_types[0].replace(/_/g, " ")}
+                                                                {displayChat.google_place_types[0].replace(
+                                                                    /_/g,
+                                                                    " "
+                                                                )}
                                                             </span>
                                                         )}
                                                     </div>
                                                 </div>
                                                 {displayChat.google_place_rating && (
                                                     <div className="bg-black/60 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
-                                                        <span className="text-amber-400">★</span>
+                                                        <span className="text-amber-400">
+                                                            ★
+                                                        </span>
                                                         <span className="text-white font-semibold text-sm">
-                                                            {displayChat.google_place_rating.toFixed(1)}
+                                                            {displayChat.google_place_rating.toFixed(
+                                                                1
+                                                            )}
                                                         </span>
                                                         {displayChat.google_place_user_ratings_total && (
                                                             <span className="text-zinc-400 text-xs">
-                                                                ({displayChat.google_place_user_ratings_total > 999 
-                                                                    ? `${(displayChat.google_place_user_ratings_total / 1000).toFixed(1)}k`
-                                                                    : displayChat.google_place_user_ratings_total})
+                                                                (
+                                                                {displayChat.google_place_user_ratings_total >
+                                                                999
+                                                                    ? `${(
+                                                                          displayChat.google_place_user_ratings_total /
+                                                                          1000
+                                                                      ).toFixed(
+                                                                          1
+                                                                      )}k`
+                                                                    : displayChat.google_place_user_ratings_total}
+                                                                )
                                                             </span>
                                                         )}
                                                     </div>
@@ -432,25 +544,49 @@ export function LocationChatModal({
                                         {/* Info Content */}
                                         <div className="p-4 space-y-4">
                                             {/* Address */}
-                                            {(displayChat.google_place_address || displayChat.formatted_address) && (
+                                            {(displayChat.google_place_address ||
+                                                displayChat.formatted_address) && (
                                                 <div className="flex items-start gap-3">
                                                     <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                                                        <svg className="w-4.5 h-4.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <svg
+                                                            className="w-4.5 h-4.5 text-zinc-400"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={
+                                                                    1.5
+                                                                }
+                                                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                                            />
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={
+                                                                    1.5
+                                                                }
+                                                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                                            />
                                                         </svg>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-xs text-zinc-500 uppercase tracking-wide mb-0.5">Address</p>
+                                                        <p className="text-xs text-zinc-500 uppercase tracking-wide mb-0.5">
+                                                            Address
+                                                        </p>
                                                         <p className="text-sm text-zinc-200">
-                                                            {displayChat.google_place_address || displayChat.formatted_address}
+                                                            {displayChat.google_place_address ||
+                                                                displayChat.formatted_address}
                                                         </p>
                                                     </div>
                                                 </div>
                                             )}
 
                                             {/* Phone & Website Row */}
-                                            {(displayChat.google_place_phone || displayChat.google_place_website) && (
+                                            {(displayChat.google_place_phone ||
+                                                displayChat.google_place_website) && (
                                                 <div className="flex gap-3">
                                                     {displayChat.google_place_phone && (
                                                         <a
@@ -458,34 +594,71 @@ export function LocationChatModal({
                                                             className="flex-1 flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors group"
                                                         >
                                                             <div className="w-9 h-9 rounded-xl bg-green-500/10 flex items-center justify-center">
-                                                                <svg className="w-4.5 h-4.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                                                <svg
+                                                                    className="w-4.5 h-4.5 text-green-400"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            1.5
+                                                                        }
+                                                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                                                    />
                                                                 </svg>
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <p className="text-xs text-zinc-500">Call</p>
+                                                                <p className="text-xs text-zinc-500">
+                                                                    Call
+                                                                </p>
                                                                 <p className="text-sm text-zinc-200 truncate group-hover:text-green-400 transition-colors">
-                                                                    {displayChat.google_place_phone}
+                                                                    {
+                                                                        displayChat.google_place_phone
+                                                                    }
                                                                 </p>
                                                             </div>
                                                         </a>
                                                     )}
                                                     {displayChat.google_place_website && (
                                                         <a
-                                                            href={displayChat.google_place_website}
+                                                            href={
+                                                                displayChat.google_place_website
+                                                            }
                                                             target="_blank"
                                                             rel="noopener noreferrer"
                                                             className="flex-1 flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors group"
                                                         >
                                                             <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                                                                <svg className="w-4.5 h-4.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                                                                <svg
+                                                                    className="w-4.5 h-4.5 text-blue-400"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            1.5
+                                                                        }
+                                                                        d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                                                    />
                                                                 </svg>
                                                             </div>
                                                             <div className="min-w-0">
-                                                                <p className="text-xs text-zinc-500">Website</p>
+                                                                <p className="text-xs text-zinc-500">
+                                                                    Website
+                                                                </p>
                                                                 <p className="text-sm text-zinc-200 truncate group-hover:text-blue-400 transition-colors">
-                                                                    {new URL(displayChat.google_place_website).hostname.replace('www.', '')}
+                                                                    {new URL(
+                                                                        displayChat.google_place_website
+                                                                    ).hostname.replace(
+                                                                        "www.",
+                                                                        ""
+                                                                    )}
                                                                 </p>
                                                             </div>
                                                         </a>
@@ -496,40 +669,92 @@ export function LocationChatModal({
                                             {/* Description */}
                                             {displayChat.description && (
                                                 <div className="p-3 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
-                                                    <p className="text-sm text-zinc-300 leading-relaxed">{displayChat.description}</p>
+                                                    <p className="text-sm text-zinc-300 leading-relaxed">
+                                                        {
+                                                            displayChat.description
+                                                        }
+                                                    </p>
                                                 </div>
                                             )}
 
                                             {/* Stats */}
                                             <div className="flex gap-3">
                                                 <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                    <p className="text-2xl font-bold text-white">{displayChat.member_count}</p>
-                                                    <p className="text-xs text-zinc-500">Members</p>
+                                                    <p className="text-2xl font-bold text-white">
+                                                        {
+                                                            displayChat.member_count
+                                                        }
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        Members
+                                                    </p>
                                                 </div>
                                                 <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                    <p className="text-2xl font-bold text-white">{displayChat.message_count}</p>
-                                                    <p className="text-xs text-zinc-500">Messages</p>
+                                                    <p className="text-2xl font-bold text-white">
+                                                        {
+                                                            displayChat.message_count
+                                                        }
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        Messages
+                                                    </p>
                                                 </div>
-                                                {displayChat.google_place_types && displayChat.google_place_types.length > 0 && (
-                                                    <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                        <p className="text-2xl">{
-                                                            displayChat.google_place_types[0]?.includes('restaurant') ? '🍽️' :
-                                                            displayChat.google_place_types[0]?.includes('cafe') ? '☕' :
-                                                            displayChat.google_place_types[0]?.includes('bar') ? '🍺' :
-                                                            displayChat.google_place_types[0]?.includes('hotel') ? '🏨' :
-                                                            displayChat.google_place_types[0]?.includes('park') ? '🌳' :
-                                                            displayChat.google_place_types[0]?.includes('museum') ? '🏛️' :
-                                                            displayChat.google_place_types[0]?.includes('store') ? '🛍️' :
-                                                            displayChat.google_place_types[0]?.includes('gym') ? '💪' :
-                                                            displayChat.google_place_types[0]?.includes('airport') ? '✈️' :
-                                                            displayChat.google_place_types[0]?.includes('hospital') ? '🏥' :
-                                                            '📍'
-                                                        }</p>
-                                                        <p className="text-xs text-zinc-500 capitalize truncate">
-                                                            {displayChat.google_place_types[0]?.replace(/_/g, " ")}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                {displayChat.google_place_types &&
+                                                    displayChat
+                                                        .google_place_types
+                                                        .length > 0 && (
+                                                        <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                            <p className="text-2xl">
+                                                                {displayChat.google_place_types[0]?.includes(
+                                                                    "restaurant"
+                                                                )
+                                                                    ? "🍽️"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "cafe"
+                                                                      )
+                                                                    ? "☕"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "bar"
+                                                                      )
+                                                                    ? "🍺"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "hotel"
+                                                                      )
+                                                                    ? "🏨"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "park"
+                                                                      )
+                                                                    ? "🌳"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "museum"
+                                                                      )
+                                                                    ? "🏛️"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "store"
+                                                                      )
+                                                                    ? "🛍️"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "gym"
+                                                                      )
+                                                                    ? "💪"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "airport"
+                                                                      )
+                                                                    ? "✈️"
+                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                          "hospital"
+                                                                      )
+                                                                    ? "🏥"
+                                                                    : "📍"}
+                                                            </p>
+                                                            <p className="text-xs text-zinc-500 capitalize truncate">
+                                                                {displayChat.google_place_types[0]?.replace(
+                                                                    /_/g,
+                                                                    " "
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                    )}
                                             </div>
 
                                             {/* Action Buttons */}
@@ -540,8 +765,18 @@ export function LocationChatModal({
                                                     rel="noopener noreferrer"
                                                     className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-[#FF5500] to-[#FF7722] hover:from-[#E64D00] hover:to-[#FF5500] text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-orange-500/20"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+                                                        />
                                                     </svg>
                                                     Directions
                                                 </a>
@@ -549,12 +784,26 @@ export function LocationChatModal({
                                                     onClick={handleShareInvite}
                                                     className="py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium rounded-xl transition-all border border-zinc-700"
                                                 >
-                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                                        />
                                                     </svg>
                                                 </button>
                                                 <button
-                                                    onClick={() => leaveChat().then(() => onClose())}
+                                                    onClick={() =>
+                                                        leaveChat().then(() =>
+                                                            onClose()
+                                                        )
+                                                    }
                                                     className="py-3 px-4 bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 text-sm font-medium rounded-xl transition-all border border-zinc-700 hover:border-red-500/50"
                                                 >
                                                     Leave
@@ -578,32 +827,57 @@ export function LocationChatModal({
                                 />
                             ) : (
                                 messages.map((msg, idx) => {
-                                    const isOwn = msg.sender_address.toLowerCase() === userAddress.toLowerCase();
-                                    const showAvatar = idx === 0 || 
-                                        messages[idx - 1].sender_address !== msg.sender_address;
+                                    const isOwn =
+                                        msg.sender_address.toLowerCase() ===
+                                        userAddress.toLowerCase();
+                                    const showAvatar =
+                                        idx === 0 ||
+                                        messages[idx - 1].sender_address !==
+                                            msg.sender_address;
 
                                     // Check message types
-                                    const isLocation = isLocationMessage(msg.content);
-                                    const locationData = isLocation ? parseLocationMessage(msg.content) : null;
+                                    const isLocation = isLocationMessage(
+                                        msg.content
+                                    );
+                                    const locationData = isLocation
+                                        ? parseLocationMessage(msg.content)
+                                        : null;
                                     const isGif = isGifMessage(msg.content);
-                                    const isPixelArt = isPixelArtMessage(msg.content);
-                                    const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
-                                    const urls = !isGif && !isPixelArt && !isLocation ? detectUrls(msg.content) : [];
+                                    const isPixelArt = isPixelArtMessage(
+                                        msg.content
+                                    );
+                                    const pixelArtUrl = isPixelArt
+                                        ? extractPixelArtUrl(msg.content)
+                                        : null;
+                                    const urls =
+                                        !isGif && !isPixelArt && !isLocation
+                                            ? detectUrls(msg.content)
+                                            : [];
 
                                     return (
                                         <div
                                             key={msg.id}
-                                            className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
+                                            className={`flex gap-2 ${
+                                                isOwn ? "flex-row-reverse" : ""
+                                            }`}
                                         >
                                             {/* Avatar */}
                                             {showAvatar && !isOwn ? (
                                                 <button
-                                                    onClick={() => onOpenUserCard?.(msg.sender_address)}
+                                                    onClick={() =>
+                                                        onOpenUserCard?.(
+                                                            msg.sender_address
+                                                        )
+                                                    }
                                                     className="flex-shrink-0"
                                                 >
                                                     <AvatarWithStatus
-                                                        name={getDisplayName(msg.sender_address)}
-                                                        src={getAvatar(msg.sender_address)}
+                                                        name={getDisplayName(
+                                                            msg.sender_address
+                                                        )}
+                                                        src={getAvatar(
+                                                            msg.sender_address
+                                                        )}
                                                         size="sm"
                                                     />
                                                 </button>
@@ -611,11 +885,19 @@ export function LocationChatModal({
                                                 <div className="w-8" />
                                             ) : null}
 
-                                            <div className={`flex flex-col ${isOwn ? "items-end" : "items-start"} max-w-[75%]`}>
+                                            <div
+                                                className={`flex flex-col ${
+                                                    isOwn
+                                                        ? "items-end"
+                                                        : "items-start"
+                                                } max-w-[75%]`}
+                                            >
                                                 {/* Sender name */}
                                                 {showAvatar && !isOwn && (
                                                     <span className="text-xs text-zinc-500 mb-1 ml-1">
-                                                        {getDisplayName(msg.sender_address)}
+                                                        {getDisplayName(
+                                                            msg.sender_address
+                                                        )}
                                                     </span>
                                                 )}
 
@@ -629,45 +911,99 @@ export function LocationChatModal({
                                                         }`}
                                                     >
                                                         <div className="flex items-center gap-1.5 font-medium">
-                                                            <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                                            <svg
+                                                                className="w-3 h-3 flex-shrink-0"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+                                                                />
                                                             </svg>
-                                                            <span className={isOwn ? "text-white/80" : "text-orange-400"}>
-                                                                {getDisplayName(msg.reply_to_message.sender_address)}
+                                                            <span
+                                                                className={
+                                                                    isOwn
+                                                                        ? "text-white/80"
+                                                                        : "text-orange-400"
+                                                                }
+                                                            >
+                                                                {getDisplayName(
+                                                                    msg
+                                                                        .reply_to_message
+                                                                        .sender_address
+                                                                )}
                                                             </span>
                                                         </div>
-                                                        <p className={`mt-1 line-clamp-2 ${isOwn ? "text-white/70" : "text-zinc-400"}`}>
-                                                            {msg.reply_to_message.content}
+                                                        <p
+                                                            className={`mt-1 line-clamp-2 ${
+                                                                isOwn
+                                                                    ? "text-white/70"
+                                                                    : "text-zinc-400"
+                                                            }`}
+                                                        >
+                                                            {
+                                                                msg
+                                                                    .reply_to_message
+                                                                    .content
+                                                            }
                                                         </p>
                                                     </div>
                                                 )}
 
                                                 {/* Message content - tap for actions */}
                                                 <button
-                                                    onClick={() => handleMessageTap(msg)}
+                                                    onClick={() =>
+                                                        handleMessageTap(msg)
+                                                    }
                                                     className="text-left focus:outline-none active:opacity-80 transition-opacity"
                                                 >
                                                     {/* Location message */}
-                                                    {isLocation && locationData ? (
+                                                    {isLocation &&
+                                                    locationData ? (
                                                         <LocationMessage
-                                                            location={locationData}
+                                                            location={
+                                                                locationData
+                                                            }
                                                             isOwn={isOwn}
                                                         />
                                                     ) : isGif ? (
                                                         /* GIF message */
-                                                        <div className={`rounded-2xl overflow-hidden ${isOwn ? "rounded-br-md" : "rounded-bl-md"}`}>
+                                                        <div
+                                                            className={`rounded-2xl overflow-hidden ${
+                                                                isOwn
+                                                                    ? "rounded-br-md"
+                                                                    : "rounded-bl-md"
+                                                            }`}
+                                                        >
                                                             <img
-                                                                src={msg.content}
+                                                                src={
+                                                                    msg.content
+                                                                }
                                                                 alt="GIF"
                                                                 className="max-w-[250px] max-h-[200px] object-contain rounded-lg"
                                                                 loading="lazy"
                                                             />
                                                         </div>
-                                                    ) : isPixelArt && pixelArtUrl ? (
+                                                    ) : isPixelArt &&
+                                                      pixelArtUrl ? (
                                                         /* Pixel Art message */
-                                                        <div className={`rounded-2xl overflow-hidden ${isOwn ? "rounded-br-md" : "rounded-bl-md"}`}>
+                                                        <div
+                                                            className={`rounded-2xl overflow-hidden ${
+                                                                isOwn
+                                                                    ? "rounded-br-md"
+                                                                    : "rounded-bl-md"
+                                                            }`}
+                                                        >
                                                             <PixelArtImage
-                                                                src={pixelArtUrl}
+                                                                src={
+                                                                    pixelArtUrl
+                                                                }
                                                                 alt="Pixel Art"
                                                                 className="max-w-[200px]"
                                                             />
@@ -685,11 +1021,28 @@ export function LocationChatModal({
                                                                 {msg.content}
                                                             </p>
                                                             {/* Link previews */}
-                                                            {urls.length > 0 && (
+                                                            {urls.length >
+                                                                0 && (
                                                                 <div className="mt-2">
-                                                                    {urls.slice(0, 1).map((url) => (
-                                                                        <LinkPreview key={url} url={url} />
-                                                                    ))}
+                                                                    {urls
+                                                                        .slice(
+                                                                            0,
+                                                                            1
+                                                                        )
+                                                                        .map(
+                                                                            (
+                                                                                url
+                                                                            ) => (
+                                                                                <LinkPreview
+                                                                                    key={
+                                                                                        url
+                                                                                    }
+                                                                                    url={
+                                                                                        url
+                                                                                    }
+                                                                                />
+                                                                            )
+                                                                        )}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -698,16 +1051,24 @@ export function LocationChatModal({
 
                                                 {/* Reactions Display */}
                                                 <ReactionDisplay
-                                                    reactions={msgReactions[msg.id] || []}
+                                                    reactions={
+                                                        msgReactions[msg.id] ||
+                                                        []
+                                                    }
                                                     onReaction={(emoji) => {
-                                                        toggleMsgReaction(msg.id, emoji);
+                                                        toggleMsgReaction(
+                                                            msg.id,
+                                                            emoji
+                                                        );
                                                     }}
                                                     isOwnMessage={isOwn}
                                                 />
 
                                                 {/* Time */}
                                                 <span className="text-[10px] text-zinc-600 mt-1 mx-1">
-                                                    {formatMessageTime(msg.created_at)}
+                                                    {formatMessageTime(
+                                                        msg.created_at
+                                                    )}
                                                 </span>
                                             </div>
                                         </div>
@@ -725,27 +1086,49 @@ export function LocationChatModal({
                                     <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded-lg border-l-2 border-[#FF5500]">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs text-[#FF5500] font-medium">
-                                                Replying to {getDisplayName(replyingTo.sender_address)}
+                                                Replying to{" "}
+                                                {getDisplayName(
+                                                    replyingTo.sender_address
+                                                )}
                                             </p>
                                             <p className="text-xs text-zinc-400 truncate">
-                                                {isGifMessage(replyingTo.content) ? "GIF" : 
-                                                 isPixelArtMessage(replyingTo.content) ? "Pixel Art" :
-                                                 isLocationMessage(replyingTo.content) ? "Location" :
-                                                 replyingTo.content}
+                                                {isGifMessage(
+                                                    replyingTo.content
+                                                )
+                                                    ? "GIF"
+                                                    : isPixelArtMessage(
+                                                          replyingTo.content
+                                                      )
+                                                    ? "Pixel Art"
+                                                    : isLocationMessage(
+                                                          replyingTo.content
+                                                      )
+                                                    ? "Location"
+                                                    : replyingTo.content}
                                             </p>
                                         </div>
                                         <button
                                             onClick={cancelReply}
                                             className="p-1 text-zinc-400 hover:text-white transition-colors"
                                         >
-                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            <svg
+                                                className="w-4 h-4"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M6 18L18 6M6 6l12 12"
+                                                />
                                             </svg>
                                         </button>
                                     </div>
                                 </div>
                             )}
-                            
+
                             <div className="p-4">
                                 {!isMember ? (
                                     <button
@@ -758,34 +1141,54 @@ export function LocationChatModal({
                                     <div className="flex items-end gap-2">
                                         {/* Attachment menu */}
                                         <ChatAttachmentMenu
-                                            onPixelArt={() => setShowPixelArt(true)}
+                                            onPixelArt={() =>
+                                                setShowPixelArt(true)
+                                            }
                                             onGif={handleSendGif}
                                             onLocation={handleShareLocation}
                                             showLocation={true}
                                             isUploading={isUploading}
                                             disabled={isSending}
                                         />
-                                        
+
                                         <textarea
                                             ref={inputRef}
                                             value={newMessage}
-                                            onChange={(e) => setNewMessage(e.target.value)}
+                                            onChange={(e) =>
+                                                setNewMessage(e.target.value)
+                                            }
                                             onKeyDown={handleKeyDown}
-                                            placeholder={replyingTo ? "Type your reply..." : `Message ${displayChat.name}...`}
+                                            placeholder={
+                                                replyingTo
+                                                    ? "Type your reply..."
+                                                    : `Message ${displayChat.name}...`
+                                            }
                                             rows={1}
                                             className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
                                             style={{ maxHeight: "120px" }}
                                         />
                                         <button
                                             onClick={handleSend}
-                                            disabled={!newMessage.trim() || isSending}
+                                            disabled={
+                                                !newMessage.trim() || isSending
+                                            }
                                             className="p-3 bg-[#FF5500] hover:bg-[#E64D00] disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-xl transition-colors"
                                         >
                                             {isSending ? (
                                                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                             ) : (
-                                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                                <svg
+                                                    className="w-5 h-5"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                                                    />
                                                 </svg>
                                             )}
                                         </button>
@@ -796,8 +1199,18 @@ export function LocationChatModal({
 
                         {/* Decentralized indicator */}
                         <div className="px-4 py-2 bg-zinc-950 border-t border-zinc-800 flex items-center justify-center gap-2 text-xs text-zinc-500">
-                            <svg className="w-3.5 h-3.5 text-[#FF5500]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            <svg
+                                className="w-3.5 h-3.5 text-[#FF5500]"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                                />
                             </svg>
                             <span>Decentralized chat via Logos</span>
                         </div>
