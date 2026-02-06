@@ -416,6 +416,7 @@ export function InstantRoomChat({
                 !target.closest("[data-message-bubble]")
             ) {
                 setSelectedMessage(null);
+                setSelectedMessageConfig(null);
                 setShowReactionPicker(null);
             }
         };

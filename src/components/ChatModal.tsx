@@ -1017,6 +1017,7 @@ export function ChatModal({
                 !target.closest("input")
             ) {
                 setSelectedMessage(null);
+                setSelectedMessageConfig(null);
                 setShowMsgReactions(null);
             }
         };

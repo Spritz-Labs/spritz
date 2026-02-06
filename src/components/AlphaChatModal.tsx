@@ -803,6 +803,7 @@ export function AlphaChatModal({
         await toggleReaction(messageId, emoji);
         setShowReactionPicker(null);
         setSelectedMessage(null);
+        setSelectedMessageConfig(null);
     };
 
     // Toggle message selection for mobile tap actions
@@ -823,6 +824,7 @@ export function AlphaChatModal({
                 !target.closest("input")
             ) {
                 setSelectedMessage(null);
+                setSelectedMessageConfig(null);
                 setShowReactionPicker(null);
             }
         };

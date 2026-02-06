@@ -5954,6 +5954,14 @@ function DashboardContent({
                         handleVideoCall(friend as FriendsListFriend)
                     }
                     onMessage={(friend) => {
+                        // Close user card modal first
+                        setUserCardAddress(null);
+                        // Close any other open chat modals
+                        setIsAlphaChatOpen(false);
+                        setSelectedChannel(null);
+                        setSelectedGroup(null);
+                        setSelectedLocationChat(null);
+                        // Then open the DM
                         openDMByAddress(friend.address);
                     }}
                     onMute={

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 type LinkPreviewProps = {
     url: string;
@@ -15,83 +15,163 @@ type PreviewData = {
     favicon: string | null;
 };
 
-// Simple in-memory cache for link previews
-const previewCache = new Map<string, PreviewData>();
+// Simple in-memory cache for link previews with TTL
+const previewCache = new Map<string, { data: PreviewData; timestamp: number }>();
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+// In-flight requests to prevent duplicate fetches
+const pendingRequests = new Map<string, Promise<PreviewData>>();
 
 export function LinkPreview({ url, compact = false }: LinkPreviewProps) {
-    const [preview, setPreview] = useState<PreviewData | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [preview, setPreview] = useState<PreviewData | null>(() => {
+        // Initialize from cache if available
+        const cached = previewCache.get(url);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+            return cached.data;
+        }
+        return null;
+    });
+    const [loading, setLoading] = useState(!preview);
     const [error, setError] = useState(false);
-    const fetchedRef = useRef(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
+    const mountedRef = useRef(true);
+    const currentUrlRef = useRef(url);
+
+    const createFallback = useCallback((targetUrl: string): PreviewData => {
+        try {
+            const urlObj = new URL(targetUrl);
+            const hostname = urlObj.hostname.replace("www.", "");
+            const fallback: PreviewData = {
+                title: null,
+                description: null,
+                image: null,
+                siteName: hostname,
+                favicon: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
+            };
+            
+            // Special handling for YouTube
+            if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
+                fallback.siteName = "YouTube";
+                const videoId = extractYouTubeId(targetUrl);
+                if (videoId) {
+                    fallback.image = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+                }
+            }
+            
+            return fallback;
+        } catch {
+            return {
+                title: null,
+                description: null,
+                image: null,
+                siteName: "Unknown",
+                favicon: null,
+            };
+        }
+    }, []);
 
     useEffect(() => {
-        // Reset state when URL changes
-        fetchedRef.current = false;
+        mountedRef.current = true;
+        currentUrlRef.current = url;
         
+        // Check cache first
+        const cached = previewCache.get(url);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+            setPreview(cached.data);
+            setLoading(false);
+            setError(false);
+            return;
+        }
+
+        // Abort any previous request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
         const fetchPreview = async () => {
-            // Check cache first
-            const cached = previewCache.get(url);
-            if (cached) {
-                setPreview(cached);
-                setLoading(false);
+            // Check if there's already a pending request for this URL
+            const pending = pendingRequests.get(url);
+            if (pending) {
+                try {
+                    const data = await pending;
+                    if (mountedRef.current && currentUrlRef.current === url) {
+                        setPreview(data);
+                        setLoading(false);
+                    }
+                } catch {
+                    if (mountedRef.current && currentUrlRef.current === url) {
+                        const fallback = createFallback(url);
+                        setPreview(fallback);
+                        setLoading(false);
+                    }
+                }
                 return;
             }
 
-            try {
-                setLoading(true);
-                setError(false);
+            setLoading(true);
+            setError(false);
 
-                // Fetch metadata from our API
-                const response = await fetch(`/api/link-preview?url=${encodeURIComponent(url)}`);
-                
-                if (!response.ok) {
-                    throw new Error("Failed to fetch preview");
-                }
+            const controller = new AbortController();
+            abortControllerRef.current = controller;
 
-                const data: PreviewData = await response.json();
-                
-                // Cache the result
-                previewCache.set(url, data);
-                
-                setPreview(data);
-            } catch {
-                // Fallback to basic preview on error
+            // Create the fetch promise and store it
+            const fetchPromise = (async (): Promise<PreviewData> => {
                 try {
-                    const urlObj = new URL(url);
-                    const hostname = urlObj.hostname.replace("www.", "");
-                    const fallback: PreviewData = {
-                        title: null,
-                        description: null,
-                        image: null,
-                        siteName: hostname,
-                        favicon: `https://www.google.com/s2/favicons?domain=${hostname}&sz=32`,
-                    };
+                    const response = await fetch(
+                        `/api/link-preview?url=${encodeURIComponent(url)}`,
+                        { signal: controller.signal }
+                    );
                     
-                    // Special handling for YouTube
-                    if (hostname.includes("youtube.com") || hostname.includes("youtu.be")) {
-                        fallback.siteName = "YouTube";
-                        const videoId = extractYouTubeId(url);
-                        if (videoId) {
-                            fallback.image = `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
-                        }
+                    if (!response.ok) {
+                        throw new Error("Failed to fetch preview");
+                    }
+
+                    const data: PreviewData = await response.json();
+                    
+                    // Cache the result
+                    previewCache.set(url, { data, timestamp: Date.now() });
+                    
+                    return data;
+                } catch (err) {
+                    if ((err as Error).name === "AbortError") {
+                        throw err; // Re-throw abort errors
                     }
                     
-                    previewCache.set(url, fallback);
-                    setPreview(fallback);
-                } catch {
-                    setError(true);
+                    // Create fallback
+                    const fallback = createFallback(url);
+                    previewCache.set(url, { data: fallback, timestamp: Date.now() });
+                    return fallback;
+                } finally {
+                    pendingRequests.delete(url);
                 }
-            } finally {
-                setLoading(false);
+            })();
+
+            pendingRequests.set(url, fetchPromise);
+
+            try {
+                const data = await fetchPromise;
+                // Only update if still mounted and URL hasn't changed
+                if (mountedRef.current && currentUrlRef.current === url) {
+                    setPreview(data);
+                    setLoading(false);
+                }
+            } catch (err) {
+                if ((err as Error).name !== "AbortError" && mountedRef.current && currentUrlRef.current === url) {
+                    setError(true);
+                    setLoading(false);
+                }
             }
         };
 
-        // Prevent double fetching in strict mode
-        if (!fetchedRef.current) {
-            fetchedRef.current = true;
-            fetchPreview();
-        }
-    }, [url]);
+        fetchPreview();
+
+        return () => {
+            mountedRef.current = false;
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+            }
+        };
+    }, [url, createFallback]);
 
     // Minimal loading placeholder to avoid layout shift / flashing in chat
     if (loading) {

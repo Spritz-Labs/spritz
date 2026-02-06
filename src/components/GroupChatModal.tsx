@@ -506,6 +506,7 @@ export function GroupChatModal({
                 !target.closest("input")
             ) {
                 setSelectedMessage(null);
+                setSelectedMessageConfig(null);
                 setShowReactionPicker(null);
             }
         };

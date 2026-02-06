@@ -1079,6 +1079,7 @@ export function ChannelChatModal({
         } finally {
             setShowReactionPicker(null);
             setSelectedMessage(null);
+            setSelectedMessageConfig(null);
         }
     };
 
@@ -1094,6 +1095,7 @@ export function ChannelChatModal({
         } finally {
             setPinningMessage(null);
             setSelectedMessage(null);
+            setSelectedMessageConfig(null);
         }
     };
 
@@ -1115,6 +1117,7 @@ export function ChannelChatModal({
                 !target.closest("input")
             ) {
                 setSelectedMessage(null);
+                setSelectedMessageConfig(null);
                 setShowReactionPicker(null);
             }
         };
@@ -1147,6 +1150,7 @@ export function ChannelChatModal({
         setEditingMessage(msg.id);
         setEditContent(msg.content);
         setSelectedMessage(null);
+        setSelectedMessageConfig(null);
     };
 
     const handleSaveEdit = async () => {
@@ -1172,6 +1176,7 @@ export function ChannelChatModal({
         await deleteMessage(messageId);
         setIsDeleting(null);
         setSelectedMessage(null);
+        setSelectedMessageConfig(null);
     };
 
     // Check if message is within edit window (15 minutes)
