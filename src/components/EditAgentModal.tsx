@@ -129,7 +129,7 @@ interface EditAgentModalProps {
             x402PricingMode?: "global" | "per_tool";
             mcpServers?: MCPServer[];
             apiTools?: APITool[];
-        },
+        }
     ) => Promise<void>;
     userAddress?: string;
     isAdmin?: boolean;
@@ -166,14 +166,24 @@ export function EditAgentModal({
         "",
     ]);
 
-    // Channel presence (for Official agents)
+    // Channel presence (for Official agents): channels + location chats + POAP
     const [availableChannels, setAvailableChannels] = useState<
+        Array<{
+            id: string;
+            name: string;
+            emoji: string;
+            poap_event_id?: number | null;
+            poap_collection_id?: string | null;
+        }>
+    >([]);
+    const [availableLocationChats, setAvailableLocationChats] = useState<
         Array<{ id: string; name: string; emoji: string }>
     >([]);
     const [channelMemberships, setChannelMemberships] = useState<{
         global: boolean;
         channels: string[];
-    }>({ global: false, channels: [] });
+        locationChats: string[];
+    }>({ global: false, channels: [], locationChats: [] });
     const [isSavingChannels, setIsSavingChannels] = useState(false);
 
     // Tag helpers
@@ -202,7 +212,7 @@ export function EditAgentModal({
     // Increased to 1024px and 95% quality for sharper profile photos
     const resizeImageForAvatar = (
         file: File,
-        maxSize: number = 1024,
+        maxSize: number = 1024
     ): Promise<Blob> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -239,7 +249,7 @@ export function EditAgentModal({
                     0,
                     0,
                     targetSize,
-                    targetSize,
+                    targetSize
                 );
 
                 // Convert to blob with high quality
@@ -252,7 +262,7 @@ export function EditAgentModal({
                         }
                     },
                     "image/jpeg",
-                    0.95, // Higher quality (was 0.9)
+                    0.95 // Higher quality (was 0.9)
                 );
             };
 
@@ -272,7 +282,7 @@ export function EditAgentModal({
     const [x402Enabled, setX402Enabled] = useState(false);
     const [x402PriceCents, setX402PriceCents] = useState(1);
     const [x402Network, setX402Network] = useState<"base" | "base-sepolia">(
-        "base",
+        "base"
     );
     const [x402WalletAddress, setX402WalletAddress] = useState("");
     const [x402PricingMode, setX402PricingMode] = useState<
@@ -287,7 +297,7 @@ export function EditAgentModal({
     const [newMcpApiKey, setNewMcpApiKey] = useState("");
     const [newMcpDescription, setNewMcpDescription] = useState("");
     const [newMcpHeaders, setNewMcpHeaders] = useState<Record<string, string>>(
-        {},
+        {}
     );
 
     // API Tools
@@ -301,12 +311,12 @@ export function EditAgentModal({
     const [newApiKey, setNewApiKey] = useState("");
     const [newApiDescription, setNewApiDescription] = useState("");
     const [newApiHeaders, setNewApiHeaders] = useState<Record<string, string>>(
-        {},
+        {}
     );
 
     // API Key visibility toggles
     const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(
-        new Set(),
+        new Set()
     );
 
     const toggleApiKeyVisibility = (id: string) => {
@@ -464,7 +474,34 @@ export function EditAgentModal({
             }
         }
 
-        // Fetch agent's current channel memberships
+        async function fetchLocationChats() {
+            try {
+                const res = await fetch("/api/location-chats?limit=100");
+                if (res.ok) {
+                    const data = await res.json();
+                    setAvailableLocationChats(
+                        (data.chats || []).map(
+                            (c: {
+                                id: string;
+                                name: string;
+                                emoji?: string;
+                            }) => ({
+                                id: c.id,
+                                name: c.name,
+                                emoji: c.emoji || "📍",
+                            })
+                        )
+                    );
+                }
+            } catch (err) {
+                console.error(
+                    "[EditAgent] Error fetching location chats:",
+                    err
+                );
+            }
+        }
+
+        // Fetch agent's current channel + location memberships
         async function fetchMemberships() {
             try {
                 const res = await fetch(`/api/agents/${agentId}/channels`);
@@ -473,17 +510,24 @@ export function EditAgentModal({
                     const memberships = data.memberships || [];
                     const isInGlobal = memberships.some(
                         (m: { channel_type: string }) =>
-                            m.channel_type === "global",
+                            m.channel_type === "global"
                     );
                     const channelIds = memberships
                         .filter(
                             (m: { channel_type: string }) =>
-                                m.channel_type === "channel",
+                                m.channel_type === "channel"
+                        )
+                        .map((m: { channel_id: string }) => m.channel_id);
+                    const locationIds = memberships
+                        .filter(
+                            (m: { channel_type: string }) =>
+                                m.channel_type === "location"
                         )
                         .map((m: { channel_id: string }) => m.channel_id);
                     setChannelMemberships({
                         global: isInGlobal,
                         channels: channelIds,
+                        locationChats: locationIds,
                     });
                 }
             } catch (err) {
@@ -492,25 +536,27 @@ export function EditAgentModal({
         }
 
         fetchChannels();
+        fetchLocationChats();
         fetchMemberships();
     }, [isOpen, agent?.id, visibility]);
 
-    // Handle channel membership toggle
+    // Handle channel / location membership toggle
     const toggleChannelMembership = async (
-        channelType: "global" | "channel",
-        channelId?: string,
+        channelType: "global" | "channel" | "location",
+        channelId?: string
     ) => {
         if (!agent || !userAddress) return;
 
+        const isCurrentlyIn =
+            channelType === "global"
+                ? channelMemberships.global
+                : channelType === "location"
+                ? channelMemberships.locationChats.includes(channelId!)
+                : channelMemberships.channels.includes(channelId!);
+
         setIsSavingChannels(true);
         try {
-            const isCurrentlyIn =
-                channelType === "global"
-                    ? channelMemberships.global
-                    : channelMemberships.channels.includes(channelId!);
-
             if (isCurrentlyIn) {
-                // Remove from channel
                 const params = new URLSearchParams({
                     userAddress,
                     channelType,
@@ -526,9 +572,14 @@ export function EditAgentModal({
                         channelType === "channel"
                             ? prev.channels.filter((id) => id !== channelId)
                             : prev.channels,
+                    locationChats:
+                        channelType === "location"
+                            ? prev.locationChats.filter(
+                                  (id) => id !== channelId
+                              )
+                            : prev.locationChats,
                 }));
             } else {
-                // Add to channel
                 await fetch(`/api/agents/${agent.id}/channels`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -536,7 +587,10 @@ export function EditAgentModal({
                         userAddress,
                         channelType,
                         channelId:
-                            channelType === "channel" ? channelId : undefined,
+                            channelType === "channel" ||
+                            channelType === "location"
+                                ? channelId
+                                : undefined,
                     }),
                 });
 
@@ -546,12 +600,16 @@ export function EditAgentModal({
                         channelType === "channel" && channelId
                             ? [...prev.channels, channelId]
                             : prev.channels,
+                    locationChats:
+                        channelType === "location" && channelId
+                            ? [...prev.locationChats, channelId]
+                            : prev.locationChats,
                 }));
             }
         } catch (err) {
             console.error(
                 "[EditAgent] Error toggling channel membership:",
-                err,
+                err
             );
         } finally {
             setIsSavingChannels(false);
@@ -563,7 +621,9 @@ export function EditAgentModal({
         if (!agent || !userAddress) return;
         try {
             const res = await fetch(
-                `/api/agents/${agent.id}/embed?userAddress=${encodeURIComponent(userAddress)}`,
+                `/api/agents/${agent.id}/embed?userAddress=${encodeURIComponent(
+                    userAddress
+                )}`
             );
             if (res.ok) {
                 const data = await res.json();
@@ -620,7 +680,7 @@ export function EditAgentModal({
     // Update MCP server (using functional update to avoid stale closure)
     const updateMcpServer = (id: string, updates: Partial<MCPServer>) => {
         setMcpServers((prev) =>
-            prev.map((s) => (s.id === id ? { ...s, ...updates } : s)),
+            prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
         );
     };
 
@@ -631,7 +691,7 @@ export function EditAgentModal({
         toolId: string,
         url: string,
         apiKey?: string,
-        headers?: Record<string, string>,
+        headers?: Record<string, string>
     ) => {
         setDetectingApiId(toolId);
         try {
@@ -701,7 +761,7 @@ export function EditAgentModal({
             toolId,
             newApiUrl,
             newApiKey || undefined,
-            Object.keys(validHeaders).length > 0 ? validHeaders : undefined,
+            Object.keys(validHeaders).length > 0 ? validHeaders : undefined
         );
     };
 
@@ -713,7 +773,7 @@ export function EditAgentModal({
     // Update API Tool (using functional update to avoid stale closure)
     const updateApiTool = (id: string, updates: Partial<APITool>) => {
         setApiTools((prev) =>
-            prev.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+            prev.map((t) => (t.id === id ? { ...t, ...updates } : t))
         );
     };
 
@@ -730,7 +790,7 @@ export function EditAgentModal({
             }
             if (!x402WalletAddress || !x402WalletAddress.startsWith("0x")) {
                 setError(
-                    "Please enter a valid wallet address to receive payments",
+                    "Please enter a valid wallet address to receive payments"
                 );
                 return;
             }
@@ -776,7 +836,7 @@ export function EditAgentModal({
             onClose();
         } catch (err) {
             setError(
-                err instanceof Error ? err.message : "Failed to save changes",
+                err instanceof Error ? err.message : "Failed to save changes"
             );
         } finally {
             setIsSaving(false);
@@ -813,7 +873,7 @@ export function EditAgentModal({
         if (hasUnsavedChanges) {
             if (
                 confirm(
-                    "You have unsaved changes. Are you sure you want to close? All changes will be lost.",
+                    "You have unsaved changes. Are you sure you want to close? All changes will be lost."
                 )
             ) {
                 onClose();
@@ -985,11 +1045,11 @@ export function EditAgentModal({
 
                                                             if (
                                                                 !file.type.startsWith(
-                                                                    "image/",
+                                                                    "image/"
                                                                 )
                                                             ) {
                                                                 setError(
-                                                                    "Please select an image file",
+                                                                    "Please select an image file"
                                                                 );
                                                                 return;
                                                             }
@@ -998,13 +1058,13 @@ export function EditAgentModal({
                                                                 5 * 1024 * 1024
                                                             ) {
                                                                 setError(
-                                                                    "Image must be less than 5MB",
+                                                                    "Image must be less than 5MB"
                                                                 );
                                                                 return;
                                                             }
 
                                                             setIsUploadingAvatar(
-                                                                true,
+                                                                true
                                                             );
                                                             setError(null);
 
@@ -1013,7 +1073,7 @@ export function EditAgentModal({
                                                                 const resizedBlob =
                                                                     await resizeImageForAvatar(
                                                                         file,
-                                                                        1024,
+                                                                        1024
                                                                     );
                                                                 const resizedFile =
                                                                     new File(
@@ -1023,14 +1083,14 @@ export function EditAgentModal({
                                                                         "avatar.jpg",
                                                                         {
                                                                             type: "image/jpeg",
-                                                                        },
+                                                                        }
                                                                     );
 
                                                                 const formData =
                                                                     new FormData();
                                                                 formData.append(
                                                                     "file",
-                                                                    resizedFile,
+                                                                    resizedFile
                                                                 );
 
                                                                 const res =
@@ -1039,7 +1099,7 @@ export function EditAgentModal({
                                                                         {
                                                                             method: "POST",
                                                                             body: formData,
-                                                                        },
+                                                                        }
                                                                     );
 
                                                                 if (!res.ok) {
@@ -1047,25 +1107,25 @@ export function EditAgentModal({
                                                                         await res.json();
                                                                     throw new Error(
                                                                         data.error ||
-                                                                            "Failed to upload",
+                                                                            "Failed to upload"
                                                                     );
                                                                 }
 
                                                                 const { url } =
                                                                     await res.json();
                                                                 setAvatarUrl(
-                                                                    url,
+                                                                    url
                                                                 );
                                                             } catch (err) {
                                                                 setError(
                                                                     err instanceof
                                                                         Error
                                                                         ? err.message
-                                                                        : "Upload failed",
+                                                                        : "Upload failed"
                                                                 );
                                                             } finally {
                                                                 setIsUploadingAvatar(
-                                                                    false,
+                                                                    false
                                                                 );
                                                                 e.target.value =
                                                                     "";
@@ -1105,8 +1165,8 @@ export function EditAgentModal({
                                                         !avatarUrl
                                                             ? "bg-purple-500/30 border-2 border-purple-500 scale-110"
                                                             : emoji === e
-                                                              ? "bg-purple-500/20 border border-purple-500/50"
-                                                              : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
+                                                            ? "bg-purple-500/20 border border-purple-500/50"
+                                                            : "bg-zinc-800 border border-zinc-700 hover:border-zinc-600"
                                                     }`}
                                                 >
                                                     {e}
@@ -1139,11 +1199,11 @@ export function EditAgentModal({
                                             onClick={() => {
                                                 const el =
                                                     document.getElementById(
-                                                        "system-instructions-section",
+                                                        "system-instructions-section"
                                                     );
                                                 if (el)
                                                     el.classList.toggle(
-                                                        "hidden",
+                                                        "hidden"
                                                     );
                                             }}
                                             className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-zinc-200 mb-2"
@@ -1201,7 +1261,7 @@ export function EditAgentModal({
                                                 value={systemInstructions}
                                                 onChange={(e) =>
                                                     setSystemInstructions(
-                                                        e.target.value,
+                                                        e.target.value
                                                     )
                                                 }
                                                 maxLength={4000}
@@ -1228,7 +1288,11 @@ When users ask about X, prioritize results from source Y...`}
                                             Visibility
                                         </label>
                                         <div
-                                            className={`grid gap-2 ${isAdmin ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}
+                                            className={`grid gap-2 ${
+                                                isAdmin
+                                                    ? "grid-cols-2 sm:grid-cols-4"
+                                                    : "grid-cols-3"
+                                            }`}
                                         >
                                             {[
                                                 {
@@ -1256,7 +1320,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     key={opt.value}
                                                     onClick={() =>
                                                         setVisibility(
-                                                            opt.value as typeof visibility,
+                                                            opt.value as typeof visibility
                                                         )
                                                     }
                                                     className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -1306,7 +1370,7 @@ When users ask about X, prioritize results from source Y...`}
                                                             <button
                                                                 onClick={() =>
                                                                     removeTag(
-                                                                        tag,
+                                                                        tag
                                                                     )
                                                                 }
                                                                 className="hover:text-purple-300"
@@ -1323,8 +1387,8 @@ When users ask about X, prioritize results from source Y...`}
                                                         setTagInput(
                                                             e.target.value.slice(
                                                                 0,
-                                                                20,
-                                                            ),
+                                                                20
+                                                            )
                                                         )
                                                     }
                                                     onKeyDown={handleTagKeyDown}
@@ -1340,7 +1404,7 @@ When users ask about X, prioritize results from source Y...`}
                                             {/* Tag suggestions */}
                                             <div className="flex flex-wrap gap-1 mt-2">
                                                 {TAG_SUGGESTIONS.filter(
-                                                    (t) => !tags.includes(t),
+                                                    (t) => !tags.includes(t)
                                                 )
                                                     .slice(0, 8)
                                                     .map((suggestion) => (
@@ -1348,7 +1412,7 @@ When users ask about X, prioritize results from source Y...`}
                                                             key={suggestion}
                                                             onClick={() =>
                                                                 addTag(
-                                                                    suggestion,
+                                                                    suggestion
                                                                 )
                                                             }
                                                             disabled={
@@ -1404,14 +1468,16 @@ When users ask about X, prioritize results from source Y...`}
                                                                 ] =
                                                                     e.target.value;
                                                                 setSuggestedQuestions(
-                                                                    newQuestions,
+                                                                    newQuestions
                                                                 );
                                                             }}
-                                                            placeholder={`Question ${idx + 1} (e.g., "What can you help me with?")`}
+                                                            placeholder={`Question ${
+                                                                idx + 1
+                                                            } (e.g., "What can you help me with?")`}
                                                             maxLength={100}
                                                             className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm placeholder-zinc-500 focus:outline-none focus:border-orange-500 transition-colors"
                                                         />
-                                                    ),
+                                                    )
                                                 )}
                                             </div>
                                         </div>
@@ -1542,6 +1608,9 @@ When users ask about X, prioritize results from source Y...`}
                                                 availableChannels={
                                                     availableChannels
                                                 }
+                                                availableLocationChats={
+                                                    availableLocationChats
+                                                }
                                                 isSavingChannels={
                                                     isSavingChannels
                                                 }
@@ -1573,7 +1642,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         type="button"
                                                         onClick={() =>
                                                             setShowEventsModal(
-                                                                true,
+                                                                true
                                                             )
                                                         }
                                                         className="px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg text-sm font-medium transition-colors"
@@ -1615,7 +1684,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     onClick={() => {
                                                         const url = `${window.location.origin}/agent/${agent.id}`;
                                                         navigator.clipboard.writeText(
-                                                            url,
+                                                            url
                                                         );
                                                     }}
                                                     className="px-3 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded text-xs"
@@ -1666,7 +1735,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         type="button"
                                                         onClick={() =>
                                                             setX402PricingMode(
-                                                                "global",
+                                                                "global"
                                                             )
                                                         }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
@@ -1682,7 +1751,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         type="button"
                                                         onClick={() =>
                                                             setX402PricingMode(
-                                                                "per_tool",
+                                                                "per_tool"
                                                             )
                                                         }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
@@ -1730,11 +1799,11 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 e
                                                                                     .target
                                                                                     .value ||
-                                                                                    "0.01",
+                                                                                    "0.01"
                                                                             ) *
-                                                                                100,
-                                                                        ),
-                                                                    ),
+                                                                                100
+                                                                        )
+                                                                    )
                                                                 )
                                                             }
                                                             className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
@@ -1756,7 +1825,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         type="button"
                                                         onClick={() =>
                                                             setX402Network(
-                                                                "base",
+                                                                "base"
                                                             )
                                                         }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium ${
@@ -1772,7 +1841,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         type="button"
                                                         onClick={() =>
                                                             setX402Network(
-                                                                "base-sepolia",
+                                                                "base-sepolia"
                                                             )
                                                         }
                                                         className={`px-3 py-2 rounded-lg text-xs font-medium ${
@@ -1797,7 +1866,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     value={x402WalletAddress}
                                                     onChange={(e) =>
                                                         setX402WalletAddress(
-                                                            e.target.value,
+                                                            e.target.value
                                                         )
                                                     }
                                                     placeholder="0x..."
@@ -1882,8 +1951,7 @@ When users ask about X, prioritize results from source Y...`}
                                             <button
                                                 onClick={() =>
                                                     navigator.clipboard.writeText(
-                                                        embedData.endpoints
-                                                            .chat,
+                                                        embedData.endpoints.chat
                                                     )
                                                 }
                                                 className="mt-2 w-full py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg text-xs text-white"
@@ -1923,7 +1991,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         server.name
                                                                     }
                                                                     onChange={(
-                                                                        e,
+                                                                        e
                                                                     ) =>
                                                                         updateMcpServer(
                                                                             server.id,
@@ -1931,7 +1999,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 name: e
                                                                                     .target
                                                                                     .value,
-                                                                            },
+                                                                            }
                                                                         )
                                                                     }
                                                                     className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-500 text-sm font-medium text-white focus:outline-none px-0 py-0.5"
@@ -1943,7 +2011,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         server.url
                                                                     }
                                                                     onChange={(
-                                                                        e,
+                                                                        e
                                                                     ) =>
                                                                         updateMcpServer(
                                                                             server.id,
@@ -1951,7 +2019,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 url: e
                                                                                     .target
                                                                                     .value,
-                                                                            },
+                                                                            }
                                                                         )
                                                                     }
                                                                     className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-purple-500 text-xs text-zinc-400 font-mono focus:outline-none px-0 py-0.5"
@@ -1962,7 +2030,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         <button
                                                             onClick={() =>
                                                                 removeMcpServer(
-                                                                    server.id,
+                                                                    server.id
                                                                 )
                                                             }
                                                             className="text-zinc-500 hover:text-red-400 text-sm shrink-0 ml-2"
@@ -1987,7 +2055,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 .target
                                                                                 .value ||
                                                                             undefined,
-                                                                    },
+                                                                    }
                                                                 )
                                                             }
                                                             placeholder="Instructions for agent (e.g. 'Use this MCP server to search documentation when the user asks about API references')"
@@ -2002,7 +2070,7 @@ When users ask about X, prioritize results from source Y...`}
                                                             <input
                                                                 type={
                                                                     visibleApiKeys.has(
-                                                                        `mcp-${server.id}`,
+                                                                        `mcp-${server.id}`
                                                                     )
                                                                         ? "text"
                                                                         : "password"
@@ -2020,7 +2088,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     .target
                                                                                     .value ||
                                                                                 undefined,
-                                                                        },
+                                                                        }
                                                                     )
                                                                 }
                                                                 placeholder="API Key (optional)"
@@ -2033,20 +2101,20 @@ When users ask about X, prioritize results from source Y...`}
                                                                 type="button"
                                                                 onClick={() =>
                                                                     toggleApiKeyVisibility(
-                                                                        `mcp-${server.id}`,
+                                                                        `mcp-${server.id}`
                                                                     )
                                                                 }
                                                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
                                                                 title={
                                                                     visibleApiKeys.has(
-                                                                        `mcp-${server.id}`,
+                                                                        `mcp-${server.id}`
                                                                     )
                                                                         ? "Hide"
                                                                         : "Show"
                                                                 }
                                                             >
                                                                 {visibleApiKeys.has(
-                                                                    `mcp-${server.id}`,
+                                                                    `mcp-${server.id}`
                                                                 )
                                                                     ? "🙈"
                                                                     : "👁️"}
@@ -2060,7 +2128,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                     placeholder="Header name (e.g. X-API-Key)"
                                                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
                                                                     onKeyDown={(
-                                                                        e,
+                                                                        e
                                                                     ) => {
                                                                         if (
                                                                             e.key ===
@@ -2082,7 +2150,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 {
                                                                                     headers:
                                                                                         newHeaders,
-                                                                                },
+                                                                                }
                                                                             );
                                                                             e.currentTarget.value =
                                                                                 "";
@@ -2092,7 +2160,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                 <button
                                                                     type="button"
                                                                     onClick={(
-                                                                        e,
+                                                                        e
                                                                     ) => {
                                                                         const input =
                                                                             e
@@ -2116,7 +2184,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 {
                                                                                     headers:
                                                                                         newHeaders,
-                                                                                },
+                                                                                }
                                                                             );
                                                                             input.value =
                                                                                 "";
@@ -2141,14 +2209,14 @@ When users ask about X, prioritize results from source Y...`}
                                                                 Headers{" "}
                                                                 {server.headers &&
                                                                     Object.keys(
-                                                                        server.headers,
+                                                                        server.headers
                                                                     ).length >
                                                                         0 && (
                                                                         <span className="text-purple-400">
                                                                             (
                                                                             {
                                                                                 Object.keys(
-                                                                                    server.headers,
+                                                                                    server.headers
                                                                                 )
                                                                                     .length
                                                                             }
@@ -2160,14 +2228,14 @@ When users ask about X, prioritize results from source Y...`}
                                                                 {/* Existing headers */}
                                                                 {server.headers &&
                                                                     Object.entries(
-                                                                        server.headers,
+                                                                        server.headers
                                                                     ).map(
                                                                         (
                                                                             [
                                                                                 key,
                                                                                 value,
                                                                             ],
-                                                                            idx,
+                                                                            idx
                                                                         ) => (
                                                                             <div
                                                                                 key={
@@ -2181,7 +2249,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                         key
                                                                                     }
                                                                                     onChange={(
-                                                                                        e,
+                                                                                        e
                                                                                     ) => {
                                                                                         const newHeaders =
                                                                                             {
@@ -2207,13 +2275,13 @@ When users ask about X, prioritize results from source Y...`}
                                                                                             {
                                                                                                 headers:
                                                                                                     Object.keys(
-                                                                                                        newHeaders,
+                                                                                                        newHeaders
                                                                                                     )
                                                                                                         .length >
                                                                                                     0
                                                                                                         ? newHeaders
                                                                                                         : undefined,
-                                                                                            },
+                                                                                            }
                                                                                         );
                                                                                     }}
                                                                                     placeholder="Header name"
@@ -2228,7 +2296,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                         value
                                                                                     }
                                                                                     onChange={(
-                                                                                        e,
+                                                                                        e
                                                                                     ) => {
                                                                                         const newHeaders =
                                                                                             {
@@ -2242,7 +2310,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                             {
                                                                                                 headers:
                                                                                                     newHeaders,
-                                                                                            },
+                                                                                            }
                                                                                         );
                                                                                     }}
                                                                                     placeholder="Value"
@@ -2263,13 +2331,13 @@ When users ask about X, prioritize results from source Y...`}
                                                                                             {
                                                                                                 headers:
                                                                                                     Object.keys(
-                                                                                                        newHeaders,
+                                                                                                        newHeaders
                                                                                                     )
                                                                                                         .length >
                                                                                                     0
                                                                                                         ? newHeaders
                                                                                                         : undefined,
-                                                                                            },
+                                                                                            }
                                                                                         );
                                                                                     }}
                                                                                     className="text-zinc-500 hover:text-red-400 text-xs px-1"
@@ -2277,7 +2345,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     ✕
                                                                                 </button>
                                                                             </div>
-                                                                        ),
+                                                                        )
                                                                     )}
                                                                 {/* Add new header */}
                                                                 <button
@@ -2294,7 +2362,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             {
                                                                                 headers:
                                                                                     newHeaders,
-                                                                            },
+                                                                            }
                                                                         );
                                                                     }}
                                                                     className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-purple-500 hover:text-purple-400 text-xs transition-colors"
@@ -2318,7 +2386,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             false
                                                                         }
                                                                         onChange={(
-                                                                            e,
+                                                                            e
                                                                         ) =>
                                                                             updateMcpServer(
                                                                                 server.id,
@@ -2327,7 +2395,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                         e
                                                                                             .target
                                                                                             .checked,
-                                                                                },
+                                                                                }
                                                                             )
                                                                         }
                                                                         className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
@@ -2351,10 +2419,10 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     1) /
                                                                                 100
                                                                             ).toFixed(
-                                                                                2,
+                                                                                2
                                                                             )}
                                                                             onChange={(
-                                                                                e,
+                                                                                e
                                                                             ) =>
                                                                                 updateMcpServer(
                                                                                     server.id,
@@ -2367,12 +2435,12 @@ When users ask about X, prioritize results from source Y...`}
                                                                                                         e
                                                                                                             .target
                                                                                                             .value ||
-                                                                                                            "0.01",
+                                                                                                            "0.01"
                                                                                                     ) *
-                                                                                                        100,
-                                                                                                ),
+                                                                                                        100
+                                                                                                )
                                                                                             ),
-                                                                                    },
+                                                                                    }
                                                                                 )
                                                                             }
                                                                             className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
@@ -2421,8 +2489,8 @@ When users ask about X, prioritize results from source Y...`}
                                                             !mcpServers.some(
                                                                 (m) =>
                                                                     m.id ===
-                                                                    s.id,
-                                                            ),
+                                                                    s.id
+                                                            )
                                                     )
                                                         .slice(0, 4)
                                                         .map((preset) => (
@@ -2430,7 +2498,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                 key={preset.id}
                                                                 onClick={() =>
                                                                     addMcpServer(
-                                                                        preset,
+                                                                        preset
                                                                     )
                                                                 }
                                                                 className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 rounded text-xs text-white"
@@ -2451,7 +2519,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     value={newMcpName}
                                                     onChange={(e) =>
                                                         setNewMcpName(
-                                                            e.target.value,
+                                                            e.target.value
                                                         )
                                                     }
                                                     placeholder="Server name"
@@ -2462,7 +2530,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     value={newMcpUrl}
                                                     onChange={(e) =>
                                                         setNewMcpUrl(
-                                                            e.target.value,
+                                                            e.target.value
                                                         )
                                                     }
                                                     placeholder="Server URL or command"
@@ -2473,7 +2541,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     value={newMcpApiKey}
                                                     onChange={(e) =>
                                                         setNewMcpApiKey(
-                                                            e.target.value,
+                                                            e.target.value
                                                         )
                                                     }
                                                     placeholder="API Key (optional)"
@@ -2486,7 +2554,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     value={newMcpDescription}
                                                     onChange={(e) =>
                                                         setNewMcpDescription(
-                                                            e.target.value,
+                                                            e.target.value
                                                         )
                                                     }
                                                     placeholder="Instructions for agent (when should it use this server?)"
@@ -2501,11 +2569,11 @@ When users ask about X, prioritize results from source Y...`}
                                                     </p>
                                                     <div className="space-y-2">
                                                         {Object.entries(
-                                                            newMcpHeaders,
+                                                            newMcpHeaders
                                                         ).map(
                                                             (
                                                                 [key, value],
-                                                                idx,
+                                                                idx
                                                             ) => (
                                                                 <div
                                                                     key={idx}
@@ -2517,7 +2585,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             key
                                                                         }
                                                                         onChange={(
-                                                                            e,
+                                                                            e
                                                                         ) => {
                                                                             const newHeaders =
                                                                                 {
@@ -2535,7 +2603,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             ] =
                                                                                 oldValue;
                                                                             setNewMcpHeaders(
-                                                                                newHeaders,
+                                                                                newHeaders
                                                                             );
                                                                         }}
                                                                         placeholder="Header name"
@@ -2550,7 +2618,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             value
                                                                         }
                                                                         onChange={(
-                                                                            e,
+                                                                            e
                                                                         ) => {
                                                                             setNewMcpHeaders(
                                                                                 {
@@ -2558,7 +2626,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     [key]: e
                                                                                         .target
                                                                                         .value,
-                                                                                },
+                                                                                }
                                                                             );
                                                                         }}
                                                                         placeholder="Value"
@@ -2575,7 +2643,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 key
                                                                             ];
                                                                             setNewMcpHeaders(
-                                                                                newHeaders,
+                                                                                newHeaders
                                                                             );
                                                                         }}
                                                                         className="text-zinc-500 hover:text-red-400 text-xs px-1"
@@ -2583,7 +2651,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         ✕
                                                                     </button>
                                                                 </div>
-                                                            ),
+                                                            )
                                                         )}
                                                         <button
                                                             type="button"
@@ -2592,7 +2660,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                     {
                                                                         ...newMcpHeaders,
                                                                         "": "",
-                                                                    },
+                                                                    }
                                                                 )
                                                             }
                                                             className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-purple-500 hover:text-purple-400 text-xs transition-colors"
@@ -2654,7 +2722,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 | "POST"
                                                                                 | "PUT"
                                                                                 | "DELETE",
-                                                                        },
+                                                                        }
                                                                     )
                                                                 }
                                                                 className={`text-xs font-mono px-2 py-0.5 rounded cursor-pointer focus:outline-none ${
@@ -2662,12 +2730,12 @@ When users ask about X, prioritize results from source Y...`}
                                                                     "GET"
                                                                         ? "bg-green-500/20 text-green-400"
                                                                         : tool.method ===
-                                                                            "POST"
-                                                                          ? "bg-blue-500/20 text-blue-400"
-                                                                          : tool.method ===
-                                                                              "PUT"
-                                                                            ? "bg-yellow-500/20 text-yellow-400"
-                                                                            : "bg-red-500/20 text-red-400"
+                                                                          "POST"
+                                                                        ? "bg-blue-500/20 text-blue-400"
+                                                                        : tool.method ===
+                                                                          "PUT"
+                                                                        ? "bg-yellow-500/20 text-yellow-400"
+                                                                        : "bg-red-500/20 text-red-400"
                                                                 }`}
                                                             >
                                                                 <option value="GET">
@@ -2691,18 +2759,18 @@ When users ask about X, prioritize results from source Y...`}
                                                                         "graphql"
                                                                             ? "bg-pink-500/20 text-pink-400"
                                                                             : tool.apiType ===
-                                                                                "openapi"
-                                                                              ? "bg-purple-500/20 text-purple-400"
-                                                                              : "bg-zinc-600/20 text-zinc-400"
+                                                                              "openapi"
+                                                                            ? "bg-purple-500/20 text-purple-400"
+                                                                            : "bg-zinc-600/20 text-zinc-400"
                                                                     }`}
                                                                 >
                                                                     {tool.apiType ===
                                                                     "graphql"
                                                                         ? "GraphQL"
                                                                         : tool.apiType ===
-                                                                            "openapi"
-                                                                          ? "OpenAPI"
-                                                                          : "REST"}
+                                                                          "openapi"
+                                                                        ? "OpenAPI"
+                                                                        : "REST"}
                                                                 </span>
                                                             )}
                                                             {/* Detect/Fetch Schema Button */}
@@ -2712,7 +2780,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         tool.id,
                                                                         tool.url,
                                                                         tool.apiKey,
-                                                                        tool.headers,
+                                                                        tool.headers
                                                                     )
                                                                 }
                                                                 disabled={
@@ -2730,8 +2798,8 @@ When users ask about X, prioritize results from source Y...`}
                                                                 tool.id
                                                                     ? "..."
                                                                     : tool.schema
-                                                                      ? "🔄"
-                                                                      : "🔍"}
+                                                                    ? "🔄"
+                                                                    : "🔍"}
                                                             </button>
                                                             <div className="flex-1 min-w-0">
                                                                 <input
@@ -2740,7 +2808,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         tool.name
                                                                     }
                                                                     onChange={(
-                                                                        e,
+                                                                        e
                                                                     ) =>
                                                                         updateApiTool(
                                                                             tool.id,
@@ -2748,7 +2816,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 name: e
                                                                                     .target
                                                                                     .value,
-                                                                            },
+                                                                            }
                                                                         )
                                                                     }
                                                                     className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-500 text-sm font-medium text-white focus:outline-none px-0 py-0.5"
@@ -2760,7 +2828,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         tool.url
                                                                     }
                                                                     onChange={(
-                                                                        e,
+                                                                        e
                                                                     ) =>
                                                                         updateApiTool(
                                                                             tool.id,
@@ -2768,7 +2836,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 url: e
                                                                                     .target
                                                                                     .value,
-                                                                            },
+                                                                            }
                                                                         )
                                                                     }
                                                                     className="w-full bg-transparent border-b border-transparent hover:border-zinc-600 focus:border-cyan-500 text-xs text-zinc-400 font-mono focus:outline-none px-0 py-0.5"
@@ -2779,7 +2847,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         <button
                                                             onClick={() =>
                                                                 removeApiTool(
-                                                                    tool.id,
+                                                                    tool.id
                                                                 )
                                                             }
                                                             className="text-zinc-500 hover:text-red-400 text-sm shrink-0 ml-2"
@@ -2802,7 +2870,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             tool.id,
                                                                             {
                                                                                 schema: undefined,
-                                                                            },
+                                                                            }
                                                                         )
                                                                     }
                                                                     className="text-xs text-zinc-500 hover:text-zinc-300"
@@ -2816,7 +2884,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                 500
                                                                     ? tool.schema.substring(
                                                                           0,
-                                                                          500,
+                                                                          500
                                                                       ) + "..."
                                                                     : tool.schema}
                                                             </pre>
@@ -2839,7 +2907,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 .target
                                                                                 .value ||
                                                                             undefined,
-                                                                    },
+                                                                    }
                                                                 )
                                                             }
                                                             placeholder="Instructions for agent (e.g. 'Call this API to get weather data when the user asks about the forecast')"
@@ -2854,7 +2922,7 @@ When users ask about X, prioritize results from source Y...`}
                                                             <input
                                                                 type={
                                                                     visibleApiKeys.has(
-                                                                        `api-${tool.id}`,
+                                                                        `api-${tool.id}`
                                                                     )
                                                                         ? "text"
                                                                         : "password"
@@ -2872,7 +2940,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     .target
                                                                                     .value ||
                                                                                 undefined,
-                                                                        },
+                                                                        }
                                                                     )
                                                                 }
                                                                 placeholder="API Key (optional)"
@@ -2885,20 +2953,20 @@ When users ask about X, prioritize results from source Y...`}
                                                                 type="button"
                                                                 onClick={() =>
                                                                     toggleApiKeyVisibility(
-                                                                        `api-${tool.id}`,
+                                                                        `api-${tool.id}`
                                                                     )
                                                                 }
                                                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 text-xs"
                                                                 title={
                                                                     visibleApiKeys.has(
-                                                                        `api-${tool.id}`,
+                                                                        `api-${tool.id}`
                                                                     )
                                                                         ? "Hide"
                                                                         : "Show"
                                                                 }
                                                             >
                                                                 {visibleApiKeys.has(
-                                                                    `api-${tool.id}`,
+                                                                    `api-${tool.id}`
                                                                 )
                                                                     ? "🙈"
                                                                     : "👁️"}
@@ -2912,7 +2980,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                     placeholder="Header name (e.g. Authorization)"
                                                                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
                                                                     onKeyDown={(
-                                                                        e,
+                                                                        e
                                                                     ) => {
                                                                         if (
                                                                             e.key ===
@@ -2934,7 +3002,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 {
                                                                                     headers:
                                                                                         newHeaders,
-                                                                                },
+                                                                                }
                                                                             );
                                                                             e.currentTarget.value =
                                                                                 "";
@@ -2944,7 +3012,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                 <button
                                                                     type="button"
                                                                     onClick={(
-                                                                        e,
+                                                                        e
                                                                     ) => {
                                                                         const input =
                                                                             e
@@ -2968,7 +3036,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 {
                                                                                     headers:
                                                                                         newHeaders,
-                                                                                },
+                                                                                }
                                                                             );
                                                                             input.value =
                                                                                 "";
@@ -2993,14 +3061,14 @@ When users ask about X, prioritize results from source Y...`}
                                                                 Headers{" "}
                                                                 {tool.headers &&
                                                                     Object.keys(
-                                                                        tool.headers,
+                                                                        tool.headers
                                                                     ).length >
                                                                         0 && (
                                                                         <span className="text-cyan-400">
                                                                             (
                                                                             {
                                                                                 Object.keys(
-                                                                                    tool.headers,
+                                                                                    tool.headers
                                                                                 )
                                                                                     .length
                                                                             }
@@ -3012,14 +3080,14 @@ When users ask about X, prioritize results from source Y...`}
                                                                 {/* Existing headers */}
                                                                 {tool.headers &&
                                                                     Object.entries(
-                                                                        tool.headers,
+                                                                        tool.headers
                                                                     ).map(
                                                                         (
                                                                             [
                                                                                 key,
                                                                                 value,
                                                                             ],
-                                                                            idx,
+                                                                            idx
                                                                         ) => (
                                                                             <div
                                                                                 key={
@@ -3033,7 +3101,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                         key
                                                                                     }
                                                                                     onChange={(
-                                                                                        e,
+                                                                                        e
                                                                                     ) => {
                                                                                         const newHeaders =
                                                                                             {
@@ -3059,13 +3127,13 @@ When users ask about X, prioritize results from source Y...`}
                                                                                             {
                                                                                                 headers:
                                                                                                     Object.keys(
-                                                                                                        newHeaders,
+                                                                                                        newHeaders
                                                                                                     )
                                                                                                         .length >
                                                                                                     0
                                                                                                         ? newHeaders
                                                                                                         : undefined,
-                                                                                            },
+                                                                                            }
                                                                                         );
                                                                                     }}
                                                                                     placeholder="Header name"
@@ -3080,7 +3148,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                         value
                                                                                     }
                                                                                     onChange={(
-                                                                                        e,
+                                                                                        e
                                                                                     ) => {
                                                                                         const newHeaders =
                                                                                             {
@@ -3094,7 +3162,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                             {
                                                                                                 headers:
                                                                                                     newHeaders,
-                                                                                            },
+                                                                                            }
                                                                                         );
                                                                                     }}
                                                                                     placeholder="Value"
@@ -3115,13 +3183,13 @@ When users ask about X, prioritize results from source Y...`}
                                                                                             {
                                                                                                 headers:
                                                                                                     Object.keys(
-                                                                                                        newHeaders,
+                                                                                                        newHeaders
                                                                                                     )
                                                                                                         .length >
                                                                                                     0
                                                                                                         ? newHeaders
                                                                                                         : undefined,
-                                                                                            },
+                                                                                            }
                                                                                         );
                                                                                     }}
                                                                                     className="text-zinc-500 hover:text-red-400 text-xs px-1"
@@ -3129,7 +3197,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     ✕
                                                                                 </button>
                                                                             </div>
-                                                                        ),
+                                                                        )
                                                                     )}
                                                                 {/* Add new header */}
                                                                 <button
@@ -3146,7 +3214,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             {
                                                                                 headers:
                                                                                     newHeaders,
-                                                                            },
+                                                                            }
                                                                         );
                                                                     }}
                                                                     className="w-full py-1.5 border border-dashed border-zinc-700 rounded text-zinc-500 hover:border-cyan-500 hover:text-cyan-400 text-xs transition-colors"
@@ -3170,7 +3238,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             false
                                                                         }
                                                                         onChange={(
-                                                                            e,
+                                                                            e
                                                                         ) =>
                                                                             updateApiTool(
                                                                                 tool.id,
@@ -3179,7 +3247,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                         e
                                                                                             .target
                                                                                             .checked,
-                                                                                },
+                                                                                }
                                                                             )
                                                                         }
                                                                         className="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500"
@@ -3203,10 +3271,10 @@ When users ask about X, prioritize results from source Y...`}
                                                                                     1) /
                                                                                 100
                                                                             ).toFixed(
-                                                                                2,
+                                                                                2
                                                                             )}
                                                                             onChange={(
-                                                                                e,
+                                                                                e
                                                                             ) =>
                                                                                 updateApiTool(
                                                                                     tool.id,
@@ -3219,12 +3287,12 @@ When users ask about X, prioritize results from source Y...`}
                                                                                                         e
                                                                                                             .target
                                                                                                             .value ||
-                                                                                                            "0.01",
+                                                                                                            "0.01"
                                                                                                     ) *
-                                                                                                        100,
-                                                                                                ),
+                                                                                                        100
+                                                                                                )
                                                                                             ),
-                                                                                    },
+                                                                                    }
                                                                                 )
                                                                             }
                                                                             className="w-16 bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-emerald-500"
@@ -3268,7 +3336,7 @@ When users ask about X, prioritize results from source Y...`}
                                                 value={newApiName}
                                                 onChange={(e) =>
                                                     setNewApiName(
-                                                        e.target.value,
+                                                        e.target.value
                                                     )
                                                 }
                                                 placeholder="API name (e.g., Weather API)"
@@ -3282,7 +3350,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     onChange={(e) =>
                                                         setNewApiMethod(
                                                             e.target
-                                                                .value as typeof newApiMethod,
+                                                                .value as typeof newApiMethod
                                                         )
                                                     }
                                                     className="bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500"
@@ -3305,7 +3373,7 @@ When users ask about X, prioritize results from source Y...`}
                                                     value={newApiUrl}
                                                     onChange={(e) =>
                                                         setNewApiUrl(
-                                                            e.target.value,
+                                                            e.target.value
                                                         )
                                                     }
                                                     placeholder="https://api.example.com/endpoint"
@@ -3318,7 +3386,7 @@ When users ask about X, prioritize results from source Y...`}
                                                 value={newApiDescription}
                                                 onChange={(e) =>
                                                     setNewApiDescription(
-                                                        e.target.value,
+                                                        e.target.value
                                                     )
                                                 }
                                                 placeholder="Instructions for agent (when should it use this API?)"
@@ -3361,7 +3429,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         ...newApiHeaders,
                                                                         [headerName]:
                                                                             newApiKey,
-                                                                    },
+                                                                    }
                                                                 );
                                                                 e.currentTarget.value =
                                                                     "";
@@ -3373,7 +3441,7 @@ When users ask about X, prioritize results from source Y...`}
                                                         onClick={() => {
                                                             const input =
                                                                 document.getElementById(
-                                                                    "new-api-header-name",
+                                                                    "new-api-header-name"
                                                                 ) as HTMLInputElement;
                                                             if (
                                                                 input?.value.trim()
@@ -3385,7 +3453,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         ...newApiHeaders,
                                                                         [headerName]:
                                                                             newApiKey,
-                                                                    },
+                                                                    }
                                                                 );
                                                                 input.value =
                                                                     "";
@@ -3405,7 +3473,7 @@ When users ask about X, prioritize results from source Y...`}
                                                 </p>
                                                 <div className="space-y-2">
                                                     {Object.entries(
-                                                        newApiHeaders,
+                                                        newApiHeaders
                                                     ).map(
                                                         ([key, value], idx) => (
                                                             <div
@@ -3416,7 +3484,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                     type="text"
                                                                     value={key}
                                                                     onChange={(
-                                                                        e,
+                                                                        e
                                                                     ) => {
                                                                         const newHeaders =
                                                                             {
@@ -3434,7 +3502,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         ] =
                                                                             oldValue;
                                                                         setNewApiHeaders(
-                                                                            newHeaders,
+                                                                            newHeaders
                                                                         );
                                                                     }}
                                                                     placeholder="Header name"
@@ -3449,7 +3517,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                         value
                                                                     }
                                                                     onChange={(
-                                                                        e,
+                                                                        e
                                                                     ) => {
                                                                         setNewApiHeaders(
                                                                             {
@@ -3457,7 +3525,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                                 [key]: e
                                                                                     .target
                                                                                     .value,
-                                                                            },
+                                                                            }
                                                                         );
                                                                     }}
                                                                     placeholder="Value"
@@ -3474,7 +3542,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                             key
                                                                         ];
                                                                         setNewApiHeaders(
-                                                                            newHeaders,
+                                                                            newHeaders
                                                                         );
                                                                     }}
                                                                     className="text-zinc-500 hover:text-red-400 text-xs px-1"
@@ -3482,7 +3550,7 @@ When users ask about X, prioritize results from source Y...`}
                                                                     ✕
                                                                 </button>
                                                             </div>
-                                                        ),
+                                                        )
                                                     )}
                                                     <button
                                                         type="button"
@@ -3548,40 +3616,64 @@ When users ask about X, prioritize results from source Y...`}
     );
 }
 
-// Compact Channel Presence section for Official agents
+// Compact Channel Presence section for Official agents (channels, POAP channels, location chats)
 function ChannelPresenceSection({
     channelMemberships,
     availableChannels,
+    availableLocationChats,
     isSavingChannels,
     toggleChannelMembership,
     agentName,
 }: {
-    channelMemberships: { global: boolean; channels: string[] };
-    availableChannels: Array<{ id: string; name: string; emoji: string }>;
+    channelMemberships: {
+        global: boolean;
+        channels: string[];
+        locationChats: string[];
+    };
+    availableChannels: Array<{
+        id: string;
+        name: string;
+        emoji: string;
+        poap_event_id?: number | null;
+        poap_collection_id?: string | null;
+    }>;
+    availableLocationChats: Array<{ id: string; name: string; emoji: string }>;
     isSavingChannels: boolean;
     toggleChannelMembership: (
-        type: "global" | "channel",
-        channelId?: string,
+        type: "global" | "channel" | "location",
+        channelId?: string
     ) => void;
     agentName: string;
 }) {
     const [showChannelPicker, setShowChannelPicker] = useState(false);
+    const [showLocationPicker, setShowLocationPicker] = useState(false);
     const [channelSearch, setChannelSearch] = useState("");
+    const [locationSearch, setLocationSearch] = useState("");
 
-    // Get selected channel names for display
     const selectedChannels = availableChannels.filter((c) =>
-        channelMemberships.channels.includes(c.id),
+        channelMemberships.channels.includes(c.id)
     );
     const unselectedChannels = availableChannels.filter(
-        (c) => !channelMemberships.channels.includes(c.id),
+        (c) => !channelMemberships.channels.includes(c.id)
     );
     const filteredChannels = unselectedChannels.filter((c) =>
-        c.name.toLowerCase().includes(channelSearch.toLowerCase()),
+        c.name.toLowerCase().includes(channelSearch.toLowerCase())
+    );
+
+    const selectedLocations = availableLocationChats.filter((c) =>
+        channelMemberships.locationChats.includes(c.id)
+    );
+    const unselectedLocations = availableLocationChats.filter(
+        (c) => !channelMemberships.locationChats.includes(c.id)
+    );
+    const filteredLocations = unselectedLocations.filter((c) =>
+        c.name.toLowerCase().includes(locationSearch.toLowerCase())
     );
 
     const totalActive =
         (channelMemberships.global ? 1 : 0) +
-        channelMemberships.channels.length;
+        channelMemberships.channels.length +
+        channelMemberships.locationChats.length;
 
     return (
         <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
@@ -3598,7 +3690,7 @@ function ChannelPresenceSection({
                 <span className="text-xs text-zinc-500">
                     {totalActive > 0
                         ? `${totalActive} active`
-                        : "Not in any channels"}
+                        : "Not in any channels or locations"}
                 </span>
             </div>
 
@@ -3633,7 +3725,7 @@ function ChannelPresenceSection({
                     )}
                 </button>
 
-                {/* Selected channel chips */}
+                {/* Selected channel chips (with POAP badge when applicable) */}
                 {selectedChannels.map((channel) => (
                     <button
                         key={channel.id}
@@ -3647,8 +3739,44 @@ function ChannelPresenceSection({
                         <span className="max-w-[80px] truncate">
                             {channel.name}
                         </span>
+                        {(channel.poap_event_id != null ||
+                            channel.poap_collection_id != null) && (
+                            <span className="shrink-0" title="POAP channel">
+                                🎫
+                            </span>
+                        )}
                         <svg
                             className="w-3 h-3 ml-0.5 text-purple-400/70 hover:text-red-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                            />
+                        </svg>
+                    </button>
+                ))}
+
+                {/* Selected location chat chips */}
+                {selectedLocations.map((loc) => (
+                    <button
+                        key={loc.id}
+                        onClick={() =>
+                            toggleChannelMembership("location", loc.id)
+                        }
+                        disabled={isSavingChannels}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 transition-all"
+                    >
+                        <span>{loc.emoji || "📍"}</span>
+                        <span className="max-w-[80px] truncate">
+                            {loc.name}
+                        </span>
+                        <svg
+                            className="w-3 h-3 ml-0.5 text-amber-400/70 hover:text-red-400"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -3725,11 +3853,11 @@ function ChannelPresenceSection({
                                                     onClick={() => {
                                                         toggleChannelMembership(
                                                             "channel",
-                                                            channel.id,
+                                                            channel.id
                                                         );
                                                         setChannelSearch("");
                                                         setShowChannelPicker(
-                                                            false,
+                                                            false
                                                         );
                                                     }}
                                                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
@@ -3737,8 +3865,88 @@ function ChannelPresenceSection({
                                                     <span>
                                                         {channel.emoji || "#"}
                                                     </span>
-                                                    <span className="text-sm text-white truncate">
+                                                    <span className="text-sm text-white truncate flex-1">
                                                         {channel.name}
+                                                    </span>
+                                                    {(channel.poap_event_id !=
+                                                        null ||
+                                                        channel.poap_collection_id !=
+                                                            null) && (
+                                                        <span className="text-xs text-amber-400 shrink-0">
+                                                            🎫
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
+
+                {/* Add location button */}
+                {unselectedLocations.length > 0 && (
+                    <div className="relative">
+                        <button
+                            onClick={() =>
+                                setShowLocationPicker(!showLocationPicker)
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700 border-dashed hover:bg-zinc-700 hover:text-white transition-all"
+                        >
+                            <span>📍</span>
+                            <span>Add location</span>
+                        </button>
+                        {showLocationPicker && (
+                            <>
+                                <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => setShowLocationPicker(false)}
+                                />
+                                <div className="absolute top-full left-0 mt-1 w-56 bg-zinc-800 border border-zinc-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                                    <div className="p-2 border-b border-zinc-700">
+                                        <input
+                                            type="text"
+                                            value={locationSearch}
+                                            onChange={(e) =>
+                                                setLocationSearch(
+                                                    e.target.value
+                                                )
+                                            }
+                                            placeholder="Search locations..."
+                                            className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-700 rounded text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-purple-500"
+                                            autoFocus
+                                        />
+                                    </div>
+                                    <div className="max-h-40 overflow-y-auto">
+                                        {filteredLocations.length === 0 ? (
+                                            <p className="p-3 text-xs text-zinc-500 text-center">
+                                                {locationSearch
+                                                    ? "No locations found"
+                                                    : "No more locations"}
+                                            </p>
+                                        ) : (
+                                            filteredLocations.map((loc) => (
+                                                <button
+                                                    key={loc.id}
+                                                    onClick={() => {
+                                                        toggleChannelMembership(
+                                                            "location",
+                                                            loc.id
+                                                        );
+                                                        setLocationSearch("");
+                                                        setShowLocationPicker(
+                                                            false
+                                                        );
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-700 transition-colors"
+                                                >
+                                                    <span>
+                                                        {loc.emoji || "📍"}
+                                                    </span>
+                                                    <span className="text-sm text-white truncate">
+                                                        {loc.name}
                                                     </span>
                                                 </button>
                                             ))
@@ -3758,7 +3966,7 @@ function ChannelPresenceSection({
                     <code className="px-1 py-0.5 bg-zinc-800 rounded text-purple-400">
                         {agentName || "Agent"}
                     </code>{" "}
-                    in these channels
+                    in these channels and location chats
                 </p>
             )}
         </div>
@@ -3785,10 +3993,10 @@ function CapabilityToggle({
         color === "emerald"
             ? "bg-emerald-500"
             : color === "cyan"
-              ? "bg-cyan-500"
-              : color === "orange"
-                ? "bg-orange-500"
-                : "bg-purple-500";
+            ? "bg-cyan-500"
+            : color === "orange"
+            ? "bg-orange-500"
+            : "bg-purple-500";
 
     return (
         <div
@@ -3803,10 +4011,14 @@ function CapabilityToggle({
                 </div>
             </div>
             <div
-                className={`w-11 h-6 rounded-full transition-colors relative ${enabled ? colorClass : "bg-zinc-600"}`}
+                className={`w-11 h-6 rounded-full transition-colors relative ${
+                    enabled ? colorClass : "bg-zinc-600"
+                }`}
             >
                 <div
-                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${enabled ? "left-6" : "left-1"}`}
+                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
+                        enabled ? "left-6" : "left-1"
+                    }`}
                 />
             </div>
         </div>

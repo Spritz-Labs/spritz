@@ -2,19 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-// GET: Get channels an agent is in
+// GET: Get channels and location chats an agent is in
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 }
+        );
     }
 
     try {
@@ -22,7 +26,8 @@ export async function GET(
 
         const { data: memberships, error } = await supabase
             .from("shout_agent_channel_memberships")
-            .select(`
+            .select(
+                `
                 id,
                 channel_type,
                 channel_id,
@@ -32,18 +37,78 @@ export async function GET(
                     name,
                     emoji
                 )
-            `)
+            `
+            )
             .eq("agent_id", id);
 
         if (error) {
-            console.error("[Agent Channels] Error fetching memberships:", error);
-            return NextResponse.json({ error: "Failed to fetch memberships" }, { status: 500 });
+            console.error(
+                "[Agent Channels] Error fetching memberships:",
+                error
+            );
+            return NextResponse.json(
+                { error: "Failed to fetch memberships" },
+                { status: 500 }
+            );
         }
 
-        return NextResponse.json({ memberships: memberships || [] });
+        const list = memberships || [];
+        const locationIds = list
+            .filter(
+                (m: { channel_type: string; channel_id: string }) =>
+                    m.channel_type === "location" && m.channel_id
+            )
+            .map((m: { channel_type: string; channel_id: string }) => m.channel_id);
+
+        let locationMap: Record<
+            string,
+            { id: string; name: string; emoji: string }
+        > = {};
+        if (locationIds.length > 0) {
+            const { data: locationChats } = await supabase
+                .from("shout_location_chats")
+                .select("id, name, emoji")
+                .in("id", locationIds);
+            locationMap = (locationChats || []).reduce(
+                (
+                    acc: Record<
+                        string,
+                        { id: string; name: string; emoji: string }
+                    >,
+                    row: { id: string; name: string; emoji: string }
+                ) => {
+                    acc[row.id] = {
+                        id: row.id,
+                        name: row.name,
+                        emoji: row.emoji || "📍",
+                    };
+                    return acc;
+                },
+                {}
+            );
+        }
+
+        const enriched = list.map(
+            (m: {
+                channel_type: string;
+                channel_id: string;
+                [k: string]: unknown;
+            }) => ({
+                ...m,
+                location_chat:
+                    m.channel_type === "location" && m.channel_id
+                        ? locationMap[m.channel_id] ?? null
+                        : null,
+            })
+        );
+
+        return NextResponse.json({ memberships: enriched });
     } catch (error) {
         console.error("[Agent Channels] Error:", error);
-        return NextResponse.json({ error: "Failed to fetch memberships" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch memberships" },
+            { status: 500 }
+        );
     }
 }
 
@@ -53,7 +118,10 @@ export async function POST(
     { params }: { params: Promise<{ id: string }> }
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 }
+        );
     }
 
     try {
@@ -62,15 +130,30 @@ export async function POST(
         const { userAddress, channelType, channelId } = body;
 
         if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+            return NextResponse.json(
+                { error: "User address required" },
+                { status: 400 }
+            );
         }
 
-        if (!channelType || !["global", "channel"].includes(channelType)) {
-            return NextResponse.json({ error: "Invalid channel type" }, { status: 400 });
+        if (
+            !channelType ||
+            !["global", "channel", "location"].includes(channelType)
+        ) {
+            return NextResponse.json(
+                { error: "Invalid channel type" },
+                { status: 400 }
+            );
         }
 
-        if (channelType === "channel" && !channelId) {
-            return NextResponse.json({ error: "Channel ID required for channel type" }, { status: 400 });
+        if (
+            (channelType === "channel" || channelType === "location") &&
+            !channelId
+        ) {
+            return NextResponse.json(
+                { error: "Channel ID / Location chat ID required" },
+                { status: 400 }
+            );
         }
 
         const normalizedAddress = userAddress.toLowerCase();
@@ -83,7 +166,10 @@ export async function POST(
             .single();
 
         if (!adminData) {
-            return NextResponse.json({ error: "Only admins can add agents to channels" }, { status: 403 });
+            return NextResponse.json(
+                { error: "Only admins can add agents to channels" },
+                { status: 403 }
+            );
         }
 
         // Verify agent is official
@@ -94,7 +180,10 @@ export async function POST(
             .single();
 
         if (!agent || agent.visibility !== "official") {
-            return NextResponse.json({ error: "Only Official agents can be added to channels" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Only Official agents can be added to channels" },
+                { status: 400 }
+            );
         }
 
         // Add membership
@@ -111,16 +200,25 @@ export async function POST(
 
         if (error) {
             if (error.code === "23505") {
-                return NextResponse.json({ error: "Agent is already in this channel" }, { status: 400 });
+                return NextResponse.json(
+                    { error: "Agent is already in this channel" },
+                    { status: 400 }
+                );
             }
             console.error("[Agent Channels] Error adding membership:", error);
-            return NextResponse.json({ error: "Failed to add agent to channel" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to add agent to channel" },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({ membership });
     } catch (error) {
         console.error("[Agent Channels] Error:", error);
-        return NextResponse.json({ error: "Failed to add agent to channel" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to add agent to channel" },
+            { status: 500 }
+        );
     }
 }
 
@@ -130,7 +228,10 @@ export async function DELETE(
     { params }: { params: Promise<{ id: string }> }
 ) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 }
+        );
     }
 
     try {
@@ -141,11 +242,17 @@ export async function DELETE(
         const channelId = searchParams.get("channelId");
 
         if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+            return NextResponse.json(
+                { error: "User address required" },
+                { status: 400 }
+            );
         }
 
         if (!channelType) {
-            return NextResponse.json({ error: "Channel type required" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Channel type required" },
+                { status: 400 }
+            );
         }
 
         const normalizedAddress = userAddress.toLowerCase();
@@ -158,7 +265,10 @@ export async function DELETE(
             .single();
 
         if (!adminData) {
-            return NextResponse.json({ error: "Only admins can remove agents from channels" }, { status: 403 });
+            return NextResponse.json(
+                { error: "Only admins can remove agents from channels" },
+                { status: 403 }
+            );
         }
 
         // Build delete query
@@ -178,12 +288,18 @@ export async function DELETE(
 
         if (error) {
             console.error("[Agent Channels] Error removing membership:", error);
-            return NextResponse.json({ error: "Failed to remove agent from channel" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to remove agent from channel" },
+                { status: 500 }
+            );
         }
 
         return NextResponse.json({ success: true });
     } catch (error) {
         console.error("[Agent Channels] Error:", error);
-        return NextResponse.json({ error: "Failed to remove agent from channel" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to remove agent from channel" },
+            { status: 500 }
+        );
     }
 }

@@ -180,20 +180,22 @@ async function fetchAndCleanContent(
     };
 }
 
+// Gemini text-embedding-004 supports up to 2048 tokens (~8k chars); keep chunks well under
+const MAX_CHARS_FOR_EMBEDDING = 2000;
+
 // Generate embedding using Gemini
 async function generateEmbedding(text: string): Promise<number[] | null> {
     if (!ai) return null;
-    
+    const toEmbed = text.length > MAX_CHARS_FOR_EMBEDDING ? text.slice(0, MAX_CHARS_FOR_EMBEDDING) : text;
     try {
         const result = await ai.models.embedContent({
             model: "text-embedding-004",
-            contents: text,
+            contents: toEmbed,
         });
-        
         return result.embeddings?.[0]?.values || null;
     } catch (error) {
         console.error("[Indexing] Error generating embedding:", error);
-        return null;
+        throw error; // Re-throw so caller can surface the real reason
     }
 }
 
@@ -287,23 +289,27 @@ export async function POST(
 
             // Generate embeddings and store chunks
             const chunkInserts = [];
+            let firstEmbeddingError: string | null = null;
             for (let i = 0; i < chunks.length; i++) {
                 const chunk = chunks[i];
                 console.log(`[Indexing] Generating embedding for chunk ${i + 1}/${chunks.length}`);
-                
-                const embedding = await generateEmbedding(chunk);
-                
-                if (embedding) {
-                    chunkInserts.push({
-                        knowledge_id: knowledgeId,
-                        agent_id: agentId,
-                        chunk_index: i,
-                        content: chunk,
-                        embedding: `[${embedding.join(",")}]`, // Format for pgvector
-                        token_count: Math.ceil(chunk.length / 4), // Rough estimate
-                    });
+                try {
+                    const embedding = await generateEmbedding(chunk);
+                    if (embedding) {
+                        chunkInserts.push({
+                            knowledge_id: knowledgeId,
+                            agent_id: agentId,
+                            chunk_index: i,
+                            content: chunk,
+                            embedding: `[${embedding.join(",")}]`, // Format for pgvector
+                            token_count: Math.ceil(chunk.length / 4), // Rough estimate
+                        });
+                    }
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    if (!firstEmbeddingError) firstEmbeddingError = msg;
+                    console.error("[Indexing] Embedding failed for chunk", i + 1, err);
                 }
-                
                 // Rate limiting - wait between embeddings
                 if (i < chunks.length - 1) {
                     await new Promise(resolve => setTimeout(resolve, 100));
@@ -311,7 +317,10 @@ export async function POST(
             }
 
             if (chunkInserts.length === 0) {
-                throw new Error("Failed to generate any embeddings");
+                const detail = firstEmbeddingError
+                    ? ` Gemini error: ${firstEmbeddingError}`
+                    : " Check that GOOGLE_GEMINI_API_KEY is set and valid.";
+                throw new Error(`Failed to generate any embeddings.${detail}`);
             }
 
             // Insert chunks in batches
