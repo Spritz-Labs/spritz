@@ -71,6 +71,36 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ success: true, skipped: true, reason: "already sent" });
         }
 
+        // First, add Kevin as a friend so the chat will show up in their list
+        // Check if already friends
+        const { data: existingFriend } = await supabase
+            .from("shout_friends")
+            .select("id")
+            .eq("user_address", normalizedRecipient)
+            .eq("friend_address", KEVIN_ADDRESS)
+            .maybeSingle();
+
+        if (!existingFriend) {
+            // Add bidirectional friendship (both directions needed)
+            const { error: friendError } = await supabase.from("shout_friends").insert([
+                {
+                    user_address: normalizedRecipient,
+                    friend_address: KEVIN_ADDRESS,
+                },
+                {
+                    user_address: KEVIN_ADDRESS,
+                    friend_address: normalizedRecipient,
+                },
+            ]);
+
+            if (friendError) {
+                console.error("[Welcome] Error adding friend:", friendError);
+                // Continue anyway - message is more important
+            } else {
+                console.log("[Welcome] Added Kevin as friend for:", normalizedRecipient);
+            }
+        }
+
         // Insert welcome message (plain text, not encrypted)
         const { error } = await supabase.from("shout_messages").insert({
             conversation_id: conversationId,
