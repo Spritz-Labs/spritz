@@ -73,11 +73,15 @@ export function useLoginTracking({
     }, [walletAddress]);
 
     const trackLogin = useCallback(async () => {
+        console.log("[Login] trackLogin called, walletAddress:", walletAddress, "hasTracked:", hasTracked.current);
         if (!walletAddress || hasTracked.current) return;
 
         // Check if we've tracked this session already
         const lastTracked = localStorage.getItem(TRACKING_KEY);
         const trackingData = lastTracked ? JSON.parse(lastTracked) : null;
+        
+        console.log("[Login] trackingData:", trackingData);
+        console.log("[Login] wasWelcomeSeen:", wasWelcomeSeen());
         
         // Only track once per session (every 30 minutes)
         const thirtyMinutes = 30 * 60 * 1000;
@@ -86,6 +90,7 @@ export function useLoginTracking({
             trackingData.address === walletAddress.toLowerCase() &&
             Date.now() - trackingData.timestamp < thirtyMinutes
         ) {
+            console.log("[Login] Using cached tracking data (within 30 min)");
             hasTracked.current = true;
             // Still check daily bonus availability (only if not already fetched)
             if (!hasFetchedBonus.current) {
@@ -93,6 +98,7 @@ export function useLoginTracking({
             }
             // Check if we should show welcome (if user was marked as new and hasn't seen it)
             if (trackingData.isNewUser && !wasWelcomeSeen()) {
+                console.log("[Login] Showing welcome from cached data");
                 setShowWelcome(true);
             }
             return;
@@ -106,6 +112,7 @@ export function useLoginTracking({
             const urlParams = new URLSearchParams(window.location.search);
             const inviteCode = urlParams.get("invite") || urlParams.get("ref");
 
+            console.log("[Login] Calling track-login API...");
             const response = await fetch("/api/admin/track-login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -121,6 +128,7 @@ export function useLoginTracking({
             });
 
             const data = await response.json();
+            console.log("[Login] API response:", data);
             
             // Check if daily bonus is available (only if not dismissed today)
             if (data.dailyBonusAvailable && !wasDismissedToday()) {
@@ -128,7 +136,10 @@ export function useLoginTracking({
             }
 
             // Show welcome message for new users (only if not seen before)
-            if (data.isNewUser && !wasWelcomeSeen()) {
+            const welcomeAlreadySeen = wasWelcomeSeen();
+            console.log("[Login] isNewUser:", data.isNewUser, "welcomeAlreadySeen:", welcomeAlreadySeen);
+            if (data.isNewUser && !welcomeAlreadySeen) {
+                console.log("[Login] Setting showWelcome to TRUE");
                 setShowWelcome(true);
             }
 
