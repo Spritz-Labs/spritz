@@ -95,6 +95,37 @@ export async function POST(request: NextRequest) {
                 // Ignore errors - user might already be a member
             }
 
+            // Send welcome message if not sent yet
+            if (welcomeNotYetShown) {
+                try {
+                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL 
+                        ? `https://${process.env.VERCEL_URL}` 
+                        : "http://localhost:3000");
+                    const internalKey = process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+                    
+                    const welcomeResponse = await fetch(`${baseUrl}/api/dm/welcome`, {
+                        method: "POST",
+                        headers: { 
+                            "Content-Type": "application/json",
+                            "x-internal-key": internalKey || "",
+                        },
+                        body: JSON.stringify({ recipientAddress: normalizedAddress }),
+                    });
+                    const welcomeResult = await welcomeResponse.json();
+                    console.log("[Login] Welcome message result:", welcomeResult);
+                    
+                    // Mark welcome as shown
+                    if (welcomeResult.success && !welcomeResult.skipped) {
+                        await supabase
+                            .from("shout_users")
+                            .update({ welcome_shown_at: new Date().toISOString() })
+                            .eq("wallet_address", normalizedAddress);
+                    }
+                } catch (err) {
+                    console.error("[Login] Failed to send welcome message:", err);
+                }
+            }
+
             // Check if daily bonus is available (don't auto-claim)
             let dailyBonusAvailable = false;
             try {
