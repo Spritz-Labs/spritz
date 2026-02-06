@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (existingUser) {
+            // Check if this is the user's first actual login (login_count is 0 or null)
+            // This handles the case where user record was created during auth but hasn't "logged in" yet
+            const isFirstLogin = !existingUser.login_count || existingUser.login_count === 0;
+            
             // Update existing user
             const updates: Record<string, unknown> = {
                 last_login: new Date().toISOString(),
@@ -102,7 +106,7 @@ export async function POST(request: NextRequest) {
 
             return NextResponse.json({ 
                 success: true, 
-                isNewUser: false,
+                isNewUser: isFirstLogin, // Show welcome for first-time logins
                 isBanned: existingUser.is_banned,
                 banReason: existingUser.ban_reason,
                 dailyBonusAvailable,

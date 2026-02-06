@@ -91,6 +91,10 @@ export function useLoginTracking({
             if (!hasFetchedBonus.current) {
                 checkDailyBonus();
             }
+            // Check if we should show welcome (if user was marked as new and hasn't seen it)
+            if (trackingData.isNewUser && !wasWelcomeSeen()) {
+                setShowWelcome(true);
+            }
             return;
         }
 
@@ -128,12 +132,13 @@ export function useLoginTracking({
                 setShowWelcome(true);
             }
 
-            // Save tracking timestamp
+            // Save tracking timestamp (and isNewUser flag for subsequent checks)
             localStorage.setItem(
                 TRACKING_KEY,
                 JSON.stringify({
                     address: walletAddress.toLowerCase(),
                     timestamp: Date.now(),
+                    isNewUser: data.isNewUser || false,
                 })
             );
 
