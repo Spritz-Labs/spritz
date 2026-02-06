@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { createPortal } from "react-dom";
 import {
@@ -35,6 +35,8 @@ import {
 } from "@/hooks/useChatFeatures";
 import { ReactionDisplay } from "./EmojiPicker";
 import { ChatMembersList } from "./ChatMembersList";
+import { MentionInput, type MentionUser } from "./MentionInput";
+import { MentionText } from "./MentionText";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -155,6 +157,59 @@ export function LocationChatModal({
         }
     }, [messages, fetchMsgReactions]);
 
+    // Fetch AI agents assigned to this location chat
+    const [locationAgents, setLocationAgents] = useState<MentionUser[]>([]);
+    useEffect(() => {
+        async function fetchAgents() {
+            try {
+                const res = await fetch(`/api/channels/${locationChat.id}/agents`);
+                if (res.ok) {
+                    const data = await res.json();
+                    const agents: MentionUser[] = (data.agents || []).map(
+                        (agent: any) => ({
+                            address: agent.id,
+                            name: agent.name,
+                            avatar: agent.avatar_url || null,
+                            avatarEmoji: agent.avatar_emoji,
+                            isAgent: true,
+                        })
+                    );
+                    setLocationAgents(agents);
+                }
+            } catch (err) {
+                console.error("[LocationChat] Failed to fetch agents:", err);
+            }
+        }
+        if (isOpen && locationChat.id) {
+            fetchAgents();
+        }
+    }, [isOpen, locationChat.id]);
+
+    // Build list of mentionable users from message senders + location agents
+    const mentionableUsers: MentionUser[] = useMemo(() => {
+        const userMap = new Map<string, MentionUser>();
+
+        // Add location agents first (so they appear at the top)
+        locationAgents.forEach((agent) => {
+            userMap.set(agent.address, agent);
+        });
+
+        // Add message senders
+        messages.forEach((msg) => {
+            const address = msg.sender_address.toLowerCase();
+            if (address === userAddress.toLowerCase()) return;
+            if (userMap.has(address)) return;
+            const info = getUserInfo?.(address);
+            userMap.set(address, {
+                address,
+                name: info?.name || null,
+                avatar: info?.avatar || null,
+            });
+        });
+
+        return Array.from(userMap.values());
+    }, [messages, userAddress, getUserInfo, locationAgents]);
+
     // Auto-join when opening if not a member
     useEffect(() => {
         if (isOpen && !isMember && !isLoading) {
@@ -183,15 +238,24 @@ export function LocationChatModal({
         const replyId = replyingTo?.id;
         setNewMessage("");
         setReplyingTo(null);
-        await sendMessage(content, "text", replyId);
-    }, [newMessage, isSending, sendMessage, replyingTo]);
+        const sent = await sendMessage(content, "text", replyId);
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
+        // Check for agent mentions and trigger responses (fire and forget)
+        if (sent && content.includes("@[") && content.includes("](")) {
+            fetch("/api/channels/agent-response", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    messageContent: content,
+                    senderAddress: userAddress,
+                    channelType: "location",
+                    channelId: locationChat.id,
+                }),
+            }).catch((err) =>
+                console.error("[LocationChat] Agent response error:", err)
+            );
         }
-    };
+    }, [newMessage, isSending, sendMessage, replyingTo, userAddress, locationChat.id]);
 
     // Handle GIF sending
     const handleSendGif = useCallback(
@@ -1017,9 +1081,13 @@ export function LocationChatModal({
                                                                     : "bg-zinc-800 text-white rounded-bl-md"
                                                             }`}
                                                         >
-                                                            <p className="text-sm whitespace-pre-wrap break-words">
-                                                                {msg.content}
-                                                            </p>
+                                                            <div className="text-sm whitespace-pre-wrap break-words">
+                                                                <MentionText
+                                                                    text={msg.content}
+                                                                    currentUserAddress={userAddress}
+                                                                    onMentionClick={onOpenUserCard}
+                                                                />
+                                                            </div>
                                                             {/* Link previews */}
                                                             {urls.length >
                                                                 0 && (
@@ -1151,21 +1219,21 @@ export function LocationChatModal({
                                             disabled={isSending}
                                         />
 
-                                        <textarea
-                                            ref={inputRef}
+                                        <MentionInput
+                                            inputRef={inputRef}
                                             value={newMessage}
-                                            onChange={(e) =>
-                                                setNewMessage(e.target.value)
-                                            }
-                                            onKeyDown={handleKeyDown}
+                                            onChange={(val) => {
+                                                if (val.length > 10000) return;
+                                                setNewMessage(val);
+                                            }}
+                                            onSubmit={handleSend}
                                             placeholder={
                                                 replyingTo
                                                     ? "Type your reply..."
                                                     : `Message ${displayChat.name}...`
                                             }
-                                            rows={1}
-                                            className="flex-1 px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder-zinc-500 resize-none focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
-                                            style={{ maxHeight: "120px" }}
+                                            users={mentionableUsers}
+                                            className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
                                         />
                                         <button
                                             onClick={handleSend}
