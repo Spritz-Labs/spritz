@@ -9,7 +9,7 @@ const supabase = supabaseUrl && supabaseKey
     : null;
 
 // Kevin's wallet address
-const KEVIN_ADDRESS = "0x89480c2e67876650b48622907ff5c48a569a36c7";
+const KEVIN_ADDRESS = "0x3f22f740d41518f5017b76eed3a63eb14d2e1b07";
 
 // Generate DM content topic (conversation ID) - must match client-side logic
 function getDmContentTopic(address1: string, address2: string): string {
