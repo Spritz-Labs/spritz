@@ -2751,6 +2751,37 @@ function DashboardContent({
         return () => clearTimeout(timeout);
     }, [outgoingCall, currentCallFriend, logCall, cancelCall, leaveCall]);
 
+    // Timeout for incoming calls - auto-dismiss if not answered within 45 seconds
+    useEffect(() => {
+        if (!incomingCall || callState !== "idle") return;
+
+        console.log(
+            "[Dashboard] Incoming call timeout started for call:",
+            incomingCall.id
+        );
+
+        const timeout = setTimeout(async () => {
+            console.log(
+                "[Dashboard] Incoming call timed out - auto-dismissing"
+            );
+            stopRinging();
+            // Log as missed from callee perspective
+            if (incomingCall.caller_address && userAddress) {
+                await logCall({
+                    callerAddress: incomingCall.caller_address,
+                    calleeAddress: userAddress,
+                    callType:
+                        (incomingCall.call_type as "audio" | "video") ||
+                        "audio",
+                    status: "missed",
+                });
+            }
+            await rejectCall();
+        }, 45000); // 45 second timeout, matches outgoing call timeout
+
+        return () => clearTimeout(timeout);
+    }, [incomingCall, callState, stopRinging, logCall, userAddress, rejectCall]);
+
     const handleEndCall = async () => {
         // Track call analytics before ending
         const callDurationMinutes = Math.ceil(duration / 60);

@@ -101,7 +101,9 @@ export async function POST(request: NextRequest) {
         }
 
         // SECURITY: Validate address format to prevent injection
-        if (!isAddress(userAddress)) {
+        // Support both Ethereum addresses (0x...) and Alien ID addresses (00000001...)
+        const isAlienAddress = userAddress.startsWith("00000001") && !userAddress.startsWith("0x");
+        if (!isAlienAddress && !isAddress(userAddress)) {
             return NextResponse.json(
                 { error: "Invalid address format" },
                 { status: 400 }

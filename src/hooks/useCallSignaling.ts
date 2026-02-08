@@ -25,15 +25,19 @@ export function useCallSignaling(userAddress: string | null) {
 
         const normalizedAddress = userAddress.toLowerCase();
 
-        // Check for existing ringing calls
+        // Check for existing ringing calls (ignore stale calls older than 60 seconds)
         const checkExistingCalls = async () => {
             if (!supabase) return;
             console.log("[CallSignaling] Checking for existing calls...");
+            const staleThreshold = new Date(
+                Date.now() - 60 * 1000
+            ).toISOString();
             const { data } = await supabase
                 .from("shout_calls")
                 .select("*")
                 .eq("callee_address", normalizedAddress)
                 .eq("status", "ringing")
+                .gte("created_at", staleThreshold)
                 .order("created_at", { ascending: false })
                 .limit(1);
 
@@ -154,6 +158,35 @@ export function useCallSignaling(userAddress: string | null) {
             window.removeEventListener("focus", handleFocus);
         };
     }, [userAddress]);
+
+    // Periodic safety check: verify incoming call is still ringing in the DB
+    // This catches cases where the Supabase realtime UPDATE event is missed
+    useEffect(() => {
+        if (!incomingCall || !isSupabaseConfigured || !supabase) return;
+
+        const interval = setInterval(async () => {
+            if (!supabase) return;
+            const { data } = await supabase
+                .from("shout_calls")
+                .select("status")
+                .eq("id", incomingCall.id)
+                .single();
+
+            if (!data || data.status !== "ringing") {
+                console.log(
+                    "[CallSignaling] Safety check: call no longer ringing (status:",
+                    data?.status || "deleted",
+                    ") - clearing incoming call"
+                );
+                setIncomingCall(null);
+                if (data?.status === "ended") {
+                    setRemoteHangup(true);
+                }
+            }
+        }, 10000); // Check every 10 seconds
+
+        return () => clearInterval(interval);
+    }, [incomingCall]);
 
     // Start a call (create signaling record)
     const startCall = useCallback(
