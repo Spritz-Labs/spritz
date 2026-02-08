@@ -142,10 +142,10 @@ export async function POST(request: NextRequest) {
                     login_count: (existingUser.login_count || 0) + 1,
                 };
                 
-                // Fix wallet_type for Alien ID users who don't have it set
-                if (!existingUser.wallet_type) {
+                // Always ensure wallet_type is 'alien_id' for users authenticating via Alien
+                if (existingUser.wallet_type !== 'alien_id') {
                     updateData.wallet_type = 'alien_id';
-                    console.log("[AlienId] Fixing wallet_type to 'alien_id' for user:", alienAddress.slice(0, 10));
+                    console.log("[AlienId] Fixing wallet_type from", existingUser.wallet_type, "to 'alien_id' for user:", alienAddress.slice(0, 10));
                 }
                 
                 await supabase

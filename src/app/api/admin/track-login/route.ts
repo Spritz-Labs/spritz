@@ -46,6 +46,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Cannot track login for other users" }, { status: 403 });
         }
 
+        // Detect Alien ID users by address pattern (00000001...) regardless of what walletType the client sends
+        // This ensures Alien users are always properly tagged even if the client doesn't know it's an Alien session
+        const isAlienAddress = normalizedAddress.startsWith("00000001") && !normalizedAddress.startsWith("0x");
+        const effectiveWalletType = isAlienAddress ? "alien_id" : walletType;
+        if (isAlienAddress && walletType !== "alien_id") {
+            console.log("[Login] Detected Alien address pattern, overriding walletType to alien_id:", normalizedAddress.slice(0, 20));
+        }
+
         // Check if user exists
         const { data: existingUser } = await supabase
             .from("shout_users")
@@ -70,8 +78,12 @@ export async function POST(request: NextRequest) {
             // IMPORTANT: Don't overwrite wallet_type if it's already set to a non-wallet auth method
             // (passkey, email, world_id, alien_id) - those are set during their auth flows
             const protectedWalletTypes = ['passkey', 'email', 'world_id', 'alien_id'];
-            if (walletType && !protectedWalletTypes.includes(existingUser.wallet_type)) {
-                updates.wallet_type = walletType;
+            if (isAlienAddress && existingUser.wallet_type !== 'alien_id') {
+                // Always fix Alien users who are incorrectly tagged
+                updates.wallet_type = 'alien_id';
+                console.log("[Login] Fixing wallet_type to alien_id for Alien user:", normalizedAddress.slice(0, 20));
+            } else if (effectiveWalletType && !protectedWalletTypes.includes(existingUser.wallet_type)) {
+                updates.wallet_type = effectiveWalletType;
             }
             if (chain) updates.chain = chain;
             if (ensName) updates.ens_name = ensName;
@@ -93,6 +105,38 @@ export async function POST(request: NextRequest) {
                 });
             } catch {
                 // Ignore errors - user might already be a member
+            }
+
+            // Auto-join Alien ID users to the official Alien channel
+            if (isAlienAddress || effectiveWalletType === "alien_id" || existingUser.wallet_type === "alien_id") {
+                try {
+                    const { data: alienChannel } = await supabase
+                        .from("shout_public_channels")
+                        .select("id")
+                        .eq("slug", "alien")
+                        .eq("is_active", true)
+                        .maybeSingle();
+
+                    if (alienChannel) {
+                        const { data: existingMember } = await supabase
+                            .from("shout_channel_members")
+                            .select("id")
+                            .eq("channel_id", alienChannel.id)
+                            .eq("user_address", normalizedAddress)
+                            .maybeSingle();
+
+                        if (!existingMember) {
+                            await supabase.from("shout_channel_members").insert({
+                                channel_id: alienChannel.id,
+                                user_address: normalizedAddress,
+                            });
+                            await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
+                            console.log("[Login] Auto-joined Alien ID user to Alien channel:", normalizedAddress);
+                        }
+                    }
+                } catch (err) {
+                    console.error("[Login] Failed to auto-join Alien channel:", err);
+                }
             }
 
             // Send welcome message if not sent yet
@@ -241,7 +285,7 @@ export async function POST(request: NextRequest) {
 
             const { error } = await supabase.from("shout_users").insert({
                 wallet_address: normalizedAddress,
-                wallet_type: walletType || null,
+                wallet_type: effectiveWalletType || null,
                 chain: chain || "ethereum",
                 ens_name: ensName || null,
                 username: username || null,
@@ -261,6 +305,29 @@ export async function POST(request: NextRequest) {
                 });
             } catch (err) {
                 console.error("[Login] Failed to join Alpha channel:", err);
+            }
+
+            // Auto-join new Alien ID users to the official Alien channel
+            if (isAlienAddress || effectiveWalletType === "alien_id") {
+                try {
+                    const { data: alienChannel } = await supabase
+                        .from("shout_public_channels")
+                        .select("id")
+                        .eq("slug", "alien")
+                        .eq("is_active", true)
+                        .maybeSingle();
+
+                    if (alienChannel) {
+                        await supabase.from("shout_channel_members").insert({
+                            channel_id: alienChannel.id,
+                            user_address: normalizedAddress,
+                        });
+                        await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
+                        console.log("[Login] Auto-joined new Alien ID user to Alien channel:", normalizedAddress);
+                    }
+                } catch (err) {
+                    console.error("[Login] Failed to auto-join new user to Alien channel:", err);
+                }
             }
 
             // Send welcome message from Kevin
