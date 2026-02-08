@@ -364,6 +364,16 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
             setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
             try {
+                // Check if WebAuthn is supported (blocked in some webviews like Alien mini app)
+                if (
+                    typeof window === "undefined" ||
+                    !window.PublicKeyCredential
+                ) {
+                    throw new Error(
+                        "Passkeys are not supported in this browser. Try opening Spritz directly in Safari or Chrome."
+                    );
+                }
+
                 // SECURITY: Clear any existing session BEFORE registration
                 // This prevents the server from thinking we're "adding a passkey to existing account"
                 // when we actually want to create a new account

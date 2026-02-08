@@ -75,6 +75,12 @@ export function EnableMessagingModal({
       handleClose();
       return;
     }
+
+    // Check if WebAuthn is supported (blocked in some webviews like Alien mini app)
+    if (typeof window === "undefined" || !window.PublicKeyCredential) {
+      setError("Passkeys are not supported in this browser. Open Spritz directly in Safari or Chrome to add a passkey.");
+      return;
+    }
     
     // Use built-in passkey registration
     setIsActivating(true);

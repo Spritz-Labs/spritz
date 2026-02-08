@@ -1304,10 +1304,24 @@ export function FriendsList({
     const virtualizer = useVirtualizer({
         count: processedFriends.length,
         getScrollElement: () => parentRef.current,
-        estimateSize: () => 76,
+        estimateSize: useCallback(
+            (index: number) => {
+                // Expanded items are much taller (~400px); collapsed are ~76px
+                const friend = processedFriends[index];
+                return expandedId === friend?.id ? 400 : 76;
+            },
+            [processedFriends, expandedId]
+        ),
         overscan: 5,
         enabled: useVirtual,
     });
+
+    // Re-measure all items when expandedId changes so heights update
+    useEffect(() => {
+        if (useVirtual) {
+            virtualizer.measure();
+        }
+    }, [expandedId, useVirtual, virtualizer]);
 
     const onlineCount = friends.filter(
         (f) => onlineStatuses[f.address.toLowerCase()]
@@ -1713,6 +1727,8 @@ export function FriendsList({
                             return (
                                 <div
                                     key={friend.id}
+                                    data-index={virtualItem.index}
+                                    ref={virtualizer.measureElement}
                                     style={{
                                         position: "absolute",
                                         top: 0,

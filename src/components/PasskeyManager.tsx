@@ -35,6 +35,11 @@ function detectPlatform(): "apple" | "android" | "windows" | "other" {
     return "other";
 }
 
+// Check if WebAuthn is available in the current context
+function isWebAuthnAvailable(): boolean {
+    return typeof window !== "undefined" && !!window.PublicKeyCredential;
+}
+
 export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smartWalletAddress }: Props) {
     const [credentials, setCredentials] = useState<PasskeyCredential[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +52,7 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
     const [showRecoverySigner, setShowRecoverySigner] = useState(false);
     
     const platform = detectPlatform();
+    const webAuthnSupported = isWebAuthnAvailable();
     const hasSyncedPasskey = credentials.some(c => c.backedUp);
     const hasOnlyDevicePasskeys = credentials.length > 0 && !hasSyncedPasskey;
 
@@ -124,6 +130,16 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
         try {
             setIsAdding(true);
             setError(null);
+
+            // Check if WebAuthn is supported in this context (blocked in some webviews)
+            if (
+                typeof window === "undefined" ||
+                !window.PublicKeyCredential
+            ) {
+                throw new Error(
+                    "Passkeys are not supported in this browser. Try opening Spritz directly in Safari or Chrome."
+                );
+            }
 
             // Get registration options
             const optionsResponse = await fetch("/api/passkey/register/options", {
@@ -448,28 +464,37 @@ export function PasskeyManager({ userAddress, onClose, passkeyIsWalletKey, smart
                 </div>
             )}
 
-            <button
-                onClick={handleAddPasskey}
-                disabled={isAdding}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-medium transition-all hover:shadow-lg hover:shadow-[#FF5500]/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-                {isAdding ? (
-                    <>
-                        <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        <span>Adding...</span>
-                    </>
-                ) : (
-                    <>
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        <span>{credentials.length > 0 ? "Add Backup Passkey" : "Add Passkey"}</span>
-                    </>
-                )}
-            </button>
+            {!webAuthnSupported ? (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center">
+                    <p className="text-amber-300 text-sm font-medium mb-1">Passkeys not available here</p>
+                    <p className="text-zinc-400 text-xs">
+                        This browser or app doesn&apos;t support passkeys. Open Spritz directly in Safari or Chrome to add one.
+                    </p>
+                </div>
+            ) : (
+                <button
+                    onClick={handleAddPasskey}
+                    disabled={isAdding}
+                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-medium transition-all hover:shadow-lg hover:shadow-[#FF5500]/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                    {isAdding ? (
+                        <>
+                            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <span>Adding...</span>
+                        </>
+                    ) : (
+                        <>
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            <span>{credentials.length > 0 ? "Add Backup Passkey" : "Add Passkey"}</span>
+                        </>
+                    )}
+                </button>
+            )}
 
             {/* Backup Tips Section */}
             <div className="mt-4">
