@@ -9,16 +9,15 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export async function POST(request: NextRequest) {
     try {
         const session = await getAuthenticatedUser(request);
-        const userAddress =
-            session?.userAddress ||
-            request.headers.get("x-user-address");
 
-        if (!userAddress) {
+        if (!session?.userAddress) {
             return NextResponse.json(
                 { error: "Authentication required" },
                 { status: 401 }
             );
         }
+
+        const userAddress = session.userAddress;
 
         const { messageId } = await request.json();
 
@@ -46,11 +45,21 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Only the sender can delete their own DMs
+        // Check ownership or admin status
         const isOwner =
             message.sender_address?.toLowerCase() === normalizedAddress;
 
+        let isAdmin = false;
         if (!isOwner) {
+            const { data: adminData } = await supabase
+                .from("shout_admins")
+                .select("wallet_address")
+                .eq("wallet_address", normalizedAddress)
+                .single();
+            isAdmin = !!adminData;
+        }
+
+        if (!isOwner && !isAdmin) {
             return NextResponse.json(
                 { error: "You can only delete your own messages" },
                 { status: 403 }

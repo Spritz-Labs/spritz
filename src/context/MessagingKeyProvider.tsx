@@ -21,6 +21,10 @@ import {
   clearCachedKey,
   clearAllCachedKeys,
   importKeypairToCache,
+  hasPinSetup,
+  deriveMekFromPin,
+  getRemoteKeySource,
+  verifyPinAgainstRemote,
 } from "@/lib/messagingKey";
 
 // Storage keys for backward compatibility with existing system
@@ -33,6 +37,8 @@ export interface MessagingKeyContextType {
   isLoading: boolean;            // Currently deriving key
   requiresPasskey: boolean;      // User needs to create passkey first
   requiresActivation: boolean;   // User needs to activate messaging
+  hasPinConfigured: boolean;     // User has PIN set up locally (needs to enter it)
+  remoteKeySource: DerivedMessagingKey["derivedFrom"] | null; // Key source from Supabase (cross-device detection)
   error: string | null;
   
   // Current keypair
@@ -44,6 +50,7 @@ export interface MessagingKeyContextType {
   
   // Actions
   activateMessaging: () => Promise<MessagingKeyResult>;
+  activateWithPin: (pin: string) => Promise<MessagingKeyResult>;
   deactivate: () => void;
   
   // Auth info
@@ -74,6 +81,7 @@ export function MessagingKeyProvider({
   const [keypair, setKeypair] = useState<DerivedMessagingKey | null>(null);
   const [hasPasskey, setHasPasskey] = useState(false);
   const [localKeyLoaded, setLocalKeyLoaded] = useState(false);
+  const [remoteKeySource, setRemoteKeySource] = useState<DerivedMessagingKey["derivedFrom"] | null>(null);
   
   // Determine rpId for passkey operations
   const rpId = useMemo(() => {
@@ -164,6 +172,34 @@ export function MessagingKeyProvider({
     }
   }, [userAddress]);
   
+  // Fetch remote key source from Supabase when user has no local key
+  // This detects if they set up a PIN or passkey on another device
+  useEffect(() => {
+    if (!userAddress || !localKeyLoaded) {
+      setRemoteKeySource(null);
+      return;
+    }
+    // Only check remote if we don't have a local key
+    if (keypair) {
+      setRemoteKeySource(null);
+      return;
+    }
+    
+    const checkRemote = async () => {
+      try {
+        const result = await getRemoteKeySource(userAddress);
+        if (result.hasKey && result.source) {
+          setRemoteKeySource(result.source);
+          console.log("[MessagingKey] Remote key source detected:", result.source);
+        }
+      } catch {
+        // Silently fail -- not critical
+      }
+    };
+    
+    checkRemote();
+  }, [userAddress, localKeyLoaded, keypair]);
+  
   // Determine if messaging requires activation
   const requiresActivation = useMemo(() => {
     if (!userAddress || !authType || !localKeyLoaded) return false;
@@ -171,12 +207,24 @@ export function MessagingKeyProvider({
     return true;
   }, [userAddress, authType, keypair, localKeyLoaded]);
   
+  // Check if user has PIN configured (locally or remotely)
+  const hasPinConfigured = useMemo(() => {
+    if (!userAddress) return false;
+    // Check local first (same device)
+    if (hasPinSetup(userAddress)) return true;
+    // Check remote (another device set up PIN)
+    if (remoteKeySource === "pin") return true;
+    return false;
+  }, [userAddress, remoteKeySource]);
+  
   // Determine if user needs to create a passkey first
+  // Now returns false if user has a PIN configured (PIN is an alternative)
   const requiresPasskey = useMemo(() => {
     if (!authType) return false;
     if (authType === "wallet" || authType === "passkey") return false;
+    if (hasPinConfigured) return false; // PIN is set up, no passkey needed
     return !hasPasskey;
-  }, [authType, hasPasskey]);
+  }, [authType, hasPasskey, hasPinConfigured]);
   
   // Activate messaging (derive/restore key)
   const activateMessaging = useCallback(async (): Promise<MessagingKeyResult> => {
@@ -195,6 +243,7 @@ export function MessagingKeyProvider({
         passkeyCredentialId: passkeyCredentialId ?? undefined,
         rpId,
         hasPasskey,
+        remoteKeySource,
       });
       
       if (result.success && result.keypair) {
@@ -228,8 +277,59 @@ export function MessagingKeyProvider({
       setIsLoading(false);
       return { success: false, error: errorMessage };
     }
-  }, [userAddress, authType, walletClient, passkeyCredentialId, rpId, hasPasskey]);
+  }, [userAddress, authType, walletClient, passkeyCredentialId, rpId, hasPasskey, remoteKeySource]);
   
+  // Activate messaging with PIN (for email/digitalid/solana users without passkey)
+  const activateWithPin = useCallback(async (pin: string): Promise<MessagingKeyResult> => {
+    if (!userAddress) {
+      return { success: false, error: "Not authenticated" };
+    }
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Safety check: if a PIN key already exists remotely, verify
+      // the entered PIN produces the same key before overwriting
+      if (remoteKeySource === "pin") {
+        const matches = await verifyPinAgainstRemote(pin, userAddress);
+        if (!matches) {
+          setIsLoading(false);
+          const err = "Wrong PIN. Enter the same PIN you set up on your other device.";
+          setError(err);
+          return { success: false, error: err };
+        }
+      }
+      
+      const result = await deriveMekFromPin(pin, userAddress);
+      
+      if (result.success && result.keypair) {
+        setKeypair(result.keypair);
+        
+        // Persist to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify({
+            publicKey: result.keypair.publicKey,
+            privateKey: result.keypair.privateKey,
+          }));
+          localStorage.setItem(MESSAGING_KEY_SOURCE_STORAGE, result.keypair.derivedFrom);
+        }
+        
+        console.log("[MessagingKey] PIN-based keypair activated");
+      } else {
+        setError(result.error || "Failed to activate with PIN");
+      }
+      
+      setIsLoading(false);
+      return result;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      setError(errorMessage);
+      setIsLoading(false);
+      return { success: false, error: errorMessage };
+    }
+  }, [userAddress, remoteKeySource]);
+
   // Deactivate messaging (clear local key)
   const deactivate = useCallback(() => {
     if (userAddress) {
@@ -261,11 +361,14 @@ export function MessagingKeyProvider({
     isLoading,
     requiresPasskey,
     requiresActivation,
+    hasPinConfigured,
+    remoteKeySource,
     error,
     keypair,
     publicKey,
     derivedFrom,
     activateMessaging,
+    activateWithPin,
     deactivate,
     authType,
     hasPasskey,
@@ -275,11 +378,14 @@ export function MessagingKeyProvider({
     isLoading,
     requiresPasskey,
     requiresActivation,
+    hasPinConfigured,
+    remoteKeySource,
     error,
     keypair,
     publicKey,
     derivedFrom,
     activateMessaging,
+    activateWithPin,
     deactivate,
     authType,
     hasPasskey,

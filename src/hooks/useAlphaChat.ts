@@ -8,7 +8,7 @@ export type AlphaMessage = {
     id: string;
     sender_address: string;
     content: string;
-    message_type: "text" | "pixel_art" | "system";
+    message_type: "text" | "pixel_art" | "image" | "system";
     created_at: string;
     reply_to_id?: string | null;
     reply_to?: AlphaMessage | null;
@@ -579,7 +579,7 @@ export function useAlphaChat(
     const sendMessage = useCallback(
         async (
             content: string,
-            messageType: "text" | "pixel_art" = "text",
+            messageType: "text" | "pixel_art" | "image" = "text",
             replyToId?: string
         ): Promise<boolean> => {
             if (

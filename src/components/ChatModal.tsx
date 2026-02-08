@@ -81,6 +81,7 @@ import {
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ImageViewerModal } from "./ImageViewerModal";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 
 const log = createLogger("Chat");
 
@@ -325,6 +326,7 @@ export function ChatModal({
         useBlockedUsers(userAddress);
     const { reportUser, isSubmitting: isReportSubmitting } =
         useReportUser(userAddress);
+    const { isAdmin: isGlobalAdmin } = useAdminCheck(userAddress);
 
     const userTimezone = useUserTimezone();
     const conversationMuted = isMuted("dm", peerAddress);
@@ -2036,6 +2038,7 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
+                                                                                    canDelete: isOwn || isGlobalAdmin,
                                                                                     hasMedia:
                                                                                         true,
                                                                                     isPixelArt:
@@ -2252,6 +2255,7 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
+                                                                                    canDelete: isOwn || isGlobalAdmin,
                                                                                     hasMedia:
                                                                                         true,
                                                                                     mediaUrl:
@@ -2325,6 +2329,7 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
+                                                                                    canDelete: isOwn || isGlobalAdmin,
                                                                                     canEdit:
                                                                                         isOwn &&
                                                                                         canEditMessage(
@@ -3272,7 +3277,7 @@ export function ChatModal({
                                   }
                                 : undefined,
                             onCopy: () => {},
-                            onDelete: selectedMessageConfig?.isOwn
+                            onDelete: (selectedMessageConfig?.canDelete)
                                 ? async () => {
                                       const msgId = selectedMessageConfig?.messageId;
                                       // Optimistic removal from UI

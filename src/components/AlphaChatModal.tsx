@@ -85,7 +85,7 @@ interface AlphaChatModalProps {
         replyingTo: AlphaMessage | null;
         sendMessage: (
             content: string,
-            messageType?: "text" | "pixel_art",
+            messageType?: "text" | "pixel_art" | "image",
             replyToId?: string
         ) => Promise<boolean>;
         markAsRead: () => Promise<void>;
@@ -213,7 +213,8 @@ export function AlphaChatModal({
                     (m) =>
                         m.message_type === "text" &&
                         !m.content.startsWith("[PIXEL_ART]") &&
-                        !m.content.startsWith("[GIF]")
+                        !m.content.startsWith("[GIF]") &&
+                        !m.content.startsWith("[IMAGE]")
                 )
                 .map((m) => ({
                     id: m.id,
@@ -245,6 +246,8 @@ export function AlphaChatModal({
     const draftAppliedRef = useRef(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
+    const [isUploadingImage, setIsUploadingImage] = useState(false);
+    const imageFileInputRef = useRef<HTMLInputElement>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
@@ -936,6 +939,64 @@ export function AlphaChatModal({
         [userAddress, sendMessage]
     );
 
+    // Handle image upload (admin only)
+    const handleImageSelect = useCallback(
+        async (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file || !isAdmin) return;
+
+            // Validate file type
+            if (
+                !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
+                    file.type
+                )
+            ) {
+                alert("Only JPEG, PNG, GIF, and WebP images are allowed");
+                return;
+            }
+
+            // Validate file size (5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                alert("Image must be less than 5MB");
+                return;
+            }
+
+            setIsUploadingImage(true);
+
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("userAddress", userAddress);
+                formData.append("context", "global");
+
+                const res = await fetch("/api/upload", {
+                    method: "POST",
+                    body: formData,
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || "Failed to upload image");
+                }
+
+                // Send the image URL as an image message
+                await sendMessage(`[IMAGE]${data.url}`, "image");
+                onMessageSent?.();
+            } catch (error) {
+                console.error("Failed to upload image:", error);
+                alert("Failed to upload image. Please try again.");
+            } finally {
+                setIsUploadingImage(false);
+                // Reset file input
+                if (imageFileInputRef.current) {
+                    imageFileInputRef.current.value = "";
+                }
+            }
+        },
+        [userAddress, isAdmin, sendMessage, onMessageSent]
+    );
+
     // Handle leave
     const handleLeave = async () => {
         const confirmed = window.confirm(
@@ -965,6 +1026,12 @@ export function AlphaChatModal({
     // Check if message is a GIF
     const isGifMessage = (content: string) => content.startsWith("[GIF]");
     const getGifUrl = (content: string) => content.replace("[GIF]", "");
+
+    // Check if message is an uploaded image
+    const isImageMessage = (content: string) =>
+        content.startsWith("[IMAGE]") ||
+        content.includes("/storage/v1/object/public/chat-images/");
+    const getImageUrl = (content: string) => content.replace("[IMAGE]", "");
 
     // Agent info cache for displaying agent messages
     const [agentInfoCache, setAgentInfoCache] = useState<
@@ -1641,6 +1708,10 @@ export function AlphaChatModal({
                                                                                       )
                                                                                     ? "🎬 GIF"
                                                                                     : msg.content.startsWith(
+                                                                                          "[IMAGE]"
+                                                                                      )
+                                                                                    ? "📷 Photo"
+                                                                                    : msg.content.startsWith(
                                                                                           "[LOCATION]"
                                                                                       )
                                                                                     ? "📍 Location"
@@ -1985,11 +2056,15 @@ export function AlphaChatModal({
                                                                                                     : "text-zinc-400"
                                                                                             }`}
                                                                                         >
-                                                                                            {
-                                                                                                msg
-                                                                                                    .reply_to
-                                                                                                    .content
-                                                                                            }
+                                                                                            {msg.reply_to.content.startsWith("[PIXEL_ART]")
+                                                                                                ? "🎨 Pixel Art"
+                                                                                                : msg.reply_to.content.startsWith("[GIF]")
+                                                                                                ? "🎬 GIF"
+                                                                                                : msg.reply_to.content.startsWith("[IMAGE]")
+                                                                                                ? "📷 Photo"
+                                                                                                : msg.reply_to.content.startsWith("[LOCATION]")
+                                                                                                ? "📍 Location"
+                                                                                                : msg.reply_to.content}
                                                                                         </p>
                                                                                     </div>
                                                                                 )}
@@ -2073,6 +2148,26 @@ export function AlphaChatModal({
                                                                                             className="w-full h-auto rounded-xl"
                                                                                             loading="lazy"
                                                                                         />
+                                                                                    </div>
+                                                                                ) : isImageMessage(
+                                                                                      msg.content
+                                                                                  ) ? (
+                                                                                    <div className="relative max-w-[320px] rounded-xl overflow-hidden">
+                                                                                        <a
+                                                                                            href={getImageUrl(msg.content)}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                        >
+                                                                                            <img
+                                                                                                src={getImageUrl(
+                                                                                                    msg.content
+                                                                                                )}
+                                                                                                alt="Shared image"
+                                                                                                className="w-full h-auto rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+                                                                                                loading="lazy"
+                                                                                            />
+                                                                                        </a>
                                                                                     </div>
                                                                                 ) : isLocationMessage(
                                                                                       msg.content
@@ -2234,7 +2329,15 @@ export function AlphaChatModal({
                                                           )}
                                                 </p>
                                                 <p className="text-xs text-zinc-400 truncate">
-                                                    {replyingTo.content}
+                                                    {replyingTo.content.startsWith("[PIXEL_ART]")
+                                                        ? "🎨 Pixel Art"
+                                                        : replyingTo.content.startsWith("[GIF]")
+                                                        ? "🎬 GIF"
+                                                        : replyingTo.content.startsWith("[IMAGE]")
+                                                        ? "📷 Photo"
+                                                        : replyingTo.content.startsWith("[LOCATION]")
+                                                        ? "📍 Location"
+                                                        : replyingTo.content}
                                                 </p>
                                             </div>
                                             <button
@@ -2310,8 +2413,21 @@ export function AlphaChatModal({
                                                 isFullscreen ? "gap-3" : "gap-2"
                                             }`}
                                         >
+                                            {/* Hidden file input for admin image uploads */}
+                                            <input
+                                                ref={imageFileInputRef}
+                                                type="file"
+                                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                                onChange={handleImageSelect}
+                                                className="hidden"
+                                            />
                                             {/* Consolidated attachment menu */}
                                             <ChatAttachmentMenu
+                                                onImageUpload={
+                                                    isAdmin
+                                                        ? () => imageFileInputRef.current?.click()
+                                                        : undefined
+                                                }
                                                 onPixelArt={() =>
                                                     setShowPixelArt(true)
                                                 }
@@ -2331,7 +2447,7 @@ export function AlphaChatModal({
                                                 showPoll={canCreatePoll}
                                                 showLocation={true}
                                                 isUploading={
-                                                    isUploadingPixelArt
+                                                    isUploadingPixelArt || isUploadingImage
                                                 }
                                                 disabled={isCurrentUserMuted}
                                             />

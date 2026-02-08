@@ -7,6 +7,11 @@ import {
   clearCachedKey,
   getOrDeriveMessagingKey,
   importKeypairToCache,
+  deriveMekFromPin,
+  hasPinSetup,
+  verifyPin,
+  verifyPinAgainstRemote,
+  getRemoteKeySource,
   type DerivedMessagingKey,
   type AuthType,
 } from "@/lib/messagingKey";
@@ -43,9 +48,32 @@ export function MessagingKeyStatus({
   });
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinStep, setPinStep] = useState<"enter" | "confirm" | "unlock">("enter");
   
   const { data: walletClient } = useWalletClient();
   const rpId = typeof window !== "undefined" ? window.location.hostname : "";
+  
+  // Check if user already has a PIN set up (locally or on another device)
+  const localHasPin = userAddress ? hasPinSetup(userAddress) : false;
+  const [remoteHasPin, setRemoteHasPin] = useState(false);
+  const userHasPin = localHasPin || remoteHasPin;
+  
+  // Check remote key source for cross-device PIN detection
+  useEffect(() => {
+    if (!userAddress || localHasPin) return;
+    const check = async () => {
+      try {
+        const remote = await getRemoteKeySource(userAddress);
+        if (remote.hasKey && remote.source === "pin") {
+          setRemoteHasPin(true);
+        }
+      } catch { /* ignore */ }
+    };
+    check();
+  }, [userAddress, localHasPin]);
   
   // Determine if key is "good enough" based on source and auth type
   // For passkey users, ANY key is acceptable - they can't easily regenerate
@@ -54,6 +82,7 @@ export function MessagingKeyStatus({
     if (!source) return false;
     if (source === "eoa") return true;
     if (source === "passkey-prf") return true;
+    if (source === "pin") return true;
     // For passkey users, any key source is acceptable - they can't sign with a wallet
     // This includes "passkey-fallback" and "legacy" keys
     if (userAuthType === "passkey") return true;
@@ -142,7 +171,7 @@ export function MessagingKeyStatus({
         setStatus({
           hasKey: true,
           source: result.keypair.derivedFrom,
-          isDeterministic: result.keypair.derivedFrom === "eoa" || result.keypair.derivedFrom === "passkey-prf",
+          isDeterministic: isKeyGood(result.keypair.derivedFrom, authType),
         });
       } else if (result.requiresPasskey) {
         setError("Add a passkey first to enable messaging");
@@ -156,11 +185,87 @@ export function MessagingKeyStatus({
     }
   }, [userAddress, authType, walletClient, passkeyCredentialId, rpId]);
   
+  // Handle PIN submission (setup or unlock)
+  const handlePinSubmit = useCallback(async () => {
+    if (!userAddress) return;
+    
+    if (pinStep === "enter" && !userHasPin) {
+      // Setting up new PIN - go to confirm step
+      if (pin.length < 6 || !/^\d+$/.test(pin)) {
+        setError("PIN must be at least 6 digits (numbers only)");
+        return;
+      }
+      setPinStep("confirm");
+      setError(null);
+      return;
+    }
+    
+    if (pinStep === "confirm") {
+      // Confirm PIN matches
+      if (pin !== confirmPin) {
+        setError("PINs don't match. Try again.");
+        setConfirmPin("");
+        return;
+      }
+    }
+    
+    if (pinStep === "unlock") {
+      // Try local verification first
+      const localValid = await verifyPin(pin, userAddress);
+      if (localValid === false) {
+        setError("Wrong PIN. Try again.");
+        setPin("");
+        return;
+      }
+      // If no local hash (new device), verify against Supabase public key
+      if (localValid === null) {
+        const remoteValid = await verifyPinAgainstRemote(pin, userAddress);
+        if (!remoteValid) {
+          setError("Wrong PIN. Try again.");
+          setPin("");
+          return;
+        }
+      }
+    }
+    
+    setIsRegenerating(true);
+    setError(null);
+    
+    try {
+      const result = await deriveMekFromPin(pin, userAddress);
+      
+      if (result.success && result.keypair) {
+        localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify({
+          publicKey: result.keypair.publicKey,
+          privateKey: result.keypair.privateKey,
+        }));
+        localStorage.setItem(MESSAGING_KEY_SOURCE_STORAGE, result.keypair.derivedFrom);
+        
+        setStatus({
+          hasKey: true,
+          source: result.keypair.derivedFrom,
+          isDeterministic: true,
+        });
+        
+        setShowPinInput(false);
+        setPin("");
+        setConfirmPin("");
+      } else {
+        setError(result.error || "Failed to set up PIN encryption");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setIsRegenerating(false);
+    }
+  }, [userAddress, pin, confirmPin, pinStep, userHasPin]);
+
   const getSourceLabel = (source: DerivedMessagingKey["derivedFrom"] | null) => {
     switch (source) {
       case "eoa": return "Wallet Signature";
       case "passkey-prf": return "Passkey";
       case "passkey-fallback": return authType === "passkey" ? "Passkey" : "Passkey (Legacy)";
+      case "pin": return "PIN Protected";
       // For passkey users, don't show "Legacy" - just say "Passkey" since that's their auth
       case "legacy": return authType === "passkey" ? "Passkey" : "Legacy";
       default: return "Not set";
@@ -172,7 +277,7 @@ export function MessagingKeyStatus({
     ? !!walletClient 
     : authType === "passkey" 
     ? !!passkeyCredentialId 
-    : false; // Email/DigitalID users need to add passkey first
+    : true; // Email/DigitalID/Solana users can use PIN
   
   return (
     <div className="w-full px-4 py-3 rounded-xl bg-zinc-800/50 mt-2">
@@ -246,13 +351,13 @@ export function MessagingKeyStatus({
       )}
       
       {/* Info for good keys - show based on actual key source, not authType */}
-      {status.hasKey && (authType === "passkey" || status.isDeterministic) && (
+      {status.hasKey && (authType === "passkey" || status.isDeterministic) && status.source !== "pin" && (
         <p className="text-xs text-zinc-500 mt-2">
           {status.source === "eoa" 
-            ? "✓ Secured by your wallet" 
+            ? "Secured by your wallet" 
             : status.source === "passkey-prf" || status.source === "passkey-fallback"
-            ? "✓ Secured by your passkey"
-            : "✓ Works on all your devices"}
+            ? "Secured by your passkey"
+            : "Works on all your devices"}
         </p>
       )}
       
@@ -304,10 +409,182 @@ export function MessagingKeyStatus({
         </div>
       )}
       
-      {/* Info for non-wallet/passkey users without a key */}
-      {!status.hasKey && !canEnable && (authType === "email" || authType === "digitalid" || authType === "solana") && (
+      {/* Show upgrade to PIN for email/digitalid/solana users with legacy keys */}
+      {status.hasKey && !status.isDeterministic && (authType === "email" || authType === "digitalid" || authType === "solana") && (
+        <div className="mt-3 pt-3 border-t border-zinc-700/50">
+          {!showPinInput ? (
+            <>
+              <p className="text-xs text-zinc-400 mb-2">
+                Upgrade to PIN-protected encryption for better security.
+              </p>
+              <button
+                onClick={() => {
+                  setShowPinInput(true);
+                  setPinStep("enter");
+                  setPin("");
+                  setConfirmPin("");
+                  setError(null);
+                }}
+                className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                Upgrade with PIN
+              </button>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-zinc-400">
+                {pinStep === "enter" && "Choose a PIN (6+ digits):"}
+                {pinStep === "confirm" && "Confirm your PIN:"}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={pinStep === "confirm" ? confirmPin : pin}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "");
+                    if (pinStep === "confirm") {
+                      setConfirmPin(digits);
+                    } else {
+                      setPin(digits);
+                    }
+                    setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handlePinSubmit();
+                  }}
+                  placeholder={pinStep === "confirm" ? "Confirm PIN" : "Enter PIN"}
+                  className="flex-1 px-3 py-1.5 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-xs focus:outline-none focus:border-[#FF5500] placeholder:text-zinc-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handlePinSubmit}
+                  disabled={isRegenerating || (pinStep === "confirm" ? !confirmPin : pin.length < 6)}
+                  className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-zinc-600 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  {isRegenerating ? (
+                    <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : pinStep === "confirm" ? "Confirm" : "Next"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPinInput(false);
+                    setPin("");
+                    setConfirmPin("");
+                    setError(null);
+                  }}
+                  className="px-2 py-1.5 text-zinc-400 hover:text-white text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+              {pinStep === "enter" && !error && (
+                <p className="text-xs text-zinc-500 mt-1">
+                  Your existing messages will still be readable.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* PIN setup/unlock for email/digitalid/solana users without any key */}
+      {!status.hasKey && (authType === "email" || authType === "digitalid" || authType === "solana") && (
+        <div className="mt-3 pt-3 border-t border-zinc-700/50">
+          {!showPinInput ? (
+            <div>
+              <p className="text-xs text-zinc-400 mb-2">
+                {userHasPin 
+                  ? "Enter your PIN to unlock messaging" 
+                  : "Set a PIN to enable encrypted messaging"}
+              </p>
+              <button
+                onClick={() => {
+                  setShowPinInput(true);
+                  setPinStep(userHasPin ? "unlock" : "enter");
+                  setPin("");
+                  setConfirmPin("");
+                  setError(null);
+                }}
+                className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                {userHasPin ? "Unlock with PIN" : "Set Up PIN"}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-zinc-400">
+                {pinStep === "enter" && !userHasPin && "Choose a PIN (6+ digits):"}
+                {pinStep === "confirm" && "Confirm your PIN:"}
+                {pinStep === "unlock" && "Enter your PIN:"}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={pinStep === "confirm" ? confirmPin : pin}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "");
+                    if (pinStep === "confirm") {
+                      setConfirmPin(digits);
+                    } else {
+                      setPin(digits);
+                    }
+                    setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handlePinSubmit();
+                  }}
+                  placeholder={pinStep === "confirm" ? "Confirm PIN" : "Enter PIN"}
+                  className="flex-1 px-3 py-1.5 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-xs focus:outline-none focus:border-[#FF5500] placeholder:text-zinc-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handlePinSubmit}
+                  disabled={isRegenerating || (pinStep === "confirm" ? !confirmPin : pin.length < 6)}
+                  className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-zinc-600 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-1"
+                >
+                  {isRegenerating ? (
+                    <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : pinStep === "confirm" ? "Confirm" : pinStep === "unlock" ? "Unlock" : "Next"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPinInput(false);
+                    setPin("");
+                    setConfirmPin("");
+                    setPinStep("enter");
+                    setError(null);
+                  }}
+                  className="px-2 py-1.5 text-zinc-400 hover:text-white text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+              {pinStep === "enter" && !userHasPin && !error && (
+                <p className="text-xs text-zinc-500 mt-1">
+                  Remember this PIN - you&apos;ll need it on other devices to decrypt messages.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Show PIN info when active */}
+      {status.hasKey && status.source === "pin" && (
         <p className="text-xs text-zinc-500 mt-2">
-          Add a passkey to enable secure messaging
+          Secured by your PIN. Use the same PIN on other devices to read messages.
         </p>
       )}
     </div>

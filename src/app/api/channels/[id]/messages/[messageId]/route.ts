@@ -120,14 +120,15 @@ export async function DELETE(
 
     try {
         const session = await getAuthenticatedUser(request);
-        const userAddress = session?.userAddress || request.headers.get("x-user-address");
 
-        if (!userAddress) {
+        if (!session?.userAddress) {
             return NextResponse.json(
                 { error: "Authentication required" },
                 { status: 401 }
             );
         }
+
+        const userAddress = session.userAddress;
 
         const normalizedAddress = userAddress.toLowerCase();
 

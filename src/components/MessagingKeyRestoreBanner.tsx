@@ -6,6 +6,11 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   getOrDeriveMessagingKey,
   importKeypairToCache,
+  deriveMekFromPin,
+  hasPinSetup,
+  verifyPin,
+  verifyPinAgainstRemote,
+  getRemoteKeySource,
   type AuthType,
 } from "@/lib/messagingKey";
 import { supabase } from "@/config/supabase";
@@ -44,9 +49,18 @@ export function MessagingKeyRestoreBanner({
   const [showBanner, setShowBanner] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [bannerReason, setBannerReason] = useState<"no_key" | "legacy_key" | "key_mismatch" | "passkey_upgrade">("no_key");
+  const [bannerReason, setBannerReason] = useState<"no_key" | "legacy_key" | "key_mismatch" | "passkey_upgrade" | "needs_pin">("no_key");
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [pinStep, setPinStep] = useState<"enter" | "confirm" | "unlock">("enter");
   
   const { data: walletClient } = useWalletClient();
+  const needsPin = authType === "email" || authType === "digitalid" || authType === "solana";
+  const localHasPin = userAddress ? hasPinSetup(userAddress) : false;
+  const [remoteHasPin, setRemoteHasPin] = useState(false);
+  const [remoteHasPasskey, setRemoteHasPasskey] = useState(false);
+  const userHasPin = localHasPin || remoteHasPin;
   
   // Determine the effective rpId
   const effectiveRpId = rpId || (typeof window !== "undefined" ? window.location.hostname : "");
@@ -58,8 +72,9 @@ export function MessagingKeyRestoreBanner({
       return;
     }
     
-    // Only for wallet (EOA) and passkey users - they can restore via signing/authentication
-    if (authType !== "wallet" && authType !== "passkey") {
+    // Show for wallet, passkey, and email/digitalid/solana users (PIN-based)
+    const supportedTypes = ["wallet", "passkey", "email", "digitalid", "solana"];
+    if (!supportedTypes.includes(authType || "")) {
       setShowBanner(false);
       return;
     }
@@ -77,6 +92,22 @@ export function MessagingKeyRestoreBanner({
       const storedSource = localStorage.getItem(MESSAGING_KEY_SOURCE_STORAGE);
       
       if (!storedJson) {
+        // For email/digitalid/solana users without a key, check remote key source
+        if (authType === "email" || authType === "digitalid" || authType === "solana") {
+          const remote = await getRemoteKeySource(userAddress);
+          if (remote.hasKey && remote.source === "pin") {
+            // User set up a PIN on another device — prompt to enter it
+            setRemoteHasPin(true);
+            setPinStep("unlock");
+          } else if (remote.hasKey && (remote.source === "passkey-prf" || remote.source === "passkey-fallback")) {
+            // User has a passkey-derived key on another device
+            // This device may not support passkeys, so warn about creating a new key
+            setRemoteHasPasskey(true);
+          }
+          setBannerReason("needs_pin");
+          setShowBanner(true);
+          return;
+        }
         // No key at all - definitely need to restore
         setBannerReason("no_key");
         setShowBanner(true);
@@ -94,6 +125,14 @@ export function MessagingKeyRestoreBanner({
         // For wallet users: check if it's a legacy (non-deterministic) key
         if (authType === "wallet" && (!storedSource || storedSource === "legacy")) {
           setBannerReason("legacy_key");
+          setShowBanner(true);
+          return;
+        }
+        
+        // For email/digitalid/solana users with legacy key: prompt PIN upgrade
+        if ((authType === "email" || authType === "digitalid" || authType === "solana") 
+            && (!storedSource || storedSource === "legacy")) {
+          setBannerReason("needs_pin");
           setShowBanner(true);
           return;
         }
@@ -222,6 +261,79 @@ export function MessagingKeyRestoreBanner({
     }
   }, [userAddress, walletClient, authType, passkeyCredentialId, effectiveRpId]);
   
+  // Handle PIN submission for email/digitalid/solana users
+  const handlePinSubmit = useCallback(async () => {
+    if (!userAddress) return;
+    
+    if (pinStep === "enter" && !userHasPin) {
+      if (pin.length < 6 || !/^\d+$/.test(pin)) {
+        setError("PIN must be at least 6 digits (numbers only)");
+        return;
+      }
+      setPinStep("confirm");
+      setError(null);
+      return;
+    }
+    
+    if (pinStep === "confirm") {
+      if (pin !== confirmPin) {
+        setError("PINs don't match. Try again.");
+        setConfirmPin("");
+        return;
+      }
+    }
+    
+    if (pinStep === "unlock") {
+      // Try local verification first
+      const localValid = await verifyPin(pin, userAddress);
+      if (localValid === false) {
+        setError("Wrong PIN. Try again.");
+        setPin("");
+        return;
+      }
+      // If no local hash (new device), verify against Supabase public key
+      if (localValid === null && remoteHasPin) {
+        const remoteValid = await verifyPinAgainstRemote(pin, userAddress);
+        if (!remoteValid) {
+          setError("Wrong PIN. Try again.");
+          setPin("");
+          return;
+        }
+      }
+    }
+    
+    setIsRestoring(true);
+    setError(null);
+    
+    try {
+      const result = await deriveMekFromPin(pin, userAddress);
+      
+      if (result.success && result.keypair) {
+        localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify({
+          publicKey: result.keypair.publicKey,
+          privateKey: result.keypair.privateKey,
+        }));
+        localStorage.setItem(MESSAGING_KEY_SOURCE_STORAGE, result.keypair.derivedFrom);
+        
+        importKeypairToCache(userAddress, {
+          publicKey: result.keypair.publicKey,
+          privateKey: result.keypair.privateKey,
+        }, result.keypair.derivedFrom);
+        
+        setShowBanner(false);
+        setPin("");
+        setConfirmPin("");
+        window.location.reload();
+      } else {
+        setError(result.error || "Failed to set up PIN encryption");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [userAddress, pin, confirmPin, pinStep, userHasPin, remoteHasPin]);
+
   const handleDismiss = () => {
     if (userAddress) {
       sessionStorage.setItem(RESTORE_DISMISSED_KEY, userAddress.toLowerCase());
@@ -231,14 +343,19 @@ export function MessagingKeyRestoreBanner({
   
   // For wallet users, need walletClient
   // For passkey users, show banner but direct them to settings
+  // For email/digitalid/solana users, show PIN setup
   const canRestoreDirectly = authType === "wallet" && !!walletClient;
   const isPasskeyUser = authType === "passkey";
   
   if (!showBanner) return null;
-  if (!canRestoreDirectly && !isPasskeyUser) return null;
+  if (!canRestoreDirectly && !isPasskeyUser && !needsPin) return null;
   
   const getMessage = () => {
     switch (bannerReason) {
+      case "needs_pin":
+        if (userHasPin) return "Enter your PIN to unlock encrypted messaging.";
+        if (remoteHasPasskey) return "Your encryption key is tied to a passkey on another device. Setting up a PIN will create a new key — older messages from other devices won't be readable.";
+        return "Set a PIN to enable encrypted messaging.";
       case "no_key":
         return isPasskeyUser
           ? "Go to Settings to restore your message encryption key."
@@ -259,7 +376,8 @@ export function MessagingKeyRestoreBanner({
   };
   
   const getButtonText = () => {
-    if (isRestoring) return "Signing...";
+    if (isRestoring) return "Setting up...";
+    if (needsPin) return userHasPin ? "Unlock with PIN" : "Set Up PIN";
     if (isPasskeyUser) return "Open Settings";
     return "Sign to Restore";
   };
@@ -279,7 +397,11 @@ export function MessagingKeyRestoreBanner({
                 <div className="text-2xl">🔐</div>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-semibold text-white mb-1">
-                    {bannerReason === "no_key" ? "Restore Encryption Key" : "Key Sync Required"}
+                    {bannerReason === "needs_pin" 
+                      ? (userHasPin ? "Unlock Messaging" : remoteHasPasskey ? "⚠️ New Key Required" : "Enable Encrypted Messaging")
+                      : bannerReason === "no_key" 
+                      ? "Restore Encryption Key" 
+                      : "Key Sync Required"}
                   </h4>
                   <p className="text-xs text-zinc-400 mb-3">
                     {getMessage()}
@@ -289,32 +411,106 @@ export function MessagingKeyRestoreBanner({
                     <p className="text-xs text-red-400 mb-2">{error}</p>
                   )}
                   
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={isPasskeyUser && onOpenSettings ? onOpenSettings : handleRestore}
-                      disabled={isRestoring}
-                      className="px-4 py-2 bg-[#FF5500] text-white text-sm font-medium rounded-lg hover:bg-[#FF5500]/90 transition-colors disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isRestoring ? (
-                        <>
-                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                          Signing...
-                        </>
-                      ) : (
-                        getButtonText()
+                  {/* PIN input for email/digitalid/solana users */}
+                  {needsPin && showPinInput ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-zinc-500">
+                        {pinStep === "enter" && !userHasPin && "Choose a PIN (6+ digits):"}
+                        {pinStep === "confirm" && "Confirm your PIN:"}
+                        {pinStep === "unlock" && "Enter your PIN:"}
+                      </p>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={pinStep === "confirm" ? confirmPin : pin}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, "");
+                            if (pinStep === "confirm") {
+                              setConfirmPin(digits);
+                            } else {
+                              setPin(digits);
+                            }
+                            setError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handlePinSubmit();
+                          }}
+                          placeholder={pinStep === "confirm" ? "Confirm PIN" : "Enter PIN"}
+                          className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:border-[#FF5500] placeholder:text-zinc-500"
+                          autoFocus
+                        />
+                        <button
+                          onClick={handlePinSubmit}
+                          disabled={isRestoring || (pinStep === "confirm" ? !confirmPin : pin.length < 6)}
+                          className="px-4 py-2 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-zinc-600 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                          {isRestoring ? (
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                          ) : pinStep === "confirm" ? "Confirm" : pinStep === "unlock" ? "Unlock" : "Next"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowPinInput(false);
+                            setPin("");
+                            setConfirmPin("");
+                            setError(null);
+                          }}
+                          className="px-2 py-2 text-zinc-400 hover:text-white text-sm transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {pinStep === "enter" && !userHasPin && (
+                        <p className="text-xs text-zinc-500">
+                          Remember this PIN to decrypt messages on other devices.
+                        </p>
                       )}
-                    </button>
-                    <button
-                      onClick={handleDismiss}
-                      disabled={isRestoring}
-                      className="px-4 py-2 text-zinc-400 text-sm hover:text-white transition-colors"
-                    >
-                      Later
-                    </button>
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (needsPin) {
+                            setShowPinInput(true);
+                            setPinStep(userHasPin ? "unlock" : "enter");
+                            setPin("");
+                            setConfirmPin("");
+                            setError(null);
+                          } else if (isPasskeyUser && onOpenSettings) {
+                            onOpenSettings();
+                          } else {
+                            handleRestore();
+                          }
+                        }}
+                        disabled={isRestoring}
+                        className="px-4 py-2 bg-[#FF5500] text-white text-sm font-medium rounded-lg hover:bg-[#FF5500]/90 transition-colors disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {isRestoring ? (
+                          <>
+                            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            {needsPin ? "Setting up..." : "Signing..."}
+                          </>
+                        ) : (
+                          getButtonText()
+                        )}
+                      </button>
+                      <button
+                        onClick={handleDismiss}
+                        disabled={isRestoring}
+                        className="px-4 py-2 text-zinc-400 text-sm hover:text-white transition-colors"
+                      >
+                        Later
+                      </button>
+                    </div>
+                  )}
                 </div>
                 
                 <button

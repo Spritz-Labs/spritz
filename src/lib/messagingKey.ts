@@ -44,7 +44,7 @@ const sessionKeyCache = new Map<string, DerivedMessagingKey>();
 export interface DerivedMessagingKey {
   publicKey: string;   // Base64 encoded X25519 public key
   privateKey: string;  // Base64 encoded X25519 private key
-  derivedFrom: "eoa" | "passkey-prf" | "passkey-fallback" | "legacy";
+  derivedFrom: "eoa" | "passkey-prf" | "passkey-fallback" | "pin" | "legacy";
 }
 
 export interface MessagingKeyResult {
@@ -155,12 +155,13 @@ function generateDeterministicKeypair(seed: Uint8Array): { publicKey: string; pr
 // ============================================================================
 
 /**
- * Upload ONLY the public key to Supabase
- * Required for key exchange with other users
+ * Upload public key AND key source to Supabase
+ * Required for key exchange with other users and cross-device key source detection
  */
 async function uploadPublicKeyToSupabase(
   userAddress: string,
-  publicKey: string
+  publicKey: string,
+  keySource?: DerivedMessagingKey["derivedFrom"]
 ): Promise<void> {
   if (!supabase) {
     console.warn("[MessagingKey] Supabase not available");
@@ -168,19 +169,56 @@ async function uploadPublicKeyToSupabase(
   }
   
   try {
+    const upsertData: Record<string, unknown> = {
+      wallet_address: userAddress.toLowerCase(),
+      messaging_public_key: publicKey,
+      updated_at: new Date().toISOString(),
+    };
+    
+    if (keySource) {
+      upsertData.messaging_key_source = keySource;
+    }
+    
     await supabase
       .from("shout_user_settings")
-      .upsert({
-        wallet_address: userAddress.toLowerCase(),
-        messaging_public_key: publicKey,
-        updated_at: new Date().toISOString(),
-      }, {
+      .upsert(upsertData, {
         onConflict: "wallet_address",
       });
     
-    console.log("[MessagingKey] ✅ Public key uploaded");
+    console.log("[MessagingKey] ✅ Public key uploaded (source:", keySource || "unknown", ")");
   } catch (err) {
     console.warn("[MessagingKey] Failed to upload public key:", err);
+  }
+}
+
+/**
+ * Check Supabase for the remote key source of a user
+ * Used to detect cross-device key type (e.g., user set up PIN on another device)
+ */
+export async function getRemoteKeySource(
+  userAddress: string
+): Promise<{ source: DerivedMessagingKey["derivedFrom"] | null; hasKey: boolean }> {
+  if (!supabase) {
+    return { source: null, hasKey: false };
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from("shout_user_settings")
+      .select("messaging_public_key, messaging_key_source")
+      .eq("wallet_address", userAddress.toLowerCase())
+      .single();
+    
+    if (error || !data?.messaging_public_key) {
+      return { source: null, hasKey: false };
+    }
+    
+    return {
+      source: (data.messaging_key_source as DerivedMessagingKey["derivedFrom"]) || null,
+      hasKey: true,
+    };
+  } catch {
+    return { source: null, hasKey: false };
   }
 }
 
@@ -247,7 +285,7 @@ export async function deriveMekFromEoa(
     };
     
     // Upload public key to Supabase
-    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey);
+    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey, "eoa");
     
     // Cache for session
     sessionKeyCache.set(userAddress.toLowerCase(), keypair);
@@ -389,7 +427,7 @@ export async function deriveMekFromPasskeyPrf(
     };
     
     // Upload public key
-    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey);
+    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey, "passkey-prf");
     
     // Cache for session
     sessionKeyCache.set(userAddress.toLowerCase(), keypair);
@@ -463,13 +501,252 @@ export async function deriveMekFromPasskeySignature(
       derivedFrom: "passkey-fallback",
     };
     
-    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey);
+    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey, "passkey-fallback");
     sessionKeyCache.set(userAddress.toLowerCase(), keypair);
     
     return { success: true, keypair, isNewKey: true };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     return { success: false, error: `Passkey error: ${errorMessage}` };
+  }
+}
+
+// ============================================================================
+// PIN-Based Key Derivation (for users without passkey/wallet)
+// ============================================================================
+
+const PIN_SALT_STORAGE = "spritz_pin_salt";
+const PIN_PBKDF2_ITERATIONS = 600_000; // OWASP 2023 recommendation for SHA-256
+
+/**
+ * Check if user has set up a PIN for messaging encryption
+ */
+export function hasPinSetup(userAddress: string): boolean {
+  if (typeof window === "undefined") return false;
+  const salt = localStorage.getItem(`${PIN_SALT_STORAGE}:${userAddress.toLowerCase()}`);
+  return !!salt;
+}
+
+/**
+ * Get the stored PIN verification hash (to verify PIN on re-entry)
+ */
+function getPinVerificationHash(userAddress: string): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(`${PIN_SALT_STORAGE}:${userAddress.toLowerCase()}`);
+}
+
+/**
+ * Store PIN verification hash in localStorage
+ */
+function storePinVerificationHash(userAddress: string, hash: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(`${PIN_SALT_STORAGE}:${userAddress.toLowerCase()}`, hash);
+}
+
+/**
+ * Clear stored PIN data
+ */
+export function clearPinData(userAddress: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(`${PIN_SALT_STORAGE}:${userAddress.toLowerCase()}`);
+}
+
+/**
+ * Derive DETERMINISTIC messaging key from a user-chosen PIN
+ * 
+ * Flow:
+ * 1. PIN + userAddress → HKDF seed (deterministic)
+ * 2. Seed → X25519 keypair (deterministic)
+ * 
+ * RESULT: Same PIN + Same address = Same key (on ANY device, if they remember their PIN)
+ * 
+ * Security: Much stronger than legacy (address-only) because attacker needs the PIN.
+ * The PIN is never stored — only a verification hash to detect wrong PINs.
+ */
+export async function deriveMekFromPin(
+  pin: string,
+  userAddress: string
+): Promise<MessagingKeyResult> {
+  try {
+    if (!pin || pin.length < 6 || !/^\d+$/.test(pin)) {
+      return { success: false, error: "PIN must be at least 6 digits (numbers only)" };
+    }
+
+    // Check session cache
+    const cached = getCachedKey(userAddress);
+    if (cached) {
+      return { success: true, keypair: cached, isNewKey: false };
+    }
+
+    // Use PBKDF2 with 600k iterations for brute-force resistance
+    // This makes each PIN guess take ~100ms, so 10^6 guesses ≈ 28 hours
+    const pinKeyMaterial = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(pin),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
+    
+    const pbkdf2Salt = new TextEncoder().encode(
+      `${MEK_CONTEXT}:pin-salt:${userAddress.toLowerCase()}`
+    );
+    
+    const pinBytes = new Uint8Array(
+      await crypto.subtle.deriveBits(
+        {
+          name: "PBKDF2",
+          hash: "SHA-256",
+          salt: pbkdf2Salt,
+          iterations: PIN_PBKDF2_ITERATIONS,
+        },
+        pinKeyMaterial,
+        256 // 32 bytes
+      )
+    );
+
+    // Derive seed via HKDF for domain separation
+    const seed = await deriveSeedFromSignature(pinBytes, userAddress);
+
+    // Generate deterministic keypair
+    const keys = generateDeterministicKeypair(seed);
+    const keypair: DerivedMessagingKey = {
+      ...keys,
+      derivedFrom: "pin",
+    };
+
+    // Store a verification hash so we can check if PIN is correct on re-entry
+    // This hash is of (PIN + address + public key), NOT the PIN alone
+    // Brute-forcing this hash still requires PBKDF2 per attempt (to derive the public key)
+    const verifyInput = new TextEncoder().encode(
+      `${MEK_CONTEXT}:pin-verify:${userAddress.toLowerCase()}:${keypair.publicKey}`
+    );
+    const verifyHash = await crypto.subtle.digest("SHA-256", verifyInput);
+    const verifyHex = Array.from(new Uint8Array(verifyHash))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    storePinVerificationHash(userAddress, verifyHex);
+
+    // Upload public key to Supabase
+    await uploadPublicKeyToSupabase(userAddress, keypair.publicKey, "pin");
+
+    // Cache for session
+    sessionKeyCache.set(userAddress.toLowerCase(), keypair);
+
+    console.log("[MessagingKey] PIN-derived key generated (PBKDF2-hardened)");
+
+    return { success: true, keypair, isNewKey: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    return { success: false, error: `PIN key error: ${errorMessage}` };
+  }
+}
+
+/**
+ * Verify a PIN against the stored verification hash
+ * Returns true if PIN matches, false if wrong, null if no PIN is set up
+ */
+export async function verifyPin(
+  pin: string,
+  userAddress: string
+): Promise<boolean | null> {
+  const storedHash = getPinVerificationHash(userAddress);
+  if (!storedHash) return null; // No PIN set up yet
+
+  // Re-derive the key using the same PBKDF2 path to get public key for verification
+  const pinKeyMaterial = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(pin),
+    "PBKDF2",
+    false,
+    ["deriveBits"]
+  );
+  
+  const pbkdf2Salt = new TextEncoder().encode(
+    `${MEK_CONTEXT}:pin-salt:${userAddress.toLowerCase()}`
+  );
+  
+  const pinBytes = new Uint8Array(
+    await crypto.subtle.deriveBits(
+      {
+        name: "PBKDF2",
+        hash: "SHA-256",
+        salt: pbkdf2Salt,
+        iterations: PIN_PBKDF2_ITERATIONS,
+      },
+      pinKeyMaterial,
+      256
+    )
+  );
+  
+  const seed = await deriveSeedFromSignature(pinBytes, userAddress);
+  const keys = generateDeterministicKeypair(seed);
+
+  const verifyInput = new TextEncoder().encode(
+    `${MEK_CONTEXT}:pin-verify:${userAddress.toLowerCase()}:${keys.publicKey}`
+  );
+  const verifyHash = await crypto.subtle.digest("SHA-256", verifyInput);
+  const verifyHex = Array.from(new Uint8Array(verifyHash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return verifyHex === storedHash;
+}
+
+/**
+ * Verify a PIN against the public key stored in Supabase (for cross-device unlock)
+ * Used when a user set up a PIN on one device and is unlocking on another
+ * Returns true if the PIN derives the same public key, false if wrong
+ */
+export async function verifyPinAgainstRemote(
+  pin: string,
+  userAddress: string
+): Promise<boolean> {
+  if (!supabase) return false;
+  
+  try {
+    // Get the public key from Supabase
+    const { data, error } = await supabase
+      .from("shout_user_settings")
+      .select("messaging_public_key")
+      .eq("wallet_address", userAddress.toLowerCase())
+      .single();
+    
+    if (error || !data?.messaging_public_key) return false;
+    
+    // Derive what the public key WOULD be with this PIN
+    const pinKeyMaterial = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(pin),
+      "PBKDF2",
+      false,
+      ["deriveBits"]
+    );
+    
+    const pbkdf2Salt = new TextEncoder().encode(
+      `${MEK_CONTEXT}:pin-salt:${userAddress.toLowerCase()}`
+    );
+    
+    const pinBytes = new Uint8Array(
+      await crypto.subtle.deriveBits(
+        {
+          name: "PBKDF2",
+          hash: "SHA-256",
+          salt: pbkdf2Salt,
+          iterations: PIN_PBKDF2_ITERATIONS,
+        },
+        pinKeyMaterial,
+        256
+      )
+    );
+    
+    const seed = await deriveSeedFromSignature(pinBytes, userAddress);
+    const keys = generateDeterministicKeypair(seed);
+    
+    // Compare derived public key with Supabase public key
+    return keys.publicKey === data.messaging_public_key;
+  } catch {
+    return false;
   }
 }
 
@@ -484,6 +761,9 @@ export interface GetMessagingKeyParams {
   passkeyCredentialId?: string;
   rpId?: string;
   hasPasskey?: boolean;
+  pin?: string;
+  /** Key source from Supabase — used to prevent cross-device key conflicts */
+  remoteKeySource?: DerivedMessagingKey["derivedFrom"] | null;
 }
 
 /**
@@ -529,8 +809,28 @@ export async function getOrDeriveMessagingKey(
     
     case "email":
     case "digitalid":
-    case "solana":
+    case "solana": {
+      const existingSourceIsPin = 
+        params.remoteKeySource === "pin" || hasPinSetup(userAddress);
+      
+      // PRIORITY: If user already has a PIN-derived key (locally or remotely),
+      // ALWAYS use PIN — even if they also have a passkey on this device.
+      // This prevents passkey from overwriting the PIN key and breaking other devices.
+      if (existingSourceIsPin) {
+        if (params.pin) {
+          return deriveMekFromPin(params.pin, userAddress);
+        }
+        return {
+          success: false,
+          requiresPasskey: false,
+          error: "Enter your PIN to unlock messaging",
+        };
+      }
+      
+      // No PIN exists — try passkey (only safe if no PIN key was ever established)
       if (hasPasskey && passkeyCredentialId && rpId) {
+        // Double-check remote: if remote source is passkey, it's safe to use passkey
+        // If remote source is null/unknown, this is the first key — passkey is fine
         const result = await deriveMekFromPasskeyPrf(passkeyCredentialId, rpId, userAddress);
         if (result.success) return result;
         if (result.prfNotSupported) {
@@ -538,11 +838,21 @@ export async function getOrDeriveMessagingKey(
         }
         return result;
       }
+      
+      // Fall back to PIN if provided (new setup)
+      if (params.pin) {
+        return deriveMekFromPin(params.pin, userAddress);
+      }
+      
+      // No key exists yet — prompt user to set up
       return {
         success: false,
-        requiresPasskey: true,
-        error: "Add a passkey to enable secure messaging",
+        requiresPasskey: !hasPasskey,
+        error: hasPasskey 
+          ? "Authenticate with your passkey to enable secure messaging"
+          : "Set up a PIN or add a passkey to enable secure messaging",
       };
+    }
     
     default:
       return { success: false, error: "Unknown auth type" };
