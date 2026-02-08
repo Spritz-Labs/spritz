@@ -512,20 +512,22 @@ export function LocationChatModal({
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4"
-                    style={{
-                        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) onClose();
                     }}
                 >
                     <motion.div
                         initial={{ scale: 0.95, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.95, opacity: 0 }}
-                        className="w-full h-full max-w-none max-h-none rounded-none border-0 bg-zinc-900 flex flex-col overflow-hidden sm:w-full sm:max-w-2xl sm:max-h-[70vh] sm:h-[600px] sm:rounded-2xl sm:border sm:border-zinc-800"
+                        className="w-full h-full max-w-none max-h-none bg-zinc-900 flex flex-col overflow-hidden"
                         style={{
-                            paddingTop: "env(safe-area-inset-top, 0px)",
-                            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+                            paddingTop: "env(safe-area-inset-top)",
+                            paddingLeft: "env(safe-area-inset-left)",
+                            paddingRight: "env(safe-area-inset-right)",
                         }}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         {/* Header - same layout as ChannelChatModal: icon + title left, actions + X right */}
                         <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800 shrink-0">

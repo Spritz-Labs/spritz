@@ -4071,12 +4071,12 @@ function DashboardContent({
                                     </svg>
                                     <div>
                                         <p className="text-[#FFF0E0] font-medium">
-                                            Enable Encrypted Chat
+                                            Encrypted Chat
                                         </p>
                                         <p className="text-[#FFF0E0]/70 text-sm mt-1">
-                                            Connecting to a decentralized
-                                            network for encrypted peer-to-peer
-                                            messaging.
+                                            {isWakuInitializing
+                                                ? "Connecting..."
+                                                : "Enable encrypted peer-to-peer messaging."}
                                         </p>
                                         {wakuError && (
                                             <p className="text-red-400 text-sm mt-1">
@@ -4151,7 +4151,7 @@ function DashboardContent({
                                                         />
                                                     </svg>
                                                     {wakuInitStatus ||
-                                                        "Enabling..."}
+                                                        "Connecting..."}
                                                 </>
                                             ) : wakuError ? (
                                                 "Retry"
@@ -4189,8 +4189,7 @@ function DashboardContent({
                                         />
                                     </svg>
                                     <p className="text-emerald-200 font-medium">
-                                        Encrypted Chat Enabled! You can now send
-                                        and receive encrypted messages.
+                                        Encrypted Chat — Connected
                                     </p>
                                 </div>
                             </motion.div>

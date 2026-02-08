@@ -1165,7 +1165,7 @@ export function WakuProvider({
 
         // Wait for SDK to load if not ready
         if (!wakuSdk || !wakuEncryption || !wakuUtils) {
-            setInitStatus("Loading SDK...");
+            setInitStatus("Connecting...");
             log.debug("[Waku] SDK not loaded yet, waiting...");
             // Try to wait for SDK
             for (let i = 0; i < 50; i++) {
@@ -1199,9 +1199,7 @@ export function WakuProvider({
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
-                setInitStatus(
-                    `Creating node... (attempt ${attempt}/${MAX_RETRIES})`
-                );
+                setInitStatus("Connecting...");
                 log.debug(`[Waku] Creating light node (attempt ${attempt})...`);
 
                 // Create and start a Light Node
@@ -1212,12 +1210,12 @@ export function WakuProvider({
                     },
                 });
 
-                setInitStatus("Starting node...");
+                setInitStatus("Connecting...");
                 await node.start();
                 log.debug("[Waku] Node started");
 
                 // Wait for peer connections with timeout
-                setInitStatus("Connecting to peers...");
+                setInitStatus("Connecting...");
                 log.debug("[Waku] Waiting for peers...");
                 const peerPromise = node.waitForPeers([
                     wakuSdk.Protocols.LightPush,
@@ -1273,7 +1271,7 @@ export function WakuProvider({
                 }
 
                 // Wait before retrying
-                setInitStatus(`Retrying in 2s... (${attempt}/${MAX_RETRIES})`);
+                setInitStatus("Connecting...");
                 await new Promise((resolve) => setTimeout(resolve, 2000));
             }
         }
