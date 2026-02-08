@@ -154,6 +154,38 @@ export async function POST(request: NextRequest) {
                     .eq("wallet_address", alienAddress);
                 console.log("[AlienId] Updated user:", alienAddress.slice(0, 20) + "...");
             }
+
+            // Auto-join Alien ID users to the official Alien channel
+            try {
+                const { data: alienChannel } = await supabase
+                    .from("shout_public_channels")
+                    .select("id")
+                    .eq("slug", "alien")
+                    .eq("is_active", true)
+                    .maybeSingle();
+
+                if (alienChannel) {
+                    // Check if already a member
+                    const { data: existingMember } = await supabase
+                        .from("shout_channel_members")
+                        .select("id")
+                        .eq("channel_id", alienChannel.id)
+                        .eq("user_address", alienAddress)
+                        .maybeSingle();
+
+                    if (!existingMember) {
+                        await supabase.from("shout_channel_members").insert({
+                            channel_id: alienChannel.id,
+                            user_address: alienAddress,
+                        });
+                        await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
+                        console.log("[AlienId] Auto-joined user to Alien channel:", alienAddress.slice(0, 20) + "...");
+                    }
+                }
+            } catch (err) {
+                console.error("[AlienId] Failed to auto-join Alien channel:", err);
+                // Don't fail auth if auto-join fails
+            }
         }
         
         // Create session with cookie - THIS IS CRITICAL for API access
