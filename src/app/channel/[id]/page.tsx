@@ -17,6 +17,7 @@ type ChannelInfo = {
     created_at: string;
     poap_event_id?: number | null;
     poap_event_name?: string | null;
+    slug?: string | null;
 };
 
 export default function ChannelInvitePage({
@@ -64,11 +65,11 @@ export default function ChannelInvitePage({
     };
 
     const handleJoin = async () => {
-        if (!userAddress || joining) return;
+        if (!userAddress || joining || !channel) return;
 
         setJoining(true);
         try {
-            const res = await fetch(`/api/channels/${id}/join`, {
+            const res = await fetch(`/api/channels/${channel.id}/join`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userAddress }),
@@ -78,8 +79,8 @@ export default function ChannelInvitePage({
 
             if (res.ok || data.error === "Already a member of this channel") {
                 setJoined(true);
-                // Store that we should open this channel after redirect
-                localStorage.setItem("spritz_open_channel", id);
+                // Store that we should open this channel after redirect (always use the real UUID)
+                localStorage.setItem("spritz_open_channel", channel.id);
                 // Redirect to dashboard
                 window.location.href = "/";
             } else {
@@ -96,8 +97,8 @@ export default function ChannelInvitePage({
     };
 
     const handleLoginAndJoin = () => {
-        // Store pending channel join
-        localStorage.setItem("spritz_pending_channel_join", id);
+        // Store pending channel join (use slug if available for nicer URL, but store real ID for the join)
+        localStorage.setItem("spritz_pending_channel_join", channel?.id || id);
         // Redirect to main page for login
         window.location.href = "/";
     };

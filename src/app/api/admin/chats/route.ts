@@ -58,6 +58,7 @@ export type AdminChat = {
     is_official: boolean;
     is_active: boolean;
     created_at: string;
+    slug?: string | null;
     // For POAP channels
     poap_event_id?: number | null;
     poap_collection_id?: number | null;
@@ -141,6 +142,7 @@ export async function GET(request: NextRequest) {
                 is_official: ch.is_official || false,
                 is_active: ch.is_active !== false,
                 created_at: ch.created_at,
+                slug: ch.slug || null,
                 poap_event_id: ch.poap_event_id,
                 poap_collection_id: ch.poap_collection_id,
                 poap_image_url: ch.poap_image_url,
@@ -208,7 +210,7 @@ export async function PATCH(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { id, type, isActive, isOfficial } = body;
+        const { id, type, isActive, isOfficial, slug } = body;
 
         if (!id || !type) {
             return NextResponse.json({ error: "Missing id or type" }, { status: 400 });
@@ -219,6 +221,41 @@ export async function PATCH(request: NextRequest) {
 
         if (isActive !== undefined) updates.is_active = isActive;
         if (isOfficial !== undefined && type !== "location") updates.is_official = isOfficial;
+
+        // Handle slug updates (channels only)
+        if (slug !== undefined && type !== "location") {
+            if (slug === "" || slug === null) {
+                // Remove slug
+                updates.slug = null;
+            } else {
+                // Validate slug format: lowercase alphanumeric + hyphens, 2-50 chars
+                const slugValue = String(slug).toLowerCase().trim();
+                if (!/^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$/.test(slugValue) && slugValue.length >= 2) {
+                    // Try to auto-fix: replace spaces/underscores with hyphens, strip invalid chars
+                    const cleaned = slugValue.replace(/[\s_]+/g, "-").replace(/[^a-z0-9-]/g, "").replace(/-+/g, "-").replace(/^-|-$/g, "");
+                    if (cleaned.length < 2 || cleaned.length > 50) {
+                        return NextResponse.json({ error: "Slug must be 2-50 characters, lowercase letters, numbers, and hyphens only" }, { status: 400 });
+                    }
+                    updates.slug = cleaned;
+                } else if (slugValue.length < 2) {
+                    return NextResponse.json({ error: "Slug must be at least 2 characters" }, { status: 400 });
+                } else {
+                    updates.slug = slugValue;
+                }
+
+                // Check for uniqueness
+                const { data: existing } = await supabase
+                    .from("shout_public_channels")
+                    .select("id")
+                    .eq("slug", updates.slug)
+                    .neq("id", id)
+                    .maybeSingle();
+
+                if (existing) {
+                    return NextResponse.json({ error: "This slug is already in use by another channel" }, { status: 400 });
+                }
+            }
+        }
 
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: "No updates provided" }, { status: 400 });

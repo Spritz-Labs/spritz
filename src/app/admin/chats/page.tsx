@@ -7,7 +7,7 @@ import { AdminLayout, AdminAuthWrapper, AdminLoading } from "@/components/AdminL
 import type { AdminChat, AdminChatsResponse } from "@/app/api/admin/chats/route";
 
 type FilterType = "all" | "standard" | "waku" | "poap_event" | "poap_collection" | "location";
-type ViewTab = "channels" | "locations";
+type ViewTab = "channels" | "locations" | "official";
 
 const TYPE_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
     standard: { label: "Standard", emoji: "☁️", color: "bg-blue-500/20 text-blue-400" },
@@ -35,6 +35,11 @@ export default function AdminChatsPage() {
     const [filterType, setFilterType] = useState<FilterType>("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [updatingChat, setUpdatingChat] = useState<string | null>(null);
+    const [editingSlug, setEditingSlug] = useState<string | null>(null);
+    const [slugInput, setSlugInput] = useState("");
+    const [slugError, setSlugError] = useState<string | null>(null);
+    const [slugSaving, setSlugSaving] = useState(false);
+    const [officialSearch, setOfficialSearch] = useState("");
 
     const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
     const formatDate = (date: string) => new Date(date).toLocaleDateString();
@@ -85,6 +90,45 @@ export default function AdminChatsPage() {
             setUpdatingChat(null);
         }
     };
+
+    const updateSlug = async (id: string, slug: string | null) => {
+        const authHeaders = getAuthHeaders();
+        if (!authHeaders) return;
+
+        setSlugSaving(true);
+        setSlugError(null);
+        try {
+            const res = await fetch("/api/admin/chats", {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", ...authHeaders },
+                body: JSON.stringify({ id, type: "standard", slug: slug || null }),
+            });
+
+            const result = await res.json();
+            if (res.ok) {
+                setEditingSlug(null);
+                setSlugInput("");
+                fetchData();
+            } else {
+                setSlugError(result.error || "Failed to update slug");
+            }
+        } catch (err) {
+            console.error("[Admin Chats] Slug update error:", err);
+            setSlugError("Failed to update slug");
+        } finally {
+            setSlugSaving(false);
+        }
+    };
+
+    // Official channels list (only official channels)
+    const officialChannels = data?.channels.filter((ch) => {
+        const isOfficial = ch.is_official;
+        const matchesSearch = !officialSearch ||
+            ch.name.toLowerCase().includes(officialSearch.toLowerCase()) ||
+            ch.slug?.toLowerCase().includes(officialSearch.toLowerCase()) ||
+            ch.description?.toLowerCase().includes(officialSearch.toLowerCase());
+        return isOfficial && matchesSearch;
+    }) || [];
 
     // Filter and search logic
     const filteredChannels = data?.channels.filter((ch) => {
@@ -157,6 +201,14 @@ export default function AdminChatsPage() {
                 <div className="flex items-center gap-4 mb-4 flex-wrap">
                     <div className="flex bg-zinc-800 rounded-lg p-0.5">
                         <button
+                            onClick={() => setActiveTab("official")}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                                activeTab === "official" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"
+                            }`}
+                        >
+                            ⭐ Official ({data?.channels.filter(c => c.is_official).length || 0})
+                        </button>
+                        <button
                             onClick={() => setActiveTab("channels")}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
                                 activeTab === "channels" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"
@@ -221,6 +273,199 @@ export default function AdminChatsPage() {
 
                 {/* Content */}
                 <AnimatePresence mode="wait">
+                    {activeTab === "official" && (
+                        <motion.div
+                            key="official"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                        >
+                            {/* Description */}
+                            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 mb-4">
+                                <p className="text-sm text-zinc-400">
+                                    Manage official channels and assign custom slugs for shareable URLs like{" "}
+                                    <code className="text-orange-400 bg-zinc-800 px-1.5 py-0.5 rounded text-xs">app.spritz.chat/channel/alien</code>
+                                </p>
+                            </div>
+
+                            {/* Search */}
+                            <div className="relative max-w-xs mb-4">
+                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Search official channels..."
+                                    value={officialSearch}
+                                    onChange={(e) => setOfficialSearch(e.target.value)}
+                                    className="w-full pl-10 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-500"
+                                />
+                            </div>
+
+                            {isLoadingData && !data ? (
+                                <div className="text-center py-12 text-zinc-500">Loading...</div>
+                            ) : officialChannels.length === 0 ? (
+                                <div className="text-center py-12 text-zinc-500">No official channels found</div>
+                            ) : (
+                                <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead>
+                                                <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500 uppercase tracking-wider">
+                                                    <th className="px-4 py-3">Channel</th>
+                                                    <th className="px-4 py-3">Category</th>
+                                                    <th className="px-4 py-3">Slug / URL</th>
+                                                    <th className="px-4 py-3 text-center">Members</th>
+                                                    <th className="px-4 py-3 text-center">Messages</th>
+                                                    <th className="px-4 py-3">Status</th>
+                                                    <th className="px-4 py-3">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-800">
+                                                {officialChannels.map((ch) => (
+                                                    <tr key={ch.id} className="hover:bg-zinc-800/30 transition-colors">
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center gap-3">
+                                                                {ch.poap_image_url ? (
+                                                                    <img src={ch.poap_image_url} alt="" className="w-10 h-10 rounded-lg object-cover" />
+                                                                ) : (
+                                                                    <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center text-xl">
+                                                                        {ch.emoji}
+                                                                    </div>
+                                                                )}
+                                                                <div>
+                                                                    <p className="font-medium text-white">{ch.name}</p>
+                                                                    {ch.description && (
+                                                                        <p className="text-xs text-zinc-500 truncate max-w-[200px]">{ch.description}</p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <span className="text-xs px-2 py-1 rounded-full bg-zinc-800 text-zinc-300 capitalize">
+                                                                {ch.type === "standard" ? (data?.channels.find(c => c.id === ch.id) as AdminChat & { category?: string })?.type || "general" : ch.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 min-w-[280px]">
+                                                            {editingSlug === ch.id ? (
+                                                                <div className="space-y-2">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="text-xs text-zinc-500 whitespace-nowrap">/channel/</span>
+                                                                        <input
+                                                                            type="text"
+                                                                            value={slugInput}
+                                                                            onChange={(e) => {
+                                                                                setSlugInput(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+                                                                                setSlugError(null);
+                                                                            }}
+                                                                            placeholder="my-slug"
+                                                                            className="flex-1 px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-600 focus:border-orange-500 focus:outline-none"
+                                                                            autoFocus
+                                                                            onKeyDown={(e) => {
+                                                                                if (e.key === "Enter" && slugInput.trim()) {
+                                                                                    updateSlug(ch.id, slugInput.trim());
+                                                                                } else if (e.key === "Escape") {
+                                                                                    setEditingSlug(null);
+                                                                                    setSlugError(null);
+                                                                                }
+                                                                            }}
+                                                                        />
+                                                                    </div>
+                                                                    {slugError && (
+                                                                        <p className="text-xs text-red-400">{slugError}</p>
+                                                                    )}
+                                                                    <div className="flex items-center gap-2">
+                                                                        <button
+                                                                            onClick={() => updateSlug(ch.id, slugInput.trim() || null)}
+                                                                            disabled={slugSaving}
+                                                                            className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-colors disabled:opacity-50"
+                                                                        >
+                                                                            {slugSaving ? "Saving..." : slugInput.trim() ? "Save" : "Remove Slug"}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => { setEditingSlug(null); setSlugError(null); }}
+                                                                            className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 transition-colors"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div>
+                                                                    {ch.slug ? (
+                                                                        <div className="space-y-1">
+                                                                            <a
+                                                                                href={`https://app.spritz.chat/channel/${ch.slug}`}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="text-sm text-orange-400 hover:text-orange-300 transition-colors"
+                                                                            >
+                                                                                /channel/{ch.slug} ↗
+                                                                            </a>
+                                                                            <button
+                                                                                onClick={() => { setEditingSlug(ch.id); setSlugInput(ch.slug || ""); }}
+                                                                                className="block text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                                                                            >
+                                                                                Edit slug
+                                                                            </button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={() => { setEditingSlug(ch.id); setSlugInput(""); }}
+                                                                            className="text-xs px-2 py-1 bg-zinc-800 text-zinc-400 rounded hover:bg-zinc-700 hover:text-zinc-300 transition-colors"
+                                                                        >
+                                                                            + Add slug
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-center text-sm">{ch.member_count.toLocaleString()}</td>
+                                                        <td className="px-4 py-3 text-center text-sm">{ch.message_count.toLocaleString()}</td>
+                                                        <td className="px-4 py-3">
+                                                            <span className={`text-xs px-2 py-1 rounded-full ${ch.is_active ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"}`}>
+                                                                {ch.is_active ? "Active" : "Inactive"}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={() => updateChat(ch.id, ch.type, { isOfficial: false })}
+                                                                    disabled={updatingChat === ch.id}
+                                                                    className="text-xs px-2 py-1 bg-orange-500/20 text-orange-400 rounded hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+                                                                >
+                                                                    Remove Official
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => updateChat(ch.id, ch.type, { isActive: !ch.is_active })}
+                                                                    disabled={updatingChat === ch.id}
+                                                                    className={`text-xs px-2 py-1 rounded transition-colors ${ch.is_active ? "bg-red-500/10 text-red-400 hover:bg-red-500/20" : "bg-green-500/10 text-green-400 hover:bg-green-500/20"}`}
+                                                                >
+                                                                    {ch.is_active ? "Deactivate" : "Activate"}
+                                                                </button>
+                                                                {ch.slug && (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            navigator.clipboard.writeText(`https://app.spritz.chat/channel/${ch.slug}`);
+                                                                        }}
+                                                                        className="text-xs px-2 py-1 bg-zinc-700 text-zinc-300 rounded hover:bg-zinc-600 transition-colors"
+                                                                        title="Copy link"
+                                                                    >
+                                                                        📋 Copy URL
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+
                     {activeTab === "channels" && (
                         <motion.div
                             key="channels"

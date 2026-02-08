@@ -6,7 +6,7 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/public/channels/[id] - Get public channel info
+// GET /api/public/channels/[id] - Get public channel info (supports UUID or slug)
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -14,16 +14,37 @@ export async function GET(
     const { id } = await params;
 
     try {
-        const { data: channel, error } = await supabase
-            .from("shout_public_channels")
-            .select(
-                "id, name, description, emoji, category, is_official, member_count, message_count, created_at, poap_event_id, poap_event_name"
-            )
-            .eq("id", id)
-            .eq("is_active", true)
-            .single();
+        // Determine if the id is a UUID or a slug
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-        if (error || !channel) {
+        const selectFields =
+            "id, name, description, emoji, category, is_official, member_count, message_count, created_at, poap_event_id, poap_event_name, slug";
+
+        let channel = null;
+
+        if (isUuid) {
+            // Look up by UUID
+            const { data, error } = await supabase
+                .from("shout_public_channels")
+                .select(selectFields)
+                .eq("id", id)
+                .eq("is_active", true)
+                .single();
+
+            if (!error) channel = data;
+        } else {
+            // Look up by slug (case-insensitive)
+            const { data, error } = await supabase
+                .from("shout_public_channels")
+                .select(selectFields)
+                .eq("slug", id.toLowerCase())
+                .eq("is_active", true)
+                .single();
+
+            if (!error) channel = data;
+        }
+
+        if (!channel) {
             return NextResponse.json(
                 { error: "Channel not found" },
                 { status: 404 }
