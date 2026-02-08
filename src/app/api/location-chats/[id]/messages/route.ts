@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { isUserBanned } from "@/lib/banCheck";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -95,6 +96,14 @@ export async function POST(
             return NextResponse.json(
                 { error: "Authentication required" },
                 { status: 401 }
+            );
+        }
+
+        // Check if user is banned
+        if (await isUserBanned(session.userAddress)) {
+            return NextResponse.json(
+                { error: "Your account has been suspended" },
+                { status: 403 }
             );
         }
 

@@ -56,6 +56,7 @@ import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ChatMembersList } from "./ChatMembersList";
 import { LinkPreview, detectUrls } from "./LinkPreview";
 import { MessageSearch } from "./MessageSearch";
+import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -138,7 +139,7 @@ export function ChannelChatModal({
     });
 
     // Normalize message interface based on channel type (memoize for Waku to avoid re-render flash)
-    const messages = isWakuChannel
+    const allMessages = isWakuChannel
         ? useMemo(
               () =>
                   wakuMessages.messages.map((m) => ({
@@ -160,6 +161,13 @@ export function ChannelChatModal({
               [wakuMessages.messages, channel.id]
           )
         : standardMessages.messages;
+
+    // Filter out messages from blocked users
+    const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
+    const messages = useMemo(
+        () => allMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
+        [allMessages, isUserBlocked]
+    );
 
     const pinnedMessages = isWakuChannel ? [] : standardMessages.pinnedMessages;
 

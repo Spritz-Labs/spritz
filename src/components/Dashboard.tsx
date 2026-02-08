@@ -99,6 +99,8 @@ import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useModeration } from "@/hooks/useModeration";
 import { UserCardModal } from "./UserCardModal";
+import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
+import { BlockUserModal, ReportUserModal } from "./MuteBlockReportModals";
 import { LocationChatPicker } from "./LocationChatPicker";
 import { LocationChatModal } from "./LocationChatModal";
 import { type LocationChat } from "@/hooks/useLocationChat";
@@ -1649,6 +1651,11 @@ function DashboardContent({
     );
 
     const moderation = useModeration(userAddress);
+    const { blockUser, unblockUser, isBlockedByMe } = useBlockedUsers(userAddress);
+    const [showBlockModal, setShowBlockModal] = useState(false);
+    const [showReportModal, setShowReportModal] = useState(false);
+    const [showBanConfirm, setShowBanConfirm] = useState(false);
+    const [banReason, setBanReason] = useState("");
 
     // Normalize to a valid Date or null (invalid/missing values sort to bottom)
     const toValidLastMessageAt = useCallback((value: unknown): Date | null => {
@@ -6026,9 +6033,136 @@ function DashboardContent({
                             f.friend_address.toLowerCase() ===
                             userCardAddress.toLowerCase()
                     )}
+                    onBlock={() => setShowBlockModal(true)}
+                    onReport={() => setShowReportModal(true)}
+                    isBlocked={isBlockedByMe(userCardAddress)}
+                    onBan={isAdmin ? () => setShowBanConfirm(true) : undefined}
                     pushStateForBack={true}
                 />
             )}
+
+            {/* Block User Modal (from user card) */}
+            {userCardAddress && (
+                <BlockUserModal
+                    isOpen={showBlockModal}
+                    onClose={() => setShowBlockModal(false)}
+                    onBlock={async () => {
+                        const success = await blockUser(userCardAddress);
+                        return success;
+                    }}
+                    onUnblock={async () => {
+                        const success = await unblockUser(userCardAddress);
+                        return success;
+                    }}
+                    isBlocked={isBlockedByMe(userCardAddress)}
+                    userName={
+                        getAlphaUserInfo(userCardAddress)?.name ??
+                        friendsListData.find(
+                            (f) => f.address.toLowerCase() === userCardAddress.toLowerCase()
+                        )?.nickname ??
+                        `${userCardAddress.slice(0, 6)}...${userCardAddress.slice(-4)}`
+                    }
+                    userAddress={userCardAddress}
+                />
+            )}
+
+            {/* Report User Modal (from user card) */}
+            {userCardAddress && (
+                <ReportUserModal
+                    isOpen={showReportModal}
+                    onClose={() => setShowReportModal(false)}
+                    onReport={async (params) => {
+                        const res = await fetch("/api/users/report", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: "include",
+                            body: JSON.stringify({
+                                reportedAddress: userCardAddress,
+                                reportType: params.reportType,
+                                description: params.description,
+                                alsoBlock: params.alsoBlock,
+                            }),
+                        });
+                        if (res.ok) return { success: true };
+                        const data = await res.json();
+                        return { success: false, error: data.error || "Failed to report" };
+                    }}
+                    userName={
+                        getAlphaUserInfo(userCardAddress)?.name ??
+                        `${userCardAddress.slice(0, 6)}...${userCardAddress.slice(-4)}`
+                    }
+                    userAddress={userCardAddress}
+                />
+            )}
+
+            {/* Ban User Confirm (admin only) */}
+            <AnimatePresence>
+                {showBanConfirm && userCardAddress && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+                        onClick={() => { setShowBanConfirm(false); setBanReason(""); }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95 }}
+                            animate={{ scale: 1 }}
+                            exit={{ scale: 0.95 }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm"
+                        >
+                            <h3 className="text-lg font-bold text-white mb-2">Ban User</h3>
+                            <p className="text-sm text-zinc-400 mb-4">
+                                This will prevent{" "}
+                                <span className="text-white font-medium">
+                                    {getAlphaUserInfo(userCardAddress)?.name ?? `${userCardAddress.slice(0, 6)}...${userCardAddress.slice(-4)}`}
+                                </span>{" "}
+                                from sending messages in any chat.
+                            </p>
+                            <textarea
+                                placeholder="Reason for ban (optional)"
+                                value={banReason}
+                                onChange={(e) => setBanReason(e.target.value)}
+                                className="w-full bg-zinc-800 border border-zinc-700 rounded-xl p-3 text-sm text-white placeholder-zinc-500 mb-4 resize-none"
+                                rows={2}
+                            />
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setShowBanConfirm(false); setBanReason(""); }}
+                                    className="flex-1 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-sm font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            await fetch("/api/admin/ban", {
+                                                method: "POST",
+                                                headers: { "Content-Type": "application/json" },
+                                                credentials: "include",
+                                                body: JSON.stringify({
+                                                    userAddress: userCardAddress,
+                                                    ban: true,
+                                                    reason: banReason || undefined,
+                                                }),
+                                            });
+                                        } catch (err) {
+                                            console.error("Ban error:", err);
+                                        }
+                                        setShowBanConfirm(false);
+                                        setBanReason("");
+                                        setUserCardAddress(null);
+                                    }}
+                                    className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-bold"
+                                >
+                                    Ban User
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Create Group Modal */}
             <CreateGroupModal

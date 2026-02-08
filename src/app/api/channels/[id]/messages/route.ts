@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeMessageContent } from "@/lib/sanitize";
 import { getMembershipLookupAddresses } from "@/lib/ensResolution";
+import { isUserBanned } from "@/lib/banCheck";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -130,6 +131,14 @@ export async function POST(
         }
 
         const normalizedAddress = senderAddress.toLowerCase();
+
+        // Check if user is banned
+        if (await isUserBanned(normalizedAddress)) {
+            return NextResponse.json(
+                { error: "Your account has been suspended" },
+                { status: 403 }
+            );
+        }
 
         // Check if user is a member (resolve ENS so we find rows stored by 0x)
         const lookupAddrs = await getMembershipLookupAddresses(senderAddress);

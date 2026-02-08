@@ -52,6 +52,7 @@ import { useAlphaPolls } from "@/hooks/useAlphaPolls";
 import { MessageSearch } from "./MessageSearch";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
+import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -134,7 +135,7 @@ export function AlphaChatModal({
     onMessageSent,
 }: AlphaChatModalProps) {
     const {
-        messages,
+        messages: rawMessages,
         pinnedMessages,
         reactions,
         membership,
@@ -156,6 +157,13 @@ export function AlphaChatModal({
         loadMoreMessages,
         thinkingAgents = [],
     } = alphaChat;
+
+    // Filter out messages from blocked users
+    const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
+    const messages = useMemo(
+        () => rawMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
+        [rawMessages, isUserBlocked]
+    );
 
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);

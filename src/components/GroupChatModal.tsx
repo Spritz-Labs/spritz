@@ -48,6 +48,7 @@ import { PollEditModal } from "./PollEditModal";
 import { useGroupPolls } from "@/hooks/useGroupPolls";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
+import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -130,8 +131,9 @@ export function GroupChatModal({
     isAdmin = false,
 }: GroupChatModalProps) {
     const userTimezone = useUserTimezone();
-    const [messages, setMessages] = useState<Message[]>([]);
+    const [allMessages, setMessages] = useState<Message[]>([]);
     const [members, setMembers] = useState<Member[]>([]);
+    const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
     const [newMessage, setNewMessage] = useState("");
     const draftAppliedRef = useRef(false);
     const [isSending, setIsSending] = useState(false);
@@ -267,6 +269,16 @@ export function GroupChatModal({
             })
             .filter((u) => u.address); // Only include members with addresses
     }, [members, userInboxId, getUserInfo, memberENSData]);
+
+    // Filter out messages from blocked users
+    const messages = useMemo(() => {
+        return allMessages.filter((msg) => {
+            const senderAddress = members.find(
+                (mem) => mem.inboxId === msg.senderInboxId
+            )?.addresses?.[0];
+            return !senderAddress || !isUserBlocked(senderAddress);
+        });
+    }, [allMessages, members, isUserBlocked]);
 
     const groupSearchMessages = useMemo(
         () =>

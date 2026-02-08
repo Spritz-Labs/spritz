@@ -41,6 +41,7 @@ import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -139,7 +140,7 @@ export function LocationChatModal({
 
     const {
         chat,
-        messages,
+        messages: rawMessages,
         members,
         isMember,
         isLoading,
@@ -150,6 +151,13 @@ export function LocationChatModal({
         joinChat,
         leaveChat,
     } = useLocationChat(isOpen ? locationChat.id : null, userAddress);
+
+    // Filter out messages from blocked users
+    const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
+    const messages = useMemo(
+        () => rawMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
+        [rawMessages, isUserBlocked]
+    );
 
     // Admin check: global admin or chat creator
     const { isAdmin: isGlobalAdmin } = useAdminCheck(userAddress);

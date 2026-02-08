@@ -35,6 +35,9 @@ export interface UserCardModalProps {
     onBlock?: () => void;
     onReport?: () => void;
     isBlocked?: boolean;
+    /** Admin ban user */
+    onBan?: () => void;
+    isBanned?: boolean;
     /** PWA: push state when opened so back button closes modal */
     pushStateForBack?: boolean;
 }
@@ -65,6 +68,8 @@ export function UserCardModal({
     onBlock,
     onReport,
     isBlocked = false,
+    onBan,
+    isBanned = false,
     pushStateForBack = true,
 }: UserCardModalProps) {
     const [notes, setNotes] = useState("");
@@ -303,11 +308,26 @@ export function UserCardModal({
                                                 setMoreOpen(false);
                                                 onReport();
                                             }}
-                                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-amber-400 hover:bg-zinc-800 rounded-b-xl"
+                                            className={`flex w-full items-center gap-3 px-4 py-3 text-left text-amber-400 hover:bg-zinc-800 ${!onBan ? "rounded-b-xl" : ""}`}
                                         >
                                             <span className="text-lg">⚠️</span>
                                             <span className="text-sm font-medium">
                                                 Report
+                                            </span>
+                                        </button>
+                                    )}
+                                    {onBan && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setMoreOpen(false);
+                                                onBan();
+                                            }}
+                                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-red-500 hover:bg-zinc-800 rounded-b-xl border-t border-zinc-800"
+                                        >
+                                            <span className="text-lg">{isBanned ? "✅" : "⛔"}</span>
+                                            <span className="text-sm font-medium">
+                                                {isBanned ? "Unban user" : "Ban user"}
                                             </span>
                                         </button>
                                     )}
