@@ -168,7 +168,7 @@ const FriendCard = memo(function FriendCard({
         window.matchMedia("(max-width: 640px)").matches;
 
     return (
-        <div className="group select-none" style={style}>
+        <div id={`friend-card-${friend.id}`} className="group select-none" style={style}>
             <div
                 className={`rounded-lg sm:rounded-xl px-2.5 py-2.5 sm:p-3 transition-all ${
                     hasUnread
@@ -493,7 +493,15 @@ const FriendCard = memo(function FriendCard({
                 </div>
 
                 {/* Expanded Options */}
+                <AnimatePresence initial={false}>
                 {isExpanded && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        style={{ overflow: "hidden" }}
+                    >
                     <div className="mt-3 pt-3 border-t border-zinc-700/50">
                         {/* Nickname display */}
                         {friend.nickname && (
@@ -832,7 +840,9 @@ const FriendCard = memo(function FriendCard({
                             </button>
                         </div>
                     </div>
+                    </motion.div>
                 )}
+                </AnimatePresence>
             </div>
         </div>
     );
@@ -1137,7 +1147,17 @@ export function FriendsList({
     );
 
     const toggleExpand = useCallback((id: string) => {
-        setExpandedId((prev) => (prev === id ? null : id));
+        setExpandedId((prev) => {
+            const newId = prev === id ? null : id;
+            // Scroll the expanded card into view after render
+            if (newId) {
+                requestAnimationFrame(() => {
+                    const el = document.getElementById(`friend-card-${newId}`);
+                    el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                });
+            }
+            return newId;
+        });
     }, []);
 
     const handleRemoveClick = useCallback((friend: Friend) => {
@@ -1299,20 +1319,22 @@ export function FriendsList({
         getTag,
     ]);
 
-    // Virtual scrolling - only enabled for large lists
-    const useVirtual = processedFriends.length > 20;
+    // Virtual scrolling - only enabled for very large lists (200+)
+    // Lower thresholds caused expansion/layout bugs because virtualizer
+    // uses absolute positioning which conflicts with dynamic heights.
+    // memo'd FriendCards handle 200 items without performance issues.
+    const useVirtual = processedFriends.length > 200;
     const virtualizer = useVirtualizer({
         count: processedFriends.length,
         getScrollElement: () => parentRef.current,
         estimateSize: useCallback(
             (index: number) => {
-                // Expanded items are much taller (~400px); collapsed are ~76px
                 const friend = processedFriends[index];
                 return expandedId === friend?.id ? 400 : 76;
             },
             [processedFriends, expandedId]
         ),
-        overscan: 5,
+        overscan: 10,
         enabled: useVirtual,
     });
 
