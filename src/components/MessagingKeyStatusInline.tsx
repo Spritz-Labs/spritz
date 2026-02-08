@@ -361,6 +361,94 @@ export function MessagingKeyStatus({
         </p>
       )}
       
+      {/* Switch to PIN for email/digitalid/solana users who have a passkey-derived key */}
+      {/* This covers the case where user set up passkey on a browser but is now on a Mini App without passkey support */}
+      {status.hasKey && (status.source === "passkey-prf" || status.source === "passkey-fallback") && (authType === "email" || authType === "digitalid" || authType === "solana") && (
+        <div className="mt-3 pt-3 border-t border-zinc-700/50">
+          {!showPinInput ? (
+            <>
+              <p className="text-xs text-zinc-400 mb-2">
+                Switch to a PIN so you can access messages on devices without passkey support.
+              </p>
+              <button
+                onClick={() => {
+                  setShowPinInput(true);
+                  setPinStep("enter");
+                  setPin("");
+                  setConfirmPin("");
+                  setError(null);
+                }}
+                className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 text-white text-xs font-medium rounded-lg transition-colors"
+              >
+                Switch to PIN
+              </button>
+              <p className="text-xs text-amber-400/80 mt-2">
+                Note: Messages encrypted with your passkey on other devices won&apos;t be readable after switching.
+              </p>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs text-zinc-400">
+                {pinStep === "enter" && "Choose a PIN (6+ digits):"}
+                {pinStep === "confirm" && "Confirm your PIN:"}
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={pinStep === "confirm" ? confirmPin : pin}
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, "");
+                    if (pinStep === "confirm") {
+                      setConfirmPin(digits);
+                    } else {
+                      setPin(digits);
+                    }
+                    setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handlePinSubmit();
+                  }}
+                  placeholder={pinStep === "confirm" ? "Confirm PIN" : "Enter PIN"}
+                  className="flex-1 px-3 py-1.5 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-xs focus:outline-none focus:border-[#FF5500] placeholder:text-zinc-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handlePinSubmit}
+                  disabled={isRegenerating || (pinStep === "confirm" ? !confirmPin : pin.length < 6)}
+                  className="px-3 py-1.5 bg-[#FF5500] hover:bg-[#FF5500]/90 disabled:bg-zinc-600 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  {isRegenerating ? (
+                    <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                  ) : pinStep === "confirm" ? "Confirm" : "Next"}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPinInput(false);
+                    setPin("");
+                    setConfirmPin("");
+                    setError(null);
+                  }}
+                  className="px-2 py-1.5 text-zinc-400 hover:text-white text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+              {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+              {pinStep === "enter" && !error && (
+                <p className="text-xs text-zinc-500 mt-1">
+                  Remember this PIN — you&apos;ll need it on all your devices.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      
       {/* Enable option when no key - wallet users */}
       {!status.hasKey && authType === "wallet" && canEnable && (
         <div className="mt-3">
