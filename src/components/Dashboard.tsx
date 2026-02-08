@@ -4940,6 +4940,13 @@ function DashboardContent({
                                             await refreshFriends();
                                         }}
                                         onChatClick={handleUnifiedChatClick}
+                                        onPrefetchChat={(chat) => {
+                                            // Prefetch DM messages on hover for instant chat opening
+                                            if (chat.type === "dm") {
+                                                const addr = chat.id.replace("dm-", "");
+                                                prefetchMessages(addr);
+                                            }
+                                        }}
                                         onCallClick={handleUnifiedCallClick}
                                         onVideoClick={handleUnifiedVideoClick}
                                         showCreateFolderModal={

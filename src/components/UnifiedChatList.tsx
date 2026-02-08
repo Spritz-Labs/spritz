@@ -234,6 +234,8 @@ type UnifiedChatListProps = {
     onChatClick: (chat: UnifiedChatItem) => void;
     onCallClick?: (chat: UnifiedChatItem) => void;
     onVideoClick?: (chat: UnifiedChatItem) => void;
+    /** Prefetch messages when hovering over a chat item for faster opening */
+    onPrefetchChat?: (chat: UnifiedChatItem) => void;
     showCreateFolderModal?: boolean;
     onCreateFolderModalClose?: () => void;
     /** When "No chats yet", show CTAs to add friend, browse channels, create group */
@@ -374,6 +376,7 @@ type ChatRowProps = {
         openUpward: boolean;
     } | null;
     onChatClick: (chat: UnifiedChatItem) => void;
+    onPrefetchChat?: (chat: UnifiedChatItem) => void;
     onFolderButtonClick: (chatId: string) => void;
     onAssignFolder: (
         chatId: string,
@@ -397,6 +400,7 @@ const ChatRow = memo(
         isFolderPickerOpen,
         folderPickerPosition,
         onChatClick,
+        onPrefetchChat,
         onFolderButtonClick,
         onAssignFolder,
         onCloseFolderPicker,
@@ -412,6 +416,7 @@ const ChatRow = memo(
             <div className="relative select-none" onContextMenu={onContextMenu}>
                 <div
                     onClick={() => onChatClick(chat)}
+                    onMouseEnter={() => onPrefetchChat?.(chat)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
@@ -840,6 +845,7 @@ function UnifiedChatListInner({
     onChatClick,
     onCallClick,
     onVideoClick,
+    onPrefetchChat,
     showCreateFolderModal,
     onCreateFolderModalClose,
     showSearch = false,
@@ -1491,6 +1497,7 @@ function UnifiedChatListInner({
                                 }
                                 folderPickerPosition={folderPickerPosition}
                                 onChatClick={onChatClick}
+                                onPrefetchChat={onPrefetchChat}
                                 onFolderButtonClick={setShowFolderPicker}
                                 onAssignFolder={handleAssignFolder}
                                 onCloseFolderPicker={() =>
