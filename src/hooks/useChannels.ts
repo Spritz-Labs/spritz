@@ -394,6 +394,11 @@ export function useChannelMessages(
     const [error, setError] = useState<string | null>(null);
     const [replyingTo, setReplyingTo] = useState<ChannelMessage | null>(null);
 
+    // Track which agents are currently generating a response
+    const [thinkingAgents, setThinkingAgents] = useState<
+        { id: string; name: string; emoji?: string; avatarUrl?: string }[]
+    >([]);
+
     const PAGE_SIZE = 50;
 
     // Process raw reactions into grouped format
@@ -546,8 +551,30 @@ export function useChannelMessages(
                 // Clear reply state
                 setReplyingTo(null);
 
-                // Check for agent mentions and trigger responses (fire and forget)
+                // Check for agent mentions and trigger responses
                 if (content.includes("@[") && content.includes("](")) {
+                    // Extract mentioned agent names for thinking indicator
+                    const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+                    const mentionedAgents: { id: string; name: string }[] = [];
+                    let match;
+                    while ((match = mentionRegex.exec(content)) !== null) {
+                        // Only treat non-address IDs as agents (agent IDs are UUIDs, not wallet addresses)
+                        const mentionId = match[2];
+                        if (mentionId && !mentionId.startsWith("0x") && !mentionId.startsWith("00")) {
+                            mentionedAgents.push({ id: mentionId, name: match[1] });
+                        }
+                    }
+
+                    // Show thinking indicator for mentioned agents
+                    if (mentionedAgents.length > 0) {
+                        setThinkingAgents((prev) => [
+                            ...prev,
+                            ...mentionedAgents.filter(
+                                (a) => !prev.some((p) => p.id === a.id)
+                            ),
+                        ]);
+                    }
+
                     fetch("/api/channels/agent-response", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -587,7 +614,17 @@ export function useChannelMessages(
                                 "[useChannelMessages] Agent response error:",
                                 err
                             )
-                        );
+                        )
+                        .finally(() => {
+                            // Clear thinking state for mentioned agents
+                            if (mentionedAgents.length > 0) {
+                                setThinkingAgents((prev) =>
+                                    prev.filter(
+                                        (a) => !mentionedAgents.some((m) => m.id === a.id)
+                                    )
+                                );
+                            }
+                        });
                 }
 
                 return data.message as ChannelMessage;
@@ -928,5 +965,6 @@ export function useChannelMessages(
         togglePinMessage,
         replyingTo,
         setReplyingTo,
+        thinkingAgents,
     };
 }

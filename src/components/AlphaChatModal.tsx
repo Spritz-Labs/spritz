@@ -22,9 +22,8 @@ import { MentionText } from "./MentionText";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
 import { LinkPreview, detectUrls } from "./LinkPreview";
 import {
     LocationMessage,
@@ -100,6 +99,7 @@ interface AlphaChatModalProps {
         ) => Promise<boolean>;
         refreshMessages?: () => Promise<void>;
         loadMoreMessages: () => Promise<void>;
+        thinkingAgents?: { id: string; name: string; emoji?: string; avatarUrl?: string }[];
     };
     // For displaying usernames/avatars
     getUserInfo?: (address: string) => {
@@ -154,6 +154,7 @@ export function AlphaChatModal({
         togglePinMessage,
         refreshMessages,
         loadMoreMessages,
+        thinkingAgents = [],
     } = alphaChat;
 
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -2023,95 +2024,10 @@ export function AlphaChatModal({
                                                                                         </div>
                                                                                     </div>
                                                                                 ) : isAgent ? (
-                                                                                    // Agent messages - render markdown with images, links, and rich formatting
-                                                                                    <div
-                                                                                        className="prose prose-sm prose-invert max-w-none
-                                                                    prose-p:my-1.5 prose-p:leading-relaxed prose-p:text-zinc-100
-                                                                    prose-headings:text-white prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5
-                                                                    prose-h1:text-base prose-h2:text-sm prose-h3:text-sm
-                                                                    prose-strong:text-purple-200 prose-strong:font-semibold
-                                                                    prose-em:text-zinc-200
-                                                                    prose-ul:my-2 prose-ul:pl-4 prose-ul:space-y-1
-                                                                    prose-ol:my-2 prose-ol:pl-4 prose-ol:space-y-1
-                                                                    prose-li:my-0 prose-li:text-zinc-100 prose-li:marker:text-purple-400
-                                                                    prose-code:bg-black/30 prose-code:text-purple-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-[''] prose-code:after:content-['']
-                                                                    prose-pre:bg-black/30 prose-pre:border prose-pre:border-purple-500/20 prose-pre:rounded-lg prose-pre:my-2 prose-pre:overflow-x-auto
-                                                                    prose-hr:border-purple-500/30 prose-hr:my-3
-                                                                    prose-blockquote:border-l-purple-400 prose-blockquote:bg-black/20 prose-blockquote:pl-3 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r prose-blockquote:text-zinc-300
-                                                                "
-                                                                                    >
-                                                                                        <ReactMarkdown
-                                                                                            remarkPlugins={[
-                                                                                                remarkGfm,
-                                                                                            ]}
-                                                                                            components={{
-                                                                                                a: ({ href, children }) => (
-                                                                                                    <a
-                                                                                                        href={href}
-                                                                                                        target="_blank"
-                                                                                                        rel="noopener noreferrer"
-                                                                                                        className="inline-flex items-center gap-1 text-purple-300 hover:text-purple-200 underline decoration-purple-500/40 hover:decoration-purple-400/70 underline-offset-2 transition-colors"
-                                                                                                    >
-                                                                                                        {children}
-                                                                                                        <svg className="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                                                                                    </a>
-                                                                                                ),
-                                                                                                img: ({
-                                                                                                    src,
-                                                                                                    alt,
-                                                                                                }) => {
-                                                                                                    const srcStr =
-                                                                                                        typeof src ===
-                                                                                                        "string"
-                                                                                                            ? src
-                                                                                                            : undefined;
-                                                                                                    if (
-                                                                                                        !srcStr
-                                                                                                    )
-                                                                                                        return (
-                                                                                                            <span className="text-xs text-purple-300/70">
-                                                                                                                🖼️{" "}
-                                                                                                                {alt ||
-                                                                                                                    "Image"}
-                                                                                                            </span>
-                                                                                                        );
-                                                                                                    return (
-                                                                                                        <span className="inline-block my-2">
-                                                                                                            <img
-                                                                                                                src={
-                                                                                                                    srcStr
-                                                                                                                }
-                                                                                                                alt={
-                                                                                                                    alt ||
-                                                                                                                    ""
-                                                                                                                }
-                                                                                                                className="max-h-40 rounded-lg border border-purple-500/30 bg-black/30"
-                                                                                                                onError={(
-                                                                                                                    e
-                                                                                                                ) => {
-                                                                                                                    (
-                                                                                                                        e.target as HTMLImageElement
-                                                                                                                    ).style.display =
-                                                                                                                        "none";
-                                                                                                                }}
-                                                                                                            />
-                                                                                                            {alt && (
-                                                                                                                <span className="block text-[10px] text-purple-300/70 mt-1">
-                                                                                                                    {
-                                                                                                                        alt
-                                                                                                                    }
-                                                                                                                </span>
-                                                                                                            )}
-                                                                                                        </span>
-                                                                                                    );
-                                                                                                },
-                                                                                            }}
-                                                                                        >
-                                                                                            {
-                                                                                                msg.content
-                                                                                            }
-                                                                                        </ReactMarkdown>
-                                                                                    </div>
+                                                                                    // Agent messages - rich markdown with copy button
+                                                                                    <AgentMessageWrapper content={msg.content} theme="channel">
+                                                                                        <AgentMarkdown content={msg.content} theme="channel" />
+                                                                                    </AgentMessageWrapper>
                                                                                 ) : isGifMessage(
                                                                                       msg.content
                                                                                   ) ? (
@@ -2308,6 +2224,20 @@ export function AlphaChatModal({
                                                     />
                                                 </svg>
                                             </button>
+                                        </div>
+                                    )}
+
+                                    {/* Agent Thinking Indicators */}
+                                    {thinkingAgents.length > 0 && (
+                                        <div className="px-4 py-2 space-y-1 border-t border-purple-500/10">
+                                            {thinkingAgents.map((agent) => (
+                                                <AgentThinkingIndicator
+                                                    key={agent.id}
+                                                    agentName={agent.name}
+                                                    agentEmoji={agent.emoji}
+                                                    agentAvatarUrl={agent.avatarUrl}
+                                                />
+                                            ))}
                                         </div>
                                     )}
 

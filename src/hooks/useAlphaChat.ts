@@ -88,6 +88,9 @@ export function useAlphaChat(
         replyingTo: null,
     });
     const [isSending, setIsSending] = useState(false);
+    const [thinkingAgents, setThinkingAgents] = useState<
+        { id: string; name: string; emoji?: string; avatarUrl?: string }[]
+    >([]);
     const channelRef = useRef<RealtimeChannel | null>(null);
 
     // Load membership and messages
@@ -656,8 +659,28 @@ export function useAlphaChat(
                         ),
                     }));
 
-                    // Check for agent mentions and trigger responses (fire and forget)
+                    // Check for agent mentions and trigger responses
                     if (content.includes("@[") && content.includes("](")) {
+                        // Extract mentioned agent names for thinking indicator
+                        const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+                        const mentionedAgents: { id: string; name: string }[] = [];
+                        let mentionMatch;
+                        while ((mentionMatch = mentionRegex.exec(content)) !== null) {
+                            const mentionId = mentionMatch[2];
+                            if (mentionId && !mentionId.startsWith("0x") && !mentionId.startsWith("00")) {
+                                mentionedAgents.push({ id: mentionId, name: mentionMatch[1] });
+                            }
+                        }
+
+                        if (mentionedAgents.length > 0) {
+                            setThinkingAgents((prev) => [
+                                ...prev,
+                                ...mentionedAgents.filter(
+                                    (a) => !prev.some((p) => p.id === a.id)
+                                ),
+                            ]);
+                        }
+
                         fetch("/api/channels/agent-response", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
@@ -668,12 +691,22 @@ export function useAlphaChat(
                                 channelId: null,
                                 originalMessageId: data.id,
                             }),
-                        }).catch((err) =>
-                            console.error(
-                                "[AlphaChat] Agent response error:",
-                                err
+                        })
+                            .catch((err) =>
+                                console.error(
+                                    "[AlphaChat] Agent response error:",
+                                    err
+                                )
                             )
-                        );
+                            .finally(() => {
+                                if (mentionedAgents.length > 0) {
+                                    setThinkingAgents((prev) =>
+                                        prev.filter(
+                                            (a) => !mentionedAgents.some((m) => m.id === a.id)
+                                        )
+                                    );
+                                }
+                            });
                     }
                 }
 
@@ -1091,6 +1124,7 @@ export function useAlphaChat(
     return {
         ...state,
         isSending,
+        thinkingAgents,
         sendMessage,
         markAsRead,
         toggleNotifications,

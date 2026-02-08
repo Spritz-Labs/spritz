@@ -3,44 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "motion/react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-
-// Custom image component for nice logo/image display
-function MarkdownImage({ src, alt }: { src?: string | Blob; alt?: string }) {
-    const [error, setError] = useState(false);
-    const [loaded, setLoaded] = useState(false);
-
-    // Convert src to string (ignore Blob for now)
-    const srcStr = typeof src === "string" ? src : undefined;
-
-    if (!srcStr || error) {
-        return (
-            <span className="inline-flex items-center gap-1.5 px-2 py-1 bg-zinc-800 rounded text-xs text-zinc-400">
-                🖼️ {alt || "Image"}
-            </span>
-        );
-    }
-
-    return (
-        <span className="inline-block my-2">
-            <img
-                src={srcStr}
-                alt={alt || ""}
-                onError={() => setError(true)}
-                onLoad={() => setLoaded(true)}
-                className={`max-w-full h-auto max-h-32 rounded-lg border border-zinc-700 bg-zinc-800 object-contain transition-opacity ${
-                    loaded ? "opacity-100" : "opacity-0"
-                }`}
-            />
-            {alt && (
-                <span className="block text-xs text-zinc-500 mt-1 text-center">
-                    {alt}
-                </span>
-            )}
-        </span>
-    );
-}
+import { AgentMarkdown, AgentMessageWrapper } from "@/components/AgentMarkdown";
 
 // Logo grid component for displaying multiple logos nicely
 function LogoGrid({ children }: { children: React.ReactNode }) {
@@ -725,52 +688,9 @@ export default function PublicAgentPage() {
                                                     {msg.content}
                                                 </div>
                                             ) : (
-                                                <div
-                                                    className="prose prose-sm prose-invert max-w-none
-                                                    prose-p:my-2 prose-p:leading-relaxed
-                                                    prose-headings:text-white prose-headings:font-semibold prose-headings:mt-4 prose-headings:mb-2
-                                                    prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
-                                                    prose-strong:text-orange-300 prose-strong:font-semibold
-                                                    prose-em:text-zinc-300
-                                                    prose-ul:my-2 prose-ul:pl-4 prose-li:my-0.5 prose-li:marker:text-orange-400
-                                                    prose-ol:my-2 prose-ol:pl-4
-                                                    prose-code:bg-zinc-900 prose-code:text-orange-300 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-[''] prose-code:after:content-['']
-                                                    prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700 prose-pre:rounded-lg prose-pre:my-2
-                                                    prose-a:text-orange-400 prose-a:no-underline hover:prose-a:underline
-                                                    prose-hr:border-zinc-700 prose-hr:my-3
-                                                    prose-blockquote:border-l-orange-500 prose-blockquote:bg-zinc-900/50 prose-blockquote:pl-4 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r
-                                                "
-                                                >
-                                                    <ReactMarkdown
-                                                        remarkPlugins={[
-                                                            remarkGfm,
-                                                        ]}
-                                                        components={{
-                                                            a: ({ href, children }) => (
-                                                                <a
-                                                                    href={href}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="inline-flex items-center gap-1 text-orange-400 hover:text-orange-300 underline decoration-orange-500/40 hover:decoration-orange-400/70 underline-offset-2 transition-colors"
-                                                                >
-                                                                    {children}
-                                                                    <svg className="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                                                </a>
-                                                            ),
-                                                            img: ({
-                                                                src,
-                                                                alt,
-                                                            }) => (
-                                                                <MarkdownImage
-                                                                    src={src}
-                                                                    alt={alt}
-                                                                />
-                                                            ),
-                                                        }}
-                                                    >
-                                                        {msg.content}
-                                                    </ReactMarkdown>
-                                                </div>
+                                                <AgentMessageWrapper content={msg.content} theme="dm">
+                                                    <AgentMarkdown content={msg.content} theme="dm" />
+                                                </AgentMessageWrapper>
                                             )}
                                         </div>
                                     </motion.div>
