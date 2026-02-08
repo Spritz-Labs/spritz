@@ -40,6 +40,7 @@ import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
 import { ScrollToBottom } from "./ScrollToBottom";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -149,6 +150,11 @@ export function LocationChatModal({
         joinChat,
         leaveChat,
     } = useLocationChat(isOpen ? locationChat.id : null, userAddress);
+
+    // Admin check: global admin or chat creator
+    const { isAdmin: isGlobalAdmin } = useAdminCheck(userAddress);
+    const isChatCreator = locationChat.creator_address?.toLowerCase() === userAddress?.toLowerCase();
+    const canModerateChat = isGlobalAdmin || isChatCreator;
 
     // Message reactions hook (using location chat id as conversation_id)
     const {
@@ -482,6 +488,7 @@ export function LocationChatModal({
                 messageId: msg.id,
                 messageContent: msg.content,
                 isOwn,
+                canDelete: isOwn || canModerateChat,
                 hasMedia: isGifMessage(msg.content) || isPixelArt,
                 isPixelArt,
                 mediaUrl: isGifMessage(msg.content)
@@ -490,7 +497,7 @@ export function LocationChatModal({
             });
             setShowMessageActions(true);
         },
-        [userAddress]
+        [userAddress, canModerateChat]
     );
 
     // Message action callbacks
@@ -512,7 +519,7 @@ export function LocationChatModal({
                 navigator.clipboard.writeText(selectedMessage.messageContent);
             }
         },
-        onDelete: selectedMessage?.isOwn
+        onDelete: selectedMessage?.canDelete
             ? async () => {
                   if (selectedMessage?.messageId) {
                       await deleteMessage(selectedMessage.messageId);

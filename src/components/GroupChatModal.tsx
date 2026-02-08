@@ -1744,6 +1744,7 @@ export function GroupChatModal({
                                                                                       messageContent:
                                                                                           msg.content,
                                                                                       isOwn,
+                                                                                      canDelete: isOwn || isAdmin,
                                                                                       isPinned:
                                                                                           pinnedList.some(
                                                                                               (
@@ -2593,7 +2594,7 @@ export function GroupChatModal({
                                           false
                                       )
                                 : undefined,
-                            onDelete: selectedMessageConfig?.isOwn
+                            onDelete: (selectedMessageConfig?.isOwn || selectedMessageConfig?.canDelete)
                                 ? () => {
                                       setMessages((prev) =>
                                           prev.filter(

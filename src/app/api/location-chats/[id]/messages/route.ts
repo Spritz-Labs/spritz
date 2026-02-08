@@ -223,7 +223,32 @@ export async function DELETE(
             );
         }
 
-        if (message.sender_address.toLowerCase() !== session.userAddress.toLowerCase()) {
+        const isOwner = message.sender_address.toLowerCase() === session.userAddress.toLowerCase();
+
+        // Check if user is chat creator or global admin
+        let isAdmin = false;
+        if (!isOwner) {
+            // Check location chat creator
+            const { data: chat } = await supabase
+                .from("shout_location_chats")
+                .select("creator_address")
+                .eq("id", id)
+                .single();
+
+            isAdmin = chat?.creator_address?.toLowerCase() === session.userAddress.toLowerCase();
+
+            // Check global admin
+            if (!isAdmin) {
+                const { data: adminData } = await supabase
+                    .from("shout_admins")
+                    .select("wallet_address")
+                    .eq("wallet_address", session.userAddress.toLowerCase())
+                    .single();
+                isAdmin = !!adminData;
+            }
+        }
+
+        if (!isOwner && !isAdmin) {
             return NextResponse.json(
                 { error: "You can only delete your own messages" },
                 { status: 403 }

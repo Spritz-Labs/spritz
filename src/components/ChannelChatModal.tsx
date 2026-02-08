@@ -2399,6 +2399,7 @@ export function ChannelChatModal({
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
+                                                                                  canDelete: isOwn || isAdmin,
                                                                                   isPinned:
                                                                                       msg.is_pinned,
                                                                                   isStarred:
@@ -2463,6 +2464,7 @@ export function ChannelChatModal({
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
+                                                                                  canDelete: isOwn || isAdmin,
                                                                                   isPinned:
                                                                                       msg.is_pinned,
                                                                                   isStarred:
@@ -2576,6 +2578,7 @@ export function ChannelChatModal({
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
+                                                                                  canDelete: isOwn || isAdmin,
                                                                                   isPinned:
                                                                                       msg.is_pinned,
                                                                                   isStarred:
@@ -2637,6 +2640,7 @@ export function ChannelChatModal({
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
+                                                                                  canDelete: isOwn || isAdmin,
                                                                                   isPinned:
                                                                                       msg.is_pinned,
                                                                                   isStarred:
@@ -2686,6 +2690,7 @@ export function ChannelChatModal({
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
+                                                                                  canDelete: isOwn || isAdmin,
                                                                                   isPinned:
                                                                                       msg.is_pinned,
                                                                                   isStarred:
@@ -3576,7 +3581,7 @@ export function ChannelChatModal({
                                       selectedMessageConfig?.messageId || null
                                   )
                             : undefined,
-                        onDelete: selectedMessageConfig?.isOwn
+                        onDelete: (selectedMessageConfig?.isOwn || selectedMessageConfig?.canDelete)
                             ? () =>
                                   deleteMessage(
                                       selectedMessageConfig?.messageId || ""

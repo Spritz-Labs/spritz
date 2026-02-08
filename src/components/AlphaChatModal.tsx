@@ -742,9 +742,16 @@ export function AlphaChatModal({
         }
     };
 
-    // Handle delete message (moderator with delete permission)
+    // Handle delete message (own messages or moderator with delete permission)
     const handleDeleteMessage = async (messageId: string) => {
-        if (!moderation.permissions.canDelete || deletingMessage) return;
+        if (deletingMessage) return;
+
+        // Find the message to check ownership
+        const targetMsg = messages.find((m) => m.id === messageId);
+        const isOwnMessage = targetMsg?.sender_address?.toLowerCase() === userAddress?.toLowerCase();
+
+        // Must be own message or have moderation delete permission
+        if (!isOwnMessage && !moderation.permissions.canDelete) return;
 
         const confirmed = window.confirm(
             "Delete this message? This action will be logged."
@@ -753,11 +760,28 @@ export function AlphaChatModal({
 
         setDeletingMessage(messageId);
         try {
-            const success = await moderation.deleteMessage(messageId, "alpha");
-            if (success) {
-                // Remove from local state
-                // The hook should handle this, but we can trigger a refresh
-                refreshMessages?.();
+            if (moderation.permissions.canDelete) {
+                // Use moderation delete (works for both own and others' messages)
+                const success = await moderation.deleteMessage(messageId, "alpha");
+                if (success) {
+                    refreshMessages?.();
+                }
+            } else {
+                // Own message delete via direct API call
+                const res = await fetch("/api/moderation", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "delete-message",
+                        moderatorAddress: userAddress,
+                        messageId,
+                        messageType: "alpha",
+                        reason: "Self-deleted by author",
+                    }),
+                });
+                if (res.ok) {
+                    refreshMessages?.();
+                }
             }
         } finally {
             setDeletingMessage(null);
@@ -1875,6 +1899,7 @@ export function AlphaChatModal({
                                                                                                   messageContent:
                                                                                                       msg.content,
                                                                                                   isOwn,
+                                                                                                  canDelete: isOwn || moderation.permissions.canDelete,
                                                                                                   isPinned:
                                                                                                       msg.is_pinned,
                                                                                                   hasMedia:
@@ -2770,7 +2795,7 @@ export function AlphaChatModal({
                                           true
                                       )
                                 : undefined,
-                            onDelete: selectedMessageConfig?.isOwn
+                            onDelete: (selectedMessageConfig?.isOwn || moderation.permissions.canDelete)
                                 ? () =>
                                       handleDeleteMessage(
                                           selectedMessageConfig?.messageId || ""

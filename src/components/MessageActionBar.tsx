@@ -13,6 +13,8 @@ export type MessageActionConfig = {
     isPinned?: boolean;
     isStarred?: boolean;
     canEdit?: boolean;
+    /** Whether this user can delete this message (own message OR admin/moderator) */
+    canDelete?: boolean;
     hasMedia?: boolean;
     isPixelArt?: boolean;
     mediaUrl?: string;
@@ -316,7 +318,7 @@ export function MessageActionBar({
         { id: config.isPinned ? "unpin" : "pin", icon: <PinIcon />, label: config.isPinned ? "Unpin" : "Pin", show: !!callbacks.onPin || !!callbacks.onUnpin },
         { id: config.isStarred ? "unstar" : "star", icon: <StarIcon filled={config.isStarred} />, label: config.isStarred ? "Unstar" : "Star", show: !!callbacks.onStar || !!callbacks.onUnstar },
         { id: "edit", icon: <EditIcon />, label: "Edit", show: config.isOwn && !!config.canEdit && !!callbacks.onEdit },
-        { id: "delete", icon: <DeleteIcon />, label: "Delete", show: config.isOwn && !!callbacks.onDelete, danger: true },
+        { id: "delete", icon: <DeleteIcon />, label: "Delete", show: (config.canDelete ?? config.isOwn) && !!callbacks.onDelete, danger: true },
         { id: "report", icon: <ReportIcon />, label: "Report", show: !config.isOwn && !!callbacks.onReport, danger: true },
     ].filter(a => a.show);
 

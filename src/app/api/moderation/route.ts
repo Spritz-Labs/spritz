@@ -328,10 +328,6 @@ export async function POST(request: NextRequest) {
             case "delete-message": {
                 const { messageId, messageType, reason } = body; // messageType: 'alpha' or 'channel'
 
-                if (!permissions.canDelete) {
-                    return NextResponse.json({ error: "Not authorized to delete messages" }, { status: 403 });
-                }
-
                 if (!messageId) {
                     return NextResponse.json({ error: "messageId required" }, { status: 400 });
                 }
@@ -344,6 +340,12 @@ export async function POST(request: NextRequest) {
                     .select("sender_address")
                     .eq("id", messageId)
                     .single();
+
+                // Allow if user has canDelete permission OR is the message author
+                const isAuthor = message?.sender_address?.toLowerCase() === moderatorAddress?.toLowerCase();
+                if (!permissions.canDelete && !isAuthor) {
+                    return NextResponse.json({ error: "Not authorized to delete messages" }, { status: 403 });
+                }
 
                 const { error } = await supabase
                     .from(table)

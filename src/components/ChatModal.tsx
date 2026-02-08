@@ -3273,14 +3273,23 @@ export function ChatModal({
                                 : undefined,
                             onCopy: () => {},
                             onDelete: selectedMessageConfig?.isOwn
-                                ? () => {
+                                ? async () => {
+                                      const msgId = selectedMessageConfig?.messageId;
+                                      // Optimistic removal from UI
                                       setMessages((prev) =>
-                                          prev.filter(
-                                              (m) =>
-                                                  m.id !==
-                                                  selectedMessageConfig?.messageId
-                                          )
+                                          prev.filter((m) => m.id !== msgId)
                                       );
+                                      // Soft delete on backend
+                                      try {
+                                          await fetch("/api/messages/delete", {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ messageId: msgId }),
+                                              credentials: "include",
+                                          });
+                                      } catch (err) {
+                                          console.error("[Chat] Failed to delete message:", err);
+                                      }
                                   }
                                 : undefined,
                         }}
