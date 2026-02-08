@@ -2858,7 +2858,7 @@ export function ChannelChatModal({
                                                                             </div>
                                                                         </div>
                                                                     ) : isAgent ? (
-                                                                        // Agent messages - render markdown with images
+                                                                        // Agent messages - render markdown with images, links, and rich formatting
                                                                         <div
                                                                             className="prose prose-sm prose-invert max-w-none
                                                                 prose-p:my-1.5 prose-p:leading-relaxed prose-p:text-zinc-100
@@ -2871,7 +2871,6 @@ export function ChannelChatModal({
                                                                 prose-li:my-0 prose-li:text-zinc-100 prose-li:marker:text-purple-400
                                                                 prose-code:bg-black/30 prose-code:text-purple-200 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-[''] prose-code:after:content-['']
                                                                 prose-pre:bg-black/30 prose-pre:border prose-pre:border-purple-500/20 prose-pre:rounded-lg prose-pre:my-2 prose-pre:overflow-x-auto
-                                                                prose-a:text-purple-300 prose-a:no-underline hover:prose-a:underline hover:prose-a:text-purple-200
                                                                 prose-hr:border-purple-500/30 prose-hr:my-3
                                                                 prose-blockquote:border-l-purple-400 prose-blockquote:bg-black/20 prose-blockquote:pl-3 prose-blockquote:py-1 prose-blockquote:my-2 prose-blockquote:rounded-r prose-blockquote:text-zinc-300
                                                             "
@@ -2881,6 +2880,17 @@ export function ChannelChatModal({
                                                                                     remarkGfm,
                                                                                 ]}
                                                                                 components={{
+                                                                                    a: ({ href, children }) => (
+                                                                                        <a
+                                                                                            href={href}
+                                                                                            target="_blank"
+                                                                                            rel="noopener noreferrer"
+                                                                                            className="inline-flex items-center gap-1 text-purple-300 hover:text-purple-200 underline decoration-purple-500/40 hover:decoration-purple-400/70 underline-offset-2 transition-colors"
+                                                                                        >
+                                                                                            {children}
+                                                                                            <svg className="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                                                                        </a>
+                                                                                    ),
                                                                                     img: ({
                                                                                         src,
                                                                                         alt,

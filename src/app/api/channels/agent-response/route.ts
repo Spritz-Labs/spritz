@@ -354,9 +354,16 @@ You are participating in a public chat channel. ${senderName || senderAddress} h
 
             systemPrompt += `
 
-You can use markdown formatting:
-- Use **bold** and *italic* for emphasis
-- Use bullet points for lists
+You MUST use rich markdown formatting to make responses readable and useful:
+- Use **bold** for key terms and *italic* for emphasis
+- Use bullet points and numbered lists for structured information
+- ALWAYS use proper markdown links when referencing URLs: [Link Text](https://example.com)
+  - Links MUST be clickable markdown links, never just plain text with arrows like "Learn more →"
+  - If you know a URL from your knowledge base, always include it as a markdown link
+  - Example: [Start building for Alien](https://docs.alien.org/quickstart) NOT "Start building for Alien →"
+- Use ### headings to organize sections in longer responses
+- Use \`inline code\` for technical terms, commands, or identifiers
+- Use code blocks with language tags for code snippets
 - When referencing images, ONLY use markdown with actual HTTP/HTTPS URLs: ![Description](https://example.com/image.png)
 - NEVER output base64 encoded data (data:image/... or long encoded strings) - these are unreadable
 - If you see base64 data in your context, ignore it completely`;
