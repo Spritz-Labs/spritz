@@ -42,6 +42,12 @@ const NAV_ITEMS = [
         mobileLabel: "AI Chats",
     },
     {
+        href: "/admin/agents",
+        label: "Agent Knowledge",
+        icon: "📚",
+        mobileLabel: "RAG",
+    },
+    {
         href: "/admin/bug-reports",
         label: "Bug Reports",
         icon: "🐛",

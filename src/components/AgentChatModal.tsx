@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAgentChat, Agent, useAgentLastUsed } from "@/hooks/useAgents";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { AgentMarkdown, AgentMessageWrapper } from "./AgentMarkdown";
 import { SchedulingCard } from "./SchedulingCard";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
@@ -398,7 +398,7 @@ export function AgentChatModal({
                                                 }`}
                                             >
                                                 <div
-                                                    className={`max-w-[80%] rounded-2xl px-4 py-3 group relative ${
+                                                    className={`max-w-[80%] min-w-0 overflow-hidden rounded-2xl px-4 py-3 group relative ${
                                                         msg.role === "user"
                                                             ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
                                                             : "bg-zinc-800 text-white"
@@ -430,16 +430,9 @@ export function AgentChatModal({
                                                     {msg.role ===
                                                     "assistant" ? (
                                                         <>
-                                                            <div className="text-sm prose prose-invert prose-sm max-w-none prose-p:my-1 prose-pre:bg-zinc-900 prose-pre:border prose-pre:border-zinc-700 prose-code:text-pink-400 prose-code:before:content-[''] prose-code:after:content-['']">
-                                                                <ChatMarkdown
-                                                                    content={
-                                                                        msg.content
-                                                                    }
-                                                                    isOwnMessage={
-                                                                        false
-                                                                    }
-                                                                />
-                                                            </div>
+                                                            <AgentMessageWrapper content={msg.content} theme="dm">
+                                                                <AgentMarkdown content={msg.content} theme="dm" />
+                                                            </AgentMessageWrapper>
                                                             {msg.scheduling &&
                                                                 msg.scheduling
                                                                     .slots

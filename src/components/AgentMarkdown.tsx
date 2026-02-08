@@ -77,7 +77,7 @@ export function AgentMarkdown({ content, theme = "channel" }: AgentMarkdownProps
     const imgAltColor = isPurple ? "text-purple-300/70" : "text-zinc-400";
 
     return (
-        <div className={proseClasses}>
+        <div className={`${proseClasses} overflow-hidden break-words [word-break:break-word]`}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -121,15 +121,15 @@ export function AgentMarkdown({ content, theme = "channel" }: AgentMarkdownProps
                         }
 
                         return (
-                            <div className="relative my-2 group/code not-prose">
+                            <div className="relative my-2 group/code not-prose overflow-hidden rounded-lg">
                                 {language && (
-                                    <div className={`text-[10px] px-3 py-1 rounded-t-lg font-mono ${codeLangBg}`}>
+                                    <div className={`text-[10px] px-3 py-1 font-mono ${codeLangBg}`}>
                                         {language}
                                     </div>
                                 )}
                                 <pre
-                                    className={`p-3 overflow-x-auto text-sm font-mono ${
-                                        language ? "rounded-b-lg" : "rounded-lg"
+                                    className={`p-3 overflow-x-auto text-xs font-mono max-w-full ${
+                                        language ? "" : "rounded-lg"
                                     } ${codeBlockBg} border ${codeBlockBorder}`}
                                 >
                                     <code className="whitespace-pre" {...props}>
@@ -224,7 +224,7 @@ export function AgentMessageWrapper({
     const isPurple = theme === "channel";
 
     return (
-        <div className="relative group/agent-msg">
+        <div className="relative group/agent-msg min-w-0 overflow-hidden">
             {children}
             {/* Copy response button - appears on hover */}
             <div className="absolute -bottom-1 right-0 opacity-0 group-hover/agent-msg:opacity-100 transition-opacity">

@@ -37,6 +37,8 @@ import { ReactionDisplay } from "./EmojiPicker";
 import { ChatMembersList } from "./ChatMembersList";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
+import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
+import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -210,6 +212,63 @@ export function LocationChatModal({
         return Array.from(userMap.values());
     }, [messages, userAddress, getUserInfo, locationAgents]);
 
+    // Agent message helpers
+    const isAgentMessage = (address: string) => address.startsWith("agent:");
+    const getAgentId = (address: string) => address.replace("agent:", "");
+
+    // Cache agent info (name, avatar) for agent messages
+    const [agentInfoCache, setAgentInfoCache] = useState<
+        Map<string, { name: string; avatar_url?: string; avatar_emoji?: string }>
+    >(new Map());
+
+    useEffect(() => {
+        // Find agent addresses in messages that we haven't cached yet
+        const agentAddresses = messages
+            .filter((m) => isAgentMessage(m.sender_address))
+            .map((m) => getAgentId(m.sender_address))
+            .filter((id) => !agentInfoCache.has(id));
+
+        const uniqueIds = [...new Set(agentAddresses)];
+        if (uniqueIds.length === 0) return;
+
+        uniqueIds.forEach(async (agentId) => {
+            try {
+                const res = await fetch(`/api/public/agents/${agentId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    setAgentInfoCache((prev) => {
+                        const next = new Map(prev);
+                        next.set(agentId, {
+                            name: data.agent?.name || "AI Agent",
+                            avatar_url: data.agent?.avatar_url,
+                            avatar_emoji: data.agent?.avatar_emoji,
+                        });
+                        return next;
+                    });
+                }
+            } catch {
+                // Fallback — check locationAgents list
+                const localAgent = locationAgents.find((a) => a.address === agentId);
+                if (localAgent) {
+                    setAgentInfoCache((prev) => {
+                        const next = new Map(prev);
+                        next.set(agentId, {
+                            name: localAgent.name || "AI Agent",
+                            avatar_url: localAgent.avatar || undefined,
+                            avatar_emoji: localAgent.avatarEmoji,
+                        });
+                        return next;
+                    });
+                }
+            }
+        });
+    }, [messages, agentInfoCache, locationAgents]);
+
+    // Agent thinking state
+    const [thinkingAgents, setThinkingAgents] = useState<
+        { id: string; name: string; emoji?: string; avatarUrl?: string }[]
+    >([]);
+
     // Auto-join when opening if not a member
     useEffect(() => {
         if (isOpen && !isMember && !isLoading) {
@@ -240,8 +299,26 @@ export function LocationChatModal({
         setReplyingTo(null);
         const sent = await sendMessage(content, "text", replyId);
 
-        // Check for agent mentions and trigger responses (fire and forget)
+        // Check for agent mentions and trigger responses
         if (sent && content.includes("@[") && content.includes("](")) {
+            // Extract mentioned agent names for thinking indicator
+            const mentionRegex = /@\[([^\]]+)\]\(([^)]+)\)/g;
+            const mentionedAgents: { id: string; name: string }[] = [];
+            let match;
+            while ((match = mentionRegex.exec(content)) !== null) {
+                const mentionId = match[2];
+                if (mentionId && !mentionId.startsWith("0x") && !mentionId.startsWith("00")) {
+                    mentionedAgents.push({ id: mentionId, name: match[1] });
+                }
+            }
+
+            if (mentionedAgents.length > 0) {
+                setThinkingAgents((prev) => [
+                    ...prev,
+                    ...mentionedAgents.filter((a) => !prev.some((p) => p.id === a.id)),
+                ]);
+            }
+
             fetch("/api/channels/agent-response", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -251,9 +328,17 @@ export function LocationChatModal({
                     channelType: "location",
                     channelId: locationChat.id,
                 }),
-            }).catch((err) =>
-                console.error("[LocationChat] Agent response error:", err)
-            );
+            })
+                .catch((err) =>
+                    console.error("[LocationChat] Agent response error:", err)
+                )
+                .finally(() => {
+                    if (mentionedAgents.length > 0) {
+                        setThinkingAgents((prev) =>
+                            prev.filter((a) => !mentionedAgents.some((m) => m.id === a.id))
+                        );
+                    }
+                });
         }
     }, [newMessage, isSending, sendMessage, replyingTo, userAddress, locationChat.id]);
 
@@ -392,13 +477,28 @@ export function LocationChatModal({
     };
 
     const getDisplayName = (address: string) => {
+        if (isAgentMessage(address)) {
+            const agentId = getAgentId(address);
+            const agentInfo = agentInfoCache.get(agentId);
+            return agentInfo?.name || "AI Agent";
+        }
         const info = getUserInfo?.(address);
         if (info?.name) return info.name;
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
     const getAvatar = (address: string) => {
+        if (isAgentMessage(address)) {
+            const agentId = getAgentId(address);
+            return agentInfoCache.get(agentId)?.avatar_url || null;
+        }
         return getUserInfo?.(address)?.avatar || null;
+    };
+
+    const getAgentEmoji = (address: string) => {
+        if (!isAgentMessage(address)) return null;
+        const agentId = getAgentId(address);
+        return agentInfoCache.get(agentId)?.avatar_emoji || null;
     };
 
     if (!isOpen || typeof document === "undefined") return null;
@@ -918,6 +1018,9 @@ export function LocationChatModal({
                                             ? detectUrls(msg.content)
                                             : [];
 
+                                    const isAgent = isAgentMessage(msg.sender_address);
+                                    const agentEmoji = getAgentEmoji(msg.sender_address);
+
                                     return (
                                         <div
                                             key={msg.id}
@@ -927,24 +1030,48 @@ export function LocationChatModal({
                                         >
                                             {/* Avatar */}
                                             {showAvatar && !isOwn ? (
-                                                <button
-                                                    onClick={() =>
-                                                        onOpenUserCard?.(
-                                                            msg.sender_address
-                                                        )
-                                                    }
-                                                    className="flex-shrink-0"
-                                                >
-                                                    <AvatarWithStatus
-                                                        name={getDisplayName(
-                                                            msg.sender_address
+                                                isAgent ? (
+                                                    // Agent avatar - not clickable, with purple ring
+                                                    <div className="flex-shrink-0 relative">
+                                                        {getAvatar(msg.sender_address) ? (
+                                                            <img
+                                                                src={getAvatar(msg.sender_address)!}
+                                                                alt=""
+                                                                className="w-8 h-8 rounded-full object-cover ring-2 ring-purple-500/50"
+                                                            />
+                                                        ) : agentEmoji ? (
+                                                            <div className="w-8 h-8 rounded-full bg-purple-900/50 flex items-center justify-center ring-2 ring-purple-500/50 text-sm">
+                                                                {agentEmoji}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center ring-2 ring-purple-500/50 text-white text-xs font-bold">
+                                                                AI
+                                                            </div>
                                                         )}
-                                                        src={getAvatar(
-                                                            msg.sender_address
-                                                        )}
-                                                        size="sm"
-                                                    />
-                                                </button>
+                                                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-600 rounded-full flex items-center justify-center border-2 border-zinc-900">
+                                                            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={() =>
+                                                            onOpenUserCard?.(
+                                                                msg.sender_address
+                                                            )
+                                                        }
+                                                        className="flex-shrink-0"
+                                                    >
+                                                        <AvatarWithStatus
+                                                            name={getDisplayName(
+                                                                msg.sender_address
+                                                            )}
+                                                            src={getAvatar(
+                                                                msg.sender_address
+                                                            )}
+                                                            size="sm"
+                                                        />
+                                                    </button>
+                                                )
                                             ) : !isOwn ? (
                                                 <div className="w-8" />
                                             ) : null}
@@ -958,11 +1085,22 @@ export function LocationChatModal({
                                             >
                                                 {/* Sender name */}
                                                 {showAvatar && !isOwn && (
-                                                    <span className="text-xs text-zinc-500 mb-1 ml-1">
-                                                        {getDisplayName(
-                                                            msg.sender_address
-                                                        )}
-                                                    </span>
+                                                    isAgent ? (
+                                                        <div className="flex items-center gap-1.5 mb-1 ml-1">
+                                                            <span className="text-xs text-purple-300 font-medium">
+                                                                {getDisplayName(msg.sender_address)}
+                                                            </span>
+                                                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-medium border border-purple-500/30">
+                                                                AI
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-zinc-500 mb-1 ml-1">
+                                                            {getDisplayName(
+                                                                msg.sender_address
+                                                            )}
+                                                        </span>
+                                                    )
                                                 )}
 
                                                 {/* Reply Preview */}
@@ -1072,6 +1210,13 @@ export function LocationChatModal({
                                                                 className="max-w-[200px]"
                                                             />
                                                         </div>
+                                                    ) : isAgent ? (
+                                                        /* Agent message - rich markdown */
+                                                        <div className="px-4 py-2.5 rounded-2xl rounded-bl-md min-w-0 overflow-hidden bg-gradient-to-br from-purple-950/60 to-zinc-800 border border-purple-500/20">
+                                                            <AgentMessageWrapper content={msg.content} theme="channel">
+                                                                <AgentMarkdown content={msg.content} theme="channel" />
+                                                            </AgentMessageWrapper>
+                                                        </div>
                                                     ) : (
                                                         /* Text message */
                                                         <div
@@ -1081,13 +1226,17 @@ export function LocationChatModal({
                                                                     : "bg-zinc-800 text-white rounded-bl-md"
                                                             }`}
                                                         >
-                                                            <div className="text-sm whitespace-pre-wrap break-words">
-                                                                <MentionText
-                                                                    text={msg.content}
-                                                                    currentUserAddress={userAddress}
-                                                                    onMentionClick={onOpenUserCard}
-                                                                />
-                                                            </div>
+                                                            {hasMarkdown(msg.content) ? (
+                                                                <ChatMarkdown content={msg.content} isOwnMessage={isOwn} />
+                                                            ) : (
+                                                                <div className="text-sm whitespace-pre-wrap break-words">
+                                                                    <MentionText
+                                                                        text={msg.content}
+                                                                        currentUserAddress={userAddress}
+                                                                        onMentionClick={onOpenUserCard}
+                                                                    />
+                                                                </div>
+                                                            )}
                                                             {/* Link previews */}
                                                             {urls.length >
                                                                 0 && (
@@ -1145,6 +1294,20 @@ export function LocationChatModal({
                             )}
                             <div ref={messagesEndRef} />
                         </div>
+
+                        {/* Agent Thinking Indicators */}
+                        {thinkingAgents.length > 0 && (
+                            <div className="px-4 py-2 space-y-1 border-t border-purple-500/10">
+                                {thinkingAgents.map((agent) => (
+                                    <AgentThinkingIndicator
+                                        key={agent.id}
+                                        agentName={agent.name}
+                                        agentEmoji={agent.emoji}
+                                        agentAvatarUrl={agent.avatarUrl}
+                                    />
+                                ))}
+                            </div>
+                        )}
 
                         {/* Input Area */}
                         <div className="border-t border-zinc-800 bg-zinc-900">

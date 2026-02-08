@@ -657,7 +657,7 @@ export default function PublicAgentPage() {
                                         }`}
                                     >
                                         <div
-                                            className={`max-w-[85%] rounded-2xl px-4 py-3 ${
+                                            className={`max-w-[85%] min-w-0 overflow-hidden rounded-2xl px-4 py-3 ${
                                                 msg.role === "user"
                                                     ? "bg-[#FF5500] text-white"
                                                     : "bg-zinc-800/80 text-zinc-100 border border-zinc-700/50"

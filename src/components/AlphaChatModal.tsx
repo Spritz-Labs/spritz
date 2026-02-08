@@ -1893,7 +1893,7 @@ export function AlphaChatModal({
                                                                                     isFullscreen
                                                                                         ? "max-w-[90%]"
                                                                                         : "max-w-[75%]"
-                                                                                } rounded-2xl px-4 py-2.5 relative cursor-pointer ${
+                                                                                } rounded-2xl px-4 py-2.5 relative cursor-pointer min-w-0 overflow-hidden ${
                                                                                     isOwn
                                                                                         ? "bg-[#FF5500] text-white rounded-br-md"
                                                                                         : isAgent

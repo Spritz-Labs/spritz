@@ -2718,7 +2718,7 @@ export function ChannelChatModal({
                                                             >
                                                                 <div
                                                                     data-message-bubble
-                                                                    className={`px-4 py-2.5 rounded-2xl relative cursor-pointer ${
+                                                                    className={`px-4 py-2.5 rounded-2xl relative cursor-pointer min-w-0 overflow-hidden ${
                                                                         isOwn
                                                                             ? "bg-[#FF5500] text-white rounded-br-md"
                                                                             : isAgent

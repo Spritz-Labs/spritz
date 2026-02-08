@@ -35,7 +35,7 @@ export function ChatMarkdown({
     };
 
     return (
-        <div className={`chat-markdown break-words ${className}`}>
+        <div className={`chat-markdown break-words overflow-hidden ${className}`}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
