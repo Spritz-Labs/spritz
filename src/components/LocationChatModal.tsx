@@ -39,6 +39,7 @@ import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
+import { ScrollToBottom } from "./ScrollToBottom";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -127,7 +128,12 @@ export function LocationChatModal({
         useState<MessageActionConfig | null>(null);
     const [showMessageActions, setShowMessageActions] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
+    const userScrolledUpRef = useRef(false);
+    const lastMessageIdRef = useRef<string | null>(null);
+    const justSentMessageRef = useRef(false);
+    const [unreadCount, setUnreadCount] = useState(0);
     const timezone = useUserTimezone();
 
     const {
@@ -276,17 +282,65 @@ export function LocationChatModal({
         }
     }, [isOpen, isMember, isLoading, joinChat]);
 
-    // Scroll to bottom when messages change
+    // Channel-style auto-scroll: scroll on new messages unless user scrolled up
+    // Always force scroll for agent responses so user sees the reply
     useEffect(() => {
-        if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+        if (messages.length === 0) return;
+
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage.id === lastMessageIdRef.current) return;
+        lastMessageIdRef.current = lastMessage.id;
+
+        // Always scroll if user just sent a message
+        if (justSentMessageRef.current) {
+            justSentMessageRef.current = false;
+            userScrolledUpRef.current = false;
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            return;
+        }
+
+        // Always scroll for agent responses so the user sees the reply
+        const isAgentReply = lastMessage.sender_address?.startsWith("agent:");
+        if (isAgentReply) {
+            userScrolledUpRef.current = false;
+            setUnreadCount(0);
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            return;
+        }
+
+        // Auto-scroll if user is near the bottom
+        if (!userScrolledUpRef.current) {
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        } else {
+            // User is scrolled up reading history - show unread badge
+            setUnreadCount((prev) => prev + 1);
         }
     }, [messages]);
 
-    // Focus input when opened
+    // Track user scroll position
+    const handleMessagesScroll = useCallback(() => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+        userScrolledUpRef.current = distanceFromBottom > 150;
+
+        // Clear unread count when user scrolls to bottom
+        if (distanceFromBottom < 150) {
+            setUnreadCount(0);
+        }
+    }, []);
+
+    // Reset scroll state and focus input when opened
     useEffect(() => {
-        if (isOpen && inputRef.current) {
-            setTimeout(() => inputRef.current?.focus(), 100);
+        if (isOpen) {
+            userScrolledUpRef.current = false;
+            lastMessageIdRef.current = null;
+            setUnreadCount(0);
+            if (inputRef.current) {
+                setTimeout(() => inputRef.current?.focus(), 100);
+            }
         }
     }, [isOpen]);
 
@@ -297,6 +351,7 @@ export function LocationChatModal({
         const replyId = replyingTo?.id;
         setNewMessage("");
         setReplyingTo(null);
+        justSentMessageRef.current = true;
         const sent = await sendMessage(content, "text", replyId);
 
         // Check for agent mentions and trigger responses
@@ -982,7 +1037,11 @@ export function LocationChatModal({
                         </AnimatePresence>
 
                         {/* Messages */}
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div
+                            ref={messagesContainerRef}
+                            onScroll={handleMessagesScroll}
+                            className="flex-1 overflow-y-auto p-4 space-y-4"
+                        >
                             {isLoading ? (
                                 <ChatSkeleton />
                             ) : messages.length === 0 ? (
@@ -1296,6 +1355,13 @@ export function LocationChatModal({
                             )}
                             <div ref={messagesEndRef} />
                         </div>
+
+                        {/* Scroll to bottom button with unread badge */}
+                        <ScrollToBottom
+                            containerRef={messagesContainerRef}
+                            unreadCount={unreadCount}
+                            onScrollToBottom={() => setUnreadCount(0)}
+                        />
 
                         {/* Agent Thinking Indicators */}
                         {thinkingAgents.length > 0 && (

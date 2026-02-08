@@ -833,6 +833,14 @@ export function ChannelChatModal({
                     return;
                 }
 
+                // Always scroll for agent responses so the user sees the reply
+                const isAgentReply = lastMessage.sender_address?.startsWith("agent:");
+                if (isAgentReply && container) {
+                    userScrolledUpRef.current = false;
+                    container.scrollTop = 0;
+                    return;
+                }
+
                 // Auto-scroll if user hasn't scrolled up to read history
                 // With column-reverse, "near bottom" = scrollTop near 0
                 if (
