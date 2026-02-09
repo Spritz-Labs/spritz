@@ -165,21 +165,24 @@ export async function POST(request: NextRequest) {
                     .maybeSingle();
 
                 if (alienChannel) {
+                    // Normalize address for consistency (all user_address should be lowercase)
+                    const normalizedAlienAddress = alienAddress.toLowerCase();
+                    
                     // Check if already a member
                     const { data: existingMember } = await supabase
                         .from("shout_channel_members")
                         .select("id")
                         .eq("channel_id", alienChannel.id)
-                        .eq("user_address", alienAddress)
+                        .eq("user_address", normalizedAlienAddress)
                         .maybeSingle();
 
                     if (!existingMember) {
                         await supabase.from("shout_channel_members").insert({
                             channel_id: alienChannel.id,
-                            user_address: alienAddress,
+                            user_address: normalizedAlienAddress,
                         });
                         await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
-                        console.log("[AlienId] Auto-joined user to Alien channel:", alienAddress.slice(0, 20) + "...");
+                        console.log("[AlienId] Auto-joined user to Alien channel:", normalizedAlienAddress.slice(0, 20) + "...");
                     }
                 }
             } catch (err) {

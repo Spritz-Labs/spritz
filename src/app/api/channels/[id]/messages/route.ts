@@ -235,6 +235,25 @@ export async function PATCH(
 
         const normalizedAddress = userAddress.toLowerCase();
 
+        // Check if user is a member (same as POST endpoint)
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        const { data: membership } =
+            lookupAddrs.length > 0
+                ? await supabase
+                      .from("shout_channel_members")
+                      .select("id")
+                      .eq("channel_id", channelId)
+                      .in("user_address", lookupAddrs)
+                      .maybeSingle()
+                : { data: null };
+
+        if (!membership) {
+            return NextResponse.json(
+                { error: "You must be a member to react to messages" },
+                { status: 403 }
+            );
+        }
+
         // Check if reaction already exists
         const { data: existing } = await supabase
             .from("shout_channel_reactions")
