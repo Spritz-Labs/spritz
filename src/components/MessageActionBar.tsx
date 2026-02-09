@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { upscalePixelArt, downloadPixelArt } from "./PixelArtImage";
 
@@ -277,6 +278,15 @@ export function MessageActionBar({
     }, [callbacks, onClose, handleCopy, handleShare, handleDownload, handleDownloadHD]);
 
     if (!config) return null;
+    
+    // Use portal to render outside of any transformed parent (fixes PWA z-index issues)
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
+    if (!mounted) return null;
 
     // Build action list
     const primaryActions: { id: string; icon: React.ReactNode; label: string; show: boolean; danger?: boolean; highlight?: boolean }[] = [
@@ -322,7 +332,7 @@ export function MessageActionBar({
         { id: "report", icon: <ReportIcon />, label: "Report", show: !config.isOwn && !!callbacks.onReport, danger: true },
     ].filter(a => a.show);
 
-    return (
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
                 <>
@@ -439,7 +449,8 @@ export function MessageActionBar({
                     </motion.div>
                 </>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
     );
 }
 
