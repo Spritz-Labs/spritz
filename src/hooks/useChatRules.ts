@@ -72,9 +72,18 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
             if (!chatType) return false;
 
             try {
+                // Optimistic update: immediately reflect the change in the UI
+                setState((prev) => ({
+                    ...prev,
+                    rules: prev.rules
+                        ? { ...prev.rules, [field]: value }
+                        : prev.rules,
+                }));
+
                 const res = await fetch("/api/chat-rules", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include", // Ensure session cookie is sent in PWA context
                     body: JSON.stringify({
                         chatType,
                         chatId: chatId || null,
@@ -85,6 +94,8 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 if (!res.ok) {
                     const data = await res.json();
                     console.error("[useChatRules] Update error:", data.error);
+                    // Revert optimistic update on failure
+                    await fetchRules();
                     return false;
                 }
 
@@ -96,6 +107,8 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 return true;
             } catch (err) {
                 console.error("[useChatRules] Update error:", err);
+                // Revert optimistic update on failure
+                await fetchRules();
                 return false;
             }
         },

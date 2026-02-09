@@ -10,6 +10,7 @@ import {
     memo,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
     useChatFolders,
     DEFAULT_FOLDER_EMOJIS,
@@ -1149,6 +1150,17 @@ function UnifiedChatListInner({
         []
     );
 
+    // Virtual scrolling for large lists (100+ chats) to prevent DOM bloat
+    const virtualScrollRef = useRef<HTMLDivElement>(null);
+    const useVirtual = filteredChats.length > 100;
+    const virtualizer = useVirtualizer({
+        count: filteredChats.length,
+        getScrollElement: () => virtualScrollRef.current,
+        estimateSize: () => 72, // Approximate ChatRow height in px
+        overscan: 15, // Render extra items for smooth scrolling
+        enabled: useVirtual,
+    });
+
     // Create async refresh handler
     const handleRefresh = useCallback(async () => {
         if (onRefresh) {
@@ -1484,7 +1496,67 @@ function UnifiedChatListInner({
                             )
                         )}
                     </div>
+                ) : useVirtual ? (
+                    /* Virtual scrolling for large lists (100+ chats) */
+                    <div
+                        ref={virtualScrollRef}
+                        className="max-h-[calc(100vh-280px)] overflow-auto scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent"
+                    >
+                        <div
+                            style={{
+                                height: `${virtualizer.getTotalSize()}px`,
+                                width: "100%",
+                                position: "relative",
+                            }}
+                        >
+                            {virtualizer.getVirtualItems().map((virtualItem) => {
+                                const chat = filteredChats[virtualItem.index];
+                                const chatFolder = getChatFolder(chat.id);
+                                return (
+                                    <div
+                                        key={chat.id}
+                                        data-index={virtualItem.index}
+                                        style={{
+                                            position: "absolute",
+                                            top: 0,
+                                            left: 0,
+                                            width: "100%",
+                                            transform: `translateY(${virtualItem.start}px)`,
+                                        }}
+                                        className="pb-1 sm:pb-2"
+                                    >
+                                        <ChatRow
+                                            chat={chat}
+                                            chatFolder={chatFolder}
+                                            isFolderPickerOpen={
+                                                showFolderPicker === chat.id
+                                            }
+                                            folderPickerPosition={folderPickerPosition}
+                                            onChatClick={onChatClick}
+                                            onPrefetchChat={onPrefetchChat}
+                                            onFolderButtonClick={setShowFolderPicker}
+                                            onAssignFolder={handleAssignFolder}
+                                            onCloseFolderPicker={() =>
+                                                setShowFolderPicker(null)
+                                            }
+                                            allAvailableFolders={folderPickerOptions}
+                                            setFolderButtonRef={setFolderButtonRef}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                setShowFolderPicker(chat.id);
+                                            }}
+                                            onCallClick={onCallClick}
+                                            onVideoClick={onVideoClick}
+                                            onPinChat={onPinChat}
+                                            userTimezone={userTimezone}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 ) : (
+                    /* Regular rendering for small lists */
                     filteredChats.map((chat) => {
                         const chatFolder = getChatFolder(chat.id);
                         return (

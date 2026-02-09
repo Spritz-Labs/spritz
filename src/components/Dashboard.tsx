@@ -743,7 +743,7 @@ function DashboardContent({
         refresh: refreshFriends,
     } = useFriendRequests(userAddress);
 
-    // Fetch custom avatars for friends
+    // Fetch custom avatars for friends (batched for large friend lists)
     useEffect(() => {
         if (friends.length === 0 || !isSupabaseConfigured || !supabase) return;
 
@@ -752,32 +752,37 @@ function DashboardContent({
 
         const fetchCustomAvatars = async () => {
             try {
-                const { data } = await client
-                    .from("shout_user_settings")
-                    .select(
-                        "wallet_address, custom_avatar_url, use_custom_avatar"
-                    )
-                    .in("wallet_address", addresses);
+                const avatars: Record<string, string | null> = {};
+                // Batch in chunks of 100 to avoid Supabase .in() limits
+                const BATCH_SIZE = 100;
+                for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+                    const batch = addresses.slice(i, i + BATCH_SIZE);
+                    const { data } = await client
+                        .from("shout_user_settings")
+                        .select(
+                            "wallet_address, custom_avatar_url, use_custom_avatar"
+                        )
+                        .in("wallet_address", batch);
 
-                if (data) {
-                    const avatars: Record<string, string | null> = {};
-                    data.forEach(
-                        (row: {
-                            wallet_address: string;
-                            custom_avatar_url: string | null;
-                            use_custom_avatar: boolean;
-                        }) => {
-                            if (
-                                row.use_custom_avatar &&
-                                row.custom_avatar_url
-                            ) {
-                                avatars[row.wallet_address] =
-                                    row.custom_avatar_url;
+                    if (data) {
+                        data.forEach(
+                            (row: {
+                                wallet_address: string;
+                                custom_avatar_url: string | null;
+                                use_custom_avatar: boolean;
+                            }) => {
+                                if (
+                                    row.use_custom_avatar &&
+                                    row.custom_avatar_url
+                                ) {
+                                    avatars[row.wallet_address] =
+                                        row.custom_avatar_url;
+                                }
                             }
-                        }
-                    );
-                    setFriendCustomAvatars(avatars);
+                        );
+                    }
                 }
+                setFriendCustomAvatars(avatars);
             } catch (err) {
                 console.error(
                     "[Dashboard] Error fetching custom avatars:",

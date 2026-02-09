@@ -930,7 +930,7 @@ export function FriendsList({
         }
     }, []);
 
-    // Fetch all friend data in parallel (fast!)
+    // Fetch all friend data in parallel (fast!) - batched for large friend lists
     useEffect(() => {
         if (friends.length === 0) return;
         if (!isSupabaseConfigured || !supabase) return;
@@ -938,8 +938,26 @@ export function FriendsList({
         const client = supabase; // Capture for closure
         const addresses = friends.map((f) => f.address.toLowerCase());
 
+        // Helper to batch .in() queries for large arrays (Supabase URL limit ~8KB)
+        const batchQuery = async <T,>(
+            queryFn: (batch: string[]) => PromiseLike<{ data: T[] | null; error: unknown }>
+        ): Promise<{ data: T[] | null; error: unknown }> => {
+            const BATCH_SIZE = 100;
+            if (addresses.length <= BATCH_SIZE) {
+                return queryFn(addresses);
+            }
+            const allData: T[] = [];
+            for (let i = 0; i < addresses.length; i += BATCH_SIZE) {
+                const batch = addresses.slice(i, i + BATCH_SIZE);
+                const result = await queryFn(batch);
+                if (result.data) allData.push(...result.data);
+            }
+            return { data: allData.length > 0 ? allData : null, error: null };
+        };
+
         const fetchAllData = async () => {
             // Run ALL queries in parallel - much faster than sequential
+            // Each query is automatically batched if >100 addresses
             const [
                 userSettingsResult,
                 socialsResult,
@@ -947,23 +965,29 @@ export function FriendsList({
                 favoritesResult,
             ] = await Promise.all([
                 // Combined query for statuses + online + scheduling + avatar preferences + public profile
-                client
-                    .from("shout_user_settings")
-                    .select(
-                        "wallet_address, status_emoji, status_text, is_dnd, last_seen, scheduling_enabled, scheduling_slug, custom_avatar_url, use_custom_avatar, public_landing_enabled"
-                    )
-                    .in("wallet_address", addresses),
+                batchQuery((batch) =>
+                    client
+                        .from("shout_user_settings")
+                        .select(
+                            "wallet_address, status_emoji, status_text, is_dnd, last_seen, scheduling_enabled, scheduling_slug, custom_avatar_url, use_custom_avatar, public_landing_enabled"
+                        )
+                        .in("wallet_address", batch)
+                ),
                 // Socials
-                client
-                    .from("shout_socials")
-                    .select("*")
-                    .in("wallet_address", addresses),
+                batchQuery((batch) =>
+                    client
+                        .from("shout_socials")
+                        .select("*")
+                        .in("wallet_address", batch)
+                ),
                 // Phone numbers
-                client
-                    .from("shout_phone_numbers")
-                    .select("wallet_address, phone_number")
-                    .in("wallet_address", addresses)
-                    .eq("verified", true),
+                batchQuery((batch) =>
+                    client
+                        .from("shout_phone_numbers")
+                        .select("wallet_address, phone_number")
+                        .in("wallet_address", batch)
+                        .eq("verified", true)
+                ),
                 // Favorites (if user is logged in)
                 userAddress
                     ? client
@@ -1059,16 +1083,18 @@ export function FriendsList({
 
         // Refresh online statuses every 30 seconds (just online, not everything)
         const refreshOnline = async () => {
-            const { data } = await client
-                .from("shout_user_settings")
-                .select("wallet_address, last_seen")
-                .in("wallet_address", addresses);
+            const result = await batchQuery<{ wallet_address: string; last_seen: string | null }>((batch) =>
+                client
+                    .from("shout_user_settings")
+                    .select("wallet_address, last_seen")
+                    .in("wallet_address", batch)
+            );
 
-            if (data) {
+            if (result.data) {
                 const online: Record<string, boolean> = {};
                 const now = Date.now();
                 const ONLINE_THRESHOLD = 120000;
-                data.forEach((row) => {
+                result.data.forEach((row) => {
                     if (row.last_seen) {
                         const lastSeenTime = new Date(row.last_seen).getTime();
                         online[row.wallet_address] =

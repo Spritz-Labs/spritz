@@ -250,16 +250,24 @@ export function ChatRulesPanel({
 
     if (!mounted) return null;
 
+    const [updatingField, setUpdatingField] = useState<string | null>(null);
+
     const handleContentPermission = async (field: string, value: string) => {
-        await updateRule(field as keyof typeof rules, value);
+        setUpdatingField(field);
+        // Cast is safe: field values match DEFAULT_RULES keys from RULE_TOGGLES
+        const success = await updateRule(field as "links_allowed", value);
+        if (!success) {
+            console.error("[ChatRulesPanel] Failed to update", field, "to", value);
+        }
+        setUpdatingField(null);
     };
 
     const handleSlowMode = async (seconds: number) => {
-        await updateRule("slow_mode_seconds" as keyof typeof rules, seconds);
+        await updateRule("slow_mode_seconds", seconds);
     };
 
     const handleReadOnly = async (value: boolean) => {
-        await updateRule("read_only" as keyof typeof rules, value);
+        await updateRule("read_only", value);
     };
 
     const handleAddBlockedWord = async () => {
@@ -564,9 +572,11 @@ export function ChatRulesPanel({
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <div className="flex bg-zinc-800 rounded-lg p-0.5 shrink-0 ml-2">
+                                                        <div className={`flex bg-zinc-800 rounded-lg p-0.5 shrink-0 ml-2 ${updatingField === toggle.key ? "opacity-60 pointer-events-none" : ""}`}>
                                                             <button
-                                                                onClick={() => handleContentPermission(toggle.key, "everyone")}
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handleContentPermission(toggle.key, "everyone"); }}
+                                                                disabled={updatingField === toggle.key}
                                                                 className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all ${
                                                                     currentValue === "everyone"
                                                                         ? "bg-green-500/20 text-green-400"
@@ -577,7 +587,9 @@ export function ChatRulesPanel({
                                                                 All
                                                             </button>
                                                             <button
-                                                                onClick={() => handleContentPermission(toggle.key, "mods_only")}
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handleContentPermission(toggle.key, "mods_only"); }}
+                                                                disabled={updatingField === toggle.key}
                                                                 className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all ${
                                                                     currentValue === "mods_only"
                                                                         ? "bg-[#FF5500]/20 text-[#FF5500]"
@@ -588,7 +600,9 @@ export function ChatRulesPanel({
                                                                 Mods
                                                             </button>
                                                             <button
-                                                                onClick={() => handleContentPermission(toggle.key, "disabled")}
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); handleContentPermission(toggle.key, "disabled"); }}
+                                                                disabled={updatingField === toggle.key}
                                                                 className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all ${
                                                                     currentValue === "disabled"
                                                                         ? "bg-red-500/20 text-red-400"
