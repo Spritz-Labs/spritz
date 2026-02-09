@@ -2575,6 +2575,7 @@ export function AlphaChatModal({
                                                 }
                                                 disabled={isCurrentUserMuted}
                                                 chatRules={chatRules}
+                                                isModerator={isAdmin || moderation.permissions.isModerator}
                                             />
                                             {isCurrentUserMuted ? (
                                                 <div

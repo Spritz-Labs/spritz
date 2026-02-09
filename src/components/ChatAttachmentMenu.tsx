@@ -8,12 +8,12 @@ import { type LocationData } from "./LocationMessage";
 type AttachmentType = "image" | "pixel_art" | "gif" | "poll" | "location" | "voice";
 
 type ChatRulesConfig = {
-    photos_allowed?: boolean;
-    pixel_art_allowed?: boolean;
-    gifs_allowed?: boolean;
-    polls_allowed?: boolean;
-    location_sharing_allowed?: boolean;
-    voice_allowed?: boolean;
+    photos_allowed?: boolean | string;
+    pixel_art_allowed?: boolean | string;
+    gifs_allowed?: boolean | string;
+    polls_allowed?: boolean | string;
+    location_sharing_allowed?: boolean | string;
+    voice_allowed?: boolean | string;
 };
 
 type ChatAttachmentMenuProps = {
@@ -30,6 +30,7 @@ type ChatAttachmentMenuProps = {
     disabled?: boolean;
     className?: string;
     chatRules?: ChatRulesConfig | null;
+    isModerator?: boolean;
 };
 
 export function ChatAttachmentMenu({
@@ -46,14 +47,25 @@ export function ChatAttachmentMenu({
     disabled = false,
     className = "",
     chatRules,
+    isModerator = false,
 }: ChatAttachmentMenuProps) {
-    // Apply chat rules - if a rule disables a feature, hide the option
-    const photosAllowed = chatRules?.photos_allowed !== false;
-    const pixelArtAllowed = chatRules?.pixel_art_allowed !== false;
-    const gifsAllowed = chatRules?.gifs_allowed !== false;
-    const pollsAllowed = chatRules?.polls_allowed !== false;
-    const locationAllowed = chatRules?.location_sharing_allowed !== false;
-    const voiceAllowed = chatRules?.voice_allowed !== false;
+    // Apply chat rules - check if content type is available for this user
+    // "everyone" or true or undefined = allowed for all
+    // "mods_only" = allowed for mods/admins only
+    // "disabled" or false = hidden for regular users (admins exempt server-side)
+    const isContentAllowed = (value?: boolean | string) => {
+        if (value === undefined || value === null) return true;
+        if (value === "everyone" || value === true) return true;
+        if (value === "mods_only") return isModerator;
+        if (value === "disabled" || value === false) return isModerator;
+        return true;
+    };
+    const photosAllowed = isContentAllowed(chatRules?.photos_allowed);
+    const pixelArtAllowed = isContentAllowed(chatRules?.pixel_art_allowed);
+    const gifsAllowed = isContentAllowed(chatRules?.gifs_allowed);
+    const pollsAllowed = isContentAllowed(chatRules?.polls_allowed);
+    const locationAllowed = isContentAllowed(chatRules?.location_sharing_allowed);
+    const voiceAllowed = isContentAllowed(chatRules?.voice_allowed);
     const [isExpanded, setIsExpanded] = useState(false);
     const [showGifPicker, setShowGifPicker] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);

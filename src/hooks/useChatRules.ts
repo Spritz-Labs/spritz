@@ -10,13 +10,13 @@ export type ChatRulesState = {
 };
 
 const DEFAULT_RULES = {
-    links_allowed: true,
-    photos_allowed: true,
-    pixel_art_allowed: true,
-    gifs_allowed: true,
-    polls_allowed: true,
-    location_sharing_allowed: true,
-    voice_allowed: true,
+    links_allowed: "everyone" as string,
+    photos_allowed: "everyone" as string,
+    pixel_art_allowed: "everyone" as string,
+    gifs_allowed: "everyone" as string,
+    polls_allowed: "everyone" as string,
+    location_sharing_allowed: "everyone" as string,
+    voice_allowed: "everyone" as string,
     slow_mode_seconds: 0,
     read_only: false,
     max_message_length: 0,
@@ -67,7 +67,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
     const updateRule = useCallback(
         async (
             field: keyof typeof DEFAULT_RULES,
-            value: boolean | number,
+            value: boolean | number | string,
         ): Promise<boolean> => {
             if (!chatType) return false;
 
@@ -138,13 +138,32 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
         [chatType, chatId],
     );
 
-    // Helper to check if a specific feature is allowed
+    // Helper to check if a specific feature is allowed for regular users
+    // Returns true if "everyone", false if "mods_only" or "disabled"
     const isAllowed = useCallback(
         (feature: keyof typeof DEFAULT_RULES): boolean => {
-            if (!state.rules) return DEFAULT_RULES[feature] as boolean;
+            if (!state.rules) return true;
             const value = state.rules[feature as keyof ChatRules];
+            // Handle role-based content permissions
+            if (value === "everyone") return true;
+            if (value === "mods_only" || value === "disabled") return false;
+            // Legacy boolean support
             if (typeof value === "boolean") return value;
-            return DEFAULT_RULES[feature] as boolean;
+            return true;
+        },
+        [state.rules],
+    );
+
+    // Helper to get the permission level for a content rule
+    const getPermission = useCallback(
+        (feature: keyof typeof DEFAULT_RULES): string => {
+            if (!state.rules) return "everyone";
+            const value = state.rules[feature as keyof ChatRules];
+            if (value === "everyone" || value === "mods_only" || value === "disabled") return value;
+            // Legacy boolean support
+            if (value === true) return "everyone";
+            if (value === false) return "disabled";
+            return "everyone";
         },
         [state.rules],
     );
@@ -194,6 +213,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
         updateRules,
         updateRulesText,
         isAllowed,
+        getPermission,
         refresh: fetchRules,
     };
 }

@@ -1605,6 +1605,7 @@ export function LocationChatModal({
                                             isUploading={isUploading}
                                             disabled={isSending}
                                             chatRules={chatRules}
+                                            isModerator={moderation.permissions.isAdmin || moderation.permissions.isModerator}
                                         />
 
                                         <MentionInput

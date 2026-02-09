@@ -3273,6 +3273,7 @@ export function ChannelChatModal({
                                 showPoll={canCreatePoll}
                                 isUploading={isUploading || isUploadingPixelArt}
                                 chatRules={chatRules}
+                                isModerator={moderation.permissions.isAdmin || moderation.permissions.isModerator}
                             />
                             <MentionInput
                                 inputRef={inputRef}

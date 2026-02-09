@@ -10,17 +10,20 @@ const supabase =
         ? createClient(supabaseUrl, supabaseServiceKey)
         : null;
 
+// Role-based content permission levels
+export type ContentPermission = "everyone" | "mods_only" | "disabled";
+
 export type ChatRules = {
     id: string;
     chat_type: string;
     chat_id: string | null;
-    links_allowed: boolean;
-    photos_allowed: boolean;
-    pixel_art_allowed: boolean;
-    gifs_allowed: boolean;
-    polls_allowed: boolean;
-    location_sharing_allowed: boolean;
-    voice_allowed: boolean;
+    links_allowed: ContentPermission;
+    photos_allowed: ContentPermission;
+    pixel_art_allowed: ContentPermission;
+    gifs_allowed: ContentPermission;
+    polls_allowed: ContentPermission;
+    location_sharing_allowed: ContentPermission;
+    voice_allowed: ContentPermission;
     slow_mode_seconds: number;
     read_only: boolean;
     max_message_length: number;
@@ -29,18 +32,18 @@ export type ChatRules = {
     updated_at: string;
 };
 
-// Default rules (everything allowed)
+// Default rules (everything allowed for everyone)
 const DEFAULT_CHAT_RULES: Omit<
     ChatRules,
     "id" | "chat_type" | "chat_id" | "updated_by" | "updated_at"
 > = {
-    links_allowed: true,
-    photos_allowed: true,
-    pixel_art_allowed: true,
-    gifs_allowed: true,
-    polls_allowed: true,
-    location_sharing_allowed: true,
-    voice_allowed: true,
+    links_allowed: "everyone",
+    photos_allowed: "everyone",
+    pixel_art_allowed: "everyone",
+    gifs_allowed: "everyone",
+    polls_allowed: "everyone",
+    location_sharing_allowed: "everyone",
+    voice_allowed: "everyone",
     slow_mode_seconds: 0,
     read_only: false,
     max_message_length: 0,

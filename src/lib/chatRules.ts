@@ -7,31 +7,43 @@ const supabase = supabaseUrl && supabaseServiceKey
     ? createClient(supabaseUrl, supabaseServiceKey)
     : null;
 
+// Role-based content permission levels
+export type ContentPermission = "everyone" | "mods_only" | "disabled";
+
 export type ChatRulesData = {
-    links_allowed: boolean;
-    photos_allowed: boolean;
-    pixel_art_allowed: boolean;
-    gifs_allowed: boolean;
-    polls_allowed: boolean;
-    location_sharing_allowed: boolean;
-    voice_allowed: boolean;
+    links_allowed: ContentPermission;
+    photos_allowed: ContentPermission;
+    pixel_art_allowed: ContentPermission;
+    gifs_allowed: ContentPermission;
+    polls_allowed: ContentPermission;
+    location_sharing_allowed: ContentPermission;
+    voice_allowed: ContentPermission;
     slow_mode_seconds: number;
     read_only: boolean;
     max_message_length: number;
 };
 
 const DEFAULT_RULES: ChatRulesData = {
-    links_allowed: true,
-    photos_allowed: true,
-    pixel_art_allowed: true,
-    gifs_allowed: true,
-    polls_allowed: true,
-    location_sharing_allowed: true,
-    voice_allowed: true,
+    links_allowed: "everyone",
+    photos_allowed: "everyone",
+    pixel_art_allowed: "everyone",
+    gifs_allowed: "everyone",
+    polls_allowed: "everyone",
+    location_sharing_allowed: "everyone",
+    voice_allowed: "everyone",
     slow_mode_seconds: 0,
     read_only: false,
     max_message_length: 0,
 };
+
+/** Normalize a content rule value from DB (handles legacy booleans) */
+function normalizeContentPermission(value: unknown): ContentPermission {
+    if (value === "everyone" || value === "mods_only" || value === "disabled") return value;
+    // Legacy boolean support
+    if (value === true || value === "true") return "everyone";
+    if (value === false || value === "false") return "disabled";
+    return "everyone";
+}
 
 /**
  * Fetch chat rules for a room. Returns defaults if no rules are set.
@@ -55,13 +67,13 @@ export async function getChatRules(chatType: string, chatId: string | null): Pro
         if (!data) return DEFAULT_RULES;
 
         return {
-            links_allowed: data.links_allowed ?? true,
-            photos_allowed: data.photos_allowed ?? true,
-            pixel_art_allowed: data.pixel_art_allowed ?? true,
-            gifs_allowed: data.gifs_allowed ?? true,
-            polls_allowed: data.polls_allowed ?? true,
-            location_sharing_allowed: data.location_sharing_allowed ?? true,
-            voice_allowed: data.voice_allowed ?? true,
+            links_allowed: normalizeContentPermission(data.links_allowed),
+            photos_allowed: normalizeContentPermission(data.photos_allowed),
+            pixel_art_allowed: normalizeContentPermission(data.pixel_art_allowed),
+            gifs_allowed: normalizeContentPermission(data.gifs_allowed),
+            polls_allowed: normalizeContentPermission(data.polls_allowed),
+            location_sharing_allowed: normalizeContentPermission(data.location_sharing_allowed),
+            voice_allowed: normalizeContentPermission(data.voice_allowed),
             slow_mode_seconds: data.slow_mode_seconds ?? 0,
             read_only: data.read_only ?? false,
             max_message_length: data.max_message_length ?? 0,
@@ -201,31 +213,47 @@ export async function validateMessageAgainstRules(
         }
     }
 
-    // Check message type against rules
-    if (messageType === "image" && !rules.photos_allowed) {
-        return "Photos are not allowed in this room";
-    }
-    if (messageType === "pixel_art" && !rules.pixel_art_allowed) {
-        return "Pixel art is not allowed in this room";
-    }
-    if (messageType === "gif" && !rules.gifs_allowed) {
-        return "GIFs are not allowed in this room";
-    }
-    if (messageType === "poll" && !rules.polls_allowed) {
-        return "Polls are not allowed in this room";
-    }
-    if (messageType === "location" && !rules.location_sharing_allowed) {
-        return "Location sharing is not allowed in this room";
-    }
-    if (messageType === "voice" && !rules.voice_allowed) {
-        return "Voice messages are not allowed in this room";
+    // Check message type against role-based content rules
+    const contentRuleMap: Record<string, { rule: ContentPermission; label: string }> = {
+        image: { rule: rules.photos_allowed, label: "Photos" },
+        pixel_art: { rule: rules.pixel_art_allowed, label: "Pixel art" },
+        gif: { rule: rules.gifs_allowed, label: "GIFs" },
+        poll: { rule: rules.polls_allowed, label: "Polls" },
+        location: { rule: rules.location_sharing_allowed, label: "Location sharing" },
+        voice: { rule: rules.voice_allowed, label: "Voice messages" },
+    };
+
+    const contentCheck = contentRuleMap[messageType];
+    if (contentCheck && contentCheck.rule !== "everyone") {
+        if (contentCheck.rule === "disabled") {
+            // Admins/mods are exempt from disabled rules
+            const isPrivileged = await isAdminOrModerator(userAddress, chatType, chatId);
+            if (!isPrivileged) {
+                return `${contentCheck.label} are not allowed in this room`;
+            }
+        } else if (contentCheck.rule === "mods_only") {
+            const isPrivileged = await isAdminOrModerator(userAddress, chatType, chatId);
+            if (!isPrivileged) {
+                return `${contentCheck.label} are only allowed for moderators`;
+            }
+        }
     }
 
-    // Check links in text messages
-    if (messageType === "text" && !rules.links_allowed) {
+    // Check links in text messages (role-based)
+    if (messageType === "text" && rules.links_allowed !== "everyone") {
         const urlRegex = /https?:\/\/[^\s]+/i;
         if (urlRegex.test(content)) {
-            return "Links are not allowed in this room";
+            if (rules.links_allowed === "disabled") {
+                const isPrivileged = await isAdminOrModerator(userAddress, chatType, chatId);
+                if (!isPrivileged) {
+                    return "Links are not allowed in this room";
+                }
+            } else if (rules.links_allowed === "mods_only") {
+                const isPrivileged = await isAdminOrModerator(userAddress, chatType, chatId);
+                if (!isPrivileged) {
+                    return "Links are only allowed for moderators";
+                }
+            }
         }
     }
 

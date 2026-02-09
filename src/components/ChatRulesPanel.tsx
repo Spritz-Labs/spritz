@@ -250,8 +250,8 @@ export function ChatRulesPanel({
 
     if (!mounted) return null;
 
-    const handleToggle = async (field: string, currentValue: boolean) => {
-        await updateRule(field as keyof typeof rules, !currentValue);
+    const handleContentPermission = async (field: string, value: string) => {
+        await updateRule(field as keyof typeof rules, value);
     };
 
     const handleSlowMode = async (seconds: number) => {
@@ -524,65 +524,81 @@ export function ChatRulesPanel({
                                 </div>
                             ) : activeTab === "rules" ? (
                                 <div className="p-4 space-y-6">
-                                    {/* Content Type Toggles */}
+                                    {/* Role-Based Content Permissions */}
                                     <div>
-                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">
-                                            Allowed Content
+                                        <h3 className="text-sm font-medium text-zinc-300 mb-1">
+                                            Content Permissions
                                         </h3>
+                                        <p className="text-xs text-zinc-500 mb-3">
+                                            Control who can use each content type
+                                        </p>
                                         <div className="space-y-1">
                                             {RULE_TOGGLES.map((toggle) => {
-                                                const value =
+                                                const rawValue =
                                                     rules?.[
                                                         toggle.key as keyof typeof rules
                                                     ];
-                                                const isEnabled =
-                                                    typeof value === "boolean"
-                                                        ? value
-                                                        : true;
+                                                // Normalize: handle legacy booleans
+                                                const currentValue =
+                                                    rawValue === "everyone" || rawValue === "mods_only" || rawValue === "disabled"
+                                                        ? rawValue
+                                                        : rawValue === true || rawValue === undefined
+                                                        ? "everyone"
+                                                        : "disabled";
 
                                                 return (
                                                     <div
                                                         key={toggle.key}
                                                         className="flex items-center justify-between px-3 py-3 rounded-lg hover:bg-zinc-800/50 transition-colors"
                                                     >
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="text-lg">
+                                                        <div className="flex items-center gap-3 min-w-0">
+                                                            <span className="text-lg shrink-0">
                                                                 {toggle.icon}
                                                             </span>
-                                                            <div>
+                                                            <div className="min-w-0">
                                                                 <p className="text-sm font-medium text-white">
-                                                                    {
-                                                                        toggle.label
-                                                                    }
+                                                                    {toggle.label}
                                                                 </p>
-                                                                <p className="text-xs text-zinc-500">
-                                                                    {
-                                                                        toggle.description
-                                                                    }
+                                                                <p className="text-xs text-zinc-500 truncate">
+                                                                    {toggle.description}
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <button
-                                                            onClick={() =>
-                                                                handleToggle(
-                                                                    toggle.key,
-                                                                    isEnabled,
-                                                                )
-                                                            }
-                                                            className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                                                                isEnabled
-                                                                    ? "bg-[#FF5500]"
-                                                                    : "bg-zinc-700"
-                                                            }`}
-                                                        >
-                                                            <span
-                                                                className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                                                                    isEnabled
-                                                                        ? "translate-x-5"
-                                                                        : "translate-x-0"
+                                                        <div className="flex bg-zinc-800 rounded-lg p-0.5 shrink-0 ml-2">
+                                                            <button
+                                                                onClick={() => handleContentPermission(toggle.key, "everyone")}
+                                                                className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all ${
+                                                                    currentValue === "everyone"
+                                                                        ? "bg-green-500/20 text-green-400"
+                                                                        : "text-zinc-500 hover:text-zinc-300"
                                                                 }`}
-                                                            />
-                                                        </button>
+                                                                title="Everyone can use this"
+                                                            >
+                                                                All
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleContentPermission(toggle.key, "mods_only")}
+                                                                className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all ${
+                                                                    currentValue === "mods_only"
+                                                                        ? "bg-[#FF5500]/20 text-[#FF5500]"
+                                                                        : "text-zinc-500 hover:text-zinc-300"
+                                                                }`}
+                                                                title="Only moderators and admins"
+                                                            >
+                                                                Mods
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleContentPermission(toggle.key, "disabled")}
+                                                                className={`px-2 py-1 text-[11px] font-medium rounded-md transition-all ${
+                                                                    currentValue === "disabled"
+                                                                        ? "bg-red-500/20 text-red-400"
+                                                                        : "text-zinc-500 hover:text-zinc-300"
+                                                                }`}
+                                                                title="Disabled for everyone"
+                                                            >
+                                                                Off
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 );
                                             })}

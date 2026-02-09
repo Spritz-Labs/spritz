@@ -2264,6 +2264,7 @@ export function GroupChatModal({
                                         isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized}
                                         chatRules={chatRules}
+                                        isModerator={isAdmin}
                                     />
                                     <MentionInput
                                         value={newMessage}
