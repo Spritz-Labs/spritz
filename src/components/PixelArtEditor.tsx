@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 
 const CANVAS_SIZE = 32;
@@ -599,7 +600,16 @@ export function PixelArtEditor({
         };
     }, [isDraggingWheel, isDraggingSatBright, handleWheelInteraction, handleSatBrightInteraction]);
 
-    return (
+    // Use portal to render outside of any transformed parent (fixes PWA z-index issues)
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+        return () => setMounted(false);
+    }, []);
+
+    if (!mounted) return null;
+
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
                 <motion.div
@@ -1203,7 +1213,8 @@ export function PixelArtEditor({
                     </motion.div>
                 </motion.div>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
     );
 }
 
