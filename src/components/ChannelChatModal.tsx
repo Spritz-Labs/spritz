@@ -604,7 +604,7 @@ export function ChannelChatModal({
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Starred messages hook
-    const { isStarred, toggleStar } = useStarredMessages(userAddress);
+    const { isStarred, toggleStar, unstarMessage } = useStarredMessages(userAddress);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
 
     // Draft messages persistence
@@ -3589,6 +3589,25 @@ export function ChannelChatModal({
                                   deleteMessage(
                                       selectedMessageConfig?.messageId || ""
                                   )
+                            : undefined,
+                        onStar: selectedMessageConfig && !selectedMessageConfig.isStarred
+                            ? () => {
+                                  const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                                  if (msg) {
+                                      toggleStar({
+                                          messageId: msg.id,
+                                          messageType: "channel",
+                                          content: msg.content,
+                                          senderAddress: msg.sender_address,
+                                          channelId: channel.id,
+                                          channelName: channel.name,
+                                          originalCreatedAt: msg.created_at,
+                                      });
+                                  }
+                              }
+                            : undefined,
+                        onUnstar: selectedMessageConfig?.isStarred
+                            ? () => unstarMessage(selectedMessageConfig.messageId)
                             : undefined,
                     }}
                 />
