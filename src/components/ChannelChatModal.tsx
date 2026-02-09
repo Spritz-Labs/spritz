@@ -1054,29 +1054,24 @@ export function ChannelChatModal({
     const handleSendPixelArt = async (imageData: string) => {
         setIsUploadingPixelArt(true);
         try {
-            // Convert base64 to blob
-            const response = await fetch(imageData);
-            const blob = await response.blob();
-            const file = new File([blob], "pixel-art.png", {
-                type: "image/png",
-            });
-
-            // Upload to storage
-            const formData = new FormData();
-            formData.append("file", file);
-            formData.append("userAddress", userAddress);
-
-            const uploadRes = await fetch("/api/upload", {
+            // Upload to IPFS via pixel-art endpoint
+            const uploadResponse = await fetch("/api/pixel-art/upload", {
                 method: "POST",
-                body: formData,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    imageData,
+                    senderAddress: userAddress,
+                }),
             });
 
-            if (!uploadRes.ok) throw new Error("Upload failed");
+            const uploadResult = await uploadResponse.json();
+            if (!uploadResult.success) {
+                throw new Error(uploadResult.error || "Failed to upload");
+            }
 
-            const { url } = await uploadRes.json();
-
-            // Send as pixel art message
-            await sendMessage(url, "pixel_art");
+            // Send as pixel art message with IPFS URL
+            const pixelArtUrl = uploadResult.ipfsUrl;
+            await sendMessage(pixelArtUrl, "pixel_art");
             setShowPixelArt(false);
             onMessageSent?.();
         } catch (error) {
