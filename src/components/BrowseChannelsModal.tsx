@@ -42,15 +42,17 @@ function formatDistance(meters: number): string {
     }
 }
 
-function showToast(message: string, type: "success" | "neutral" = "success") {
+function showToast(message: string, type: "success" | "neutral" | "error" = "success") {
     const toast = document.createElement("div");
     toast.className =
         type === "success"
             ? "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2"
+            : type === "error"
+            ? "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2"
             : "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-zinc-700 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
     toast.textContent = message;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2500);
+    setTimeout(() => toast.remove(), 3500);
 }
 
 type BrowseChannelsModalProps = {
@@ -450,11 +452,14 @@ export function BrowseChannelsModal({
 
     const handleJoin = async (channel: PublicChannel) => {
         setJoiningChannel(channel.id);
-        const success = await joinChannel(channel.id);
+        const result = await joinChannel(channel.id);
         setJoiningChannel(null);
-        if (success) {
+        if (result === true) {
             showToast(`✓ Joined #${channel.name}`);
             onJoinChannel(channel);
+        } else {
+            // Show error message to user
+            showToast(result || "Failed to join channel", "error");
         }
     };
 

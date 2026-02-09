@@ -3058,7 +3058,7 @@ function DashboardContent({
 
             <div className="min-h-screen bg-zinc-950 flex flex-col">
                 {/* Header */}
-                <header className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-lg sticky top-0 z-40 safe-area-pt px-2">
+                <header className="border-b border-zinc-800 bg-zinc-950 sm:bg-zinc-900/95 backdrop-blur-lg sticky top-0 z-40 safe-area-pt px-2">
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 safe-area-pl safe-area-pr">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -4677,7 +4677,7 @@ function DashboardContent({
                                                     Folder
                                                 </span>
                                             </button>
-                                            {/* Browse/Explore Channels Button */}
+                                            {/* Browse/Explore Channels Button - Prominent for discoverability */}
                                             <button
                                                 onClick={() => {
                                                     setBrowseChannelsInitialCreate(
@@ -4687,7 +4687,7 @@ function DashboardContent({
                                                         true
                                                     );
                                                 }}
-                                                className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
+                                                className="h-8 sm:h-auto py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 hover:text-blue-300 border border-blue-500/30 transition-all flex items-center justify-center gap-1.5 sm:gap-2"
                                                 title="Explore channels"
                                             >
                                                 <svg
@@ -4703,7 +4703,7 @@ function DashboardContent({
                                                         d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                     />
                                                 </svg>
-                                                <span className="hidden sm:inline text-sm font-medium">
+                                                <span className="text-xs sm:text-sm font-medium">
                                                     Explore
                                                 </span>
                                             </button>

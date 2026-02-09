@@ -82,7 +82,13 @@ export function PushNotificationPrompt({
     // Track if we've done the initial neverAsk check
     const initialCheckDoneRef = useRef(false);
     
-    const { username: currentUsername, claimUsername, checkAvailability } = useUsername(userAddress);
+    const { username: currentUsername, isFetching: isUsernameFetching, claimUsername, checkAvailability } = useUsername(userAddress);
+
+    // Use a ref to track the latest username value to avoid stale closures in setTimeout
+    const currentUsernameRef = useRef(currentUsername);
+    useEffect(() => {
+        currentUsernameRef.current = currentUsername;
+    }, [currentUsername]);
 
     // SYNCHRONOUS CHECK: Run immediately when userAddress becomes available
     // This prevents any race conditions with the async effect
@@ -107,6 +113,14 @@ export function PushNotificationPrompt({
 
         if (!userAddress) {
             console.log("[PushNotificationPrompt] No user address");
+            return;
+        }
+
+        // Wait for username fetch to complete before making any decisions
+        // This prevents the race condition where we show the username step
+        // while the username is still being loaded from the API
+        if (isUsernameFetching) {
+            console.log("[PushNotificationPrompt] Waiting for username fetch to complete");
             return;
         }
 
@@ -170,13 +184,14 @@ export function PushNotificationPrompt({
             }
             hasShownRef.current = true;
             setIsOpen(true);
-            // If user already has username, skip to notifications step
-            if (currentUsername) {
+            // Use the ref for the latest username value (avoids stale closure)
+            const latestUsername = currentUsernameRef.current;
+            if (latestUsername) {
                 setStep("notifications");
             } else {
                 setStep("username");
             }
-            console.log("[PushNotificationPrompt] Prompt opened, step:", currentUsername ? "notifications" : "username");
+            console.log("[PushNotificationPrompt] Prompt opened, step:", latestUsername ? "notifications" : "username");
         }, 2000);
 
         return () => {
@@ -185,7 +200,7 @@ export function PushNotificationPrompt({
                 timerRef.current = null;
             }
         };
-    }, [userAddress, isSupported, isSubscribed, permission, currentUsername, shouldNeverShow]);
+    }, [userAddress, isSupported, isSubscribed, permission, currentUsername, isUsernameFetching, shouldNeverShow]);
 
     // Debounced username availability check
     useEffect(() => {

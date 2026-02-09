@@ -65,7 +65,7 @@ function CreateFolderModal({
                 exit={{ scale: 0.95, opacity: 0 }}
                 onClick={(e) => e.stopPropagation()}
                 onPointerDown={(e) => e.stopPropagation()}
-                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto"
+                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-6 max-w-md w-full max-h-[85vh] overflow-y-auto"
             >
                 <h3 className="text-lg font-bold text-white mb-2">
                     Create Folder
@@ -76,7 +76,7 @@ function CreateFolderModal({
                 </p>
 
                 {/* Custom Folder Input */}
-                <div className="mb-6 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                <div className="mb-6 p-3 sm:p-4 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
                     <p className="text-xs text-zinc-500 mb-2 font-medium">
                         Create Custom Folder
                     </p>
@@ -86,21 +86,21 @@ function CreateFolderModal({
                             value={customEmoji}
                             onChange={(e) => setCustomEmoji(e.target.value)}
                             placeholder="😀"
-                            className="w-14 h-12 text-center text-2xl bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
+                            className="w-12 sm:w-14 h-12 text-center text-2xl bg-zinc-800 border border-zinc-700 rounded-xl focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 shrink-0"
                             maxLength={4}
                         />
                         <input
                             type="text"
                             value={customLabel}
                             onChange={(e) => setCustomLabel(e.target.value)}
-                            placeholder="Folder name (optional)"
-                            className="flex-1 h-12 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
+                            placeholder="Folder name"
+                            className="flex-1 min-w-0 h-12 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20"
                             maxLength={20}
                         />
                         <button
                             onClick={handleCreateCustom}
                             disabled={!isCustomValid}
-                            className="px-4 h-12 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 sm:px-4 h-12 rounded-xl bg-[#FF5500] hover:bg-[#E04D00] text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
                         >
                             Add
                         </button>

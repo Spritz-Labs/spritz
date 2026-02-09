@@ -1,27 +1,49 @@
 /**
  * ENS resolution for channel membership and POAP lookups.
  * Use when the same user may be stored by ENS (e.g. "poap.eth") or by resolved address (0x...).
+ * Also supports non-Ethereum addresses (e.g. Alien ID identifiers) by passing them through as-is.
  */
 
 import { isAddress, createPublicClient, http } from "viem";
 import { mainnet } from "viem/chains";
 import { getRpcUrl } from "@/lib/rpc";
 
-/** Resolve ENS to address; return lowercase 0x address. If input is already 0x, normalize to lowercase. */
+/**
+ * Check if input looks like an ENS name (contains a dot, e.g. "vitalik.eth").
+ * Used to distinguish ENS names from non-Ethereum identity addresses (e.g. Alien ID).
+ */
+function looksLikeEns(input: string): boolean {
+    return input.includes(".");
+}
+
+/**
+ * Resolve address/ENS to a normalized lowercase string.
+ * - Valid Ethereum addresses (0x...): normalized to lowercase
+ * - ENS names (*.eth): resolved to Ethereum address
+ * - Other identifiers (e.g. Alien ID, World ID): returned as-is lowercase
+ *   These are valid user identifiers stored in the database from non-Ethereum auth providers.
+ */
 export async function resolveToAddress(input: string): Promise<string | null> {
     const trimmed = (input || "").trim();
     if (!trimmed) return null;
+    // Standard Ethereum address
     if (isAddress(trimmed)) return trimmed.toLowerCase();
-    try {
-        const client = createPublicClient({
-            chain: mainnet,
-            transport: http(getRpcUrl(1)),
-        });
-        const resolved = await client.getEnsAddress({ name: trimmed });
-        return resolved ? resolved.toLowerCase() : null;
-    } catch {
-        return null;
+    // Try ENS resolution only if it looks like an ENS name
+    if (looksLikeEns(trimmed)) {
+        try {
+            const client = createPublicClient({
+                chain: mainnet,
+                transport: http(getRpcUrl(1)),
+            });
+            const resolved = await client.getEnsAddress({ name: trimmed });
+            if (resolved) return resolved.toLowerCase();
+        } catch {
+            // ENS resolution failed, fall through
+        }
     }
+    // Non-Ethereum identifier (Alien ID, World ID, etc.) - return as-is lowercase
+    // These are valid user identifiers stored in the DB from alternative auth providers
+    return trimmed.toLowerCase();
 }
 
 /**

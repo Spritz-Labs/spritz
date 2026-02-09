@@ -121,8 +121,8 @@ export function useChannels(userAddress: string | null) {
     }, [userAddress]);
 
     const joinChannel = useCallback(
-        async (channelId: string) => {
-            if (!userAddress) return false;
+        async (channelId: string): Promise<true | string> => {
+            if (!userAddress) return "Not signed in";
 
             try {
                 const res = await fetch(`/api/channels/${channelId}/join`, {
@@ -134,7 +134,9 @@ export function useChannels(userAddress: string | null) {
                 const data = await res.json();
 
                 if (!res.ok) {
-                    throw new Error(data.error || "Failed to join channel");
+                    const errorMsg = data.error || "Failed to join channel";
+                    console.error("[useChannels] Join error:", errorMsg);
+                    return errorMsg;
                 }
 
                 // Refresh channels
@@ -144,7 +146,7 @@ export function useChannels(userAddress: string | null) {
                 return true;
             } catch (e) {
                 console.error("[useChannels] Error joining channel:", e);
-                return false;
+                return e instanceof Error ? e.message : "Failed to join channel";
             }
         },
         [userAddress, fetchChannels, fetchJoinedChannels]
