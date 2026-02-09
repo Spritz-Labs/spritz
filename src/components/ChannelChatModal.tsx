@@ -19,6 +19,8 @@ import { MentionText } from "./MentionText";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { ChatRulesPanel } from "./ChatRulesPanel";
+import { useChatRules } from "@/hooks/useChatRules";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay, type DisplayPoll } from "./PollDisplay";
 import { PollEditModal } from "./PollEditModal";
@@ -598,6 +600,8 @@ export function ChannelChatModal({
     const [threadInputValue, setThreadInputValue] = useState("");
     const threadInputRef = useRef<HTMLInputElement>(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showRulesPanel, setShowRulesPanel] = useState(false);
+    const { rules: chatRules } = useChatRules("channel", channel.id);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
     const [forwardingMessage, setForwardingMessage] =
         useState<ChannelMessage | null>(null);
@@ -1941,6 +1945,21 @@ export function ChannelChatModal({
                                                         : "Enable Notifications"}
                                                 </button>
                                             )}
+                                            {/* Room Rules - admin/moderator only */}
+                                            {isAdmin && (
+                                                <button
+                                                    onClick={() => {
+                                                        setShowSettings(false);
+                                                        setShowRulesPanel(true);
+                                                    }}
+                                                    className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                >
+                                                    <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                    </svg>
+                                                    Room Rules
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => {
                                                     setShowSettings(false);
@@ -3185,6 +3204,7 @@ export function ChannelChatModal({
                                 }
                                 showPoll={canCreatePoll}
                                 isUploading={isUploading || isUploadingPixelArt}
+                                chatRules={chatRules}
                             />
                             <MentionInput
                                 inputRef={inputRef}
@@ -3651,6 +3671,15 @@ export function ChannelChatModal({
                     onClose={() => setViewerImage(null)}
                     imageUrl={viewerImage ?? ""}
                     alt={channel.name}
+                />
+
+                {/* Room Rules Panel */}
+                <ChatRulesPanel
+                    isOpen={showRulesPanel}
+                    onClose={() => setShowRulesPanel(false)}
+                    chatType="channel"
+                    chatId={channel.id}
+                    chatName={channel.name}
                 />
             </motion.div>
         </AnimatePresence>

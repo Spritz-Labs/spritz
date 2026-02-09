@@ -7,6 +7,15 @@ import { type LocationData } from "./LocationMessage";
 
 type AttachmentType = "image" | "pixel_art" | "gif" | "poll" | "location" | "voice";
 
+type ChatRulesConfig = {
+    photos_allowed?: boolean;
+    pixel_art_allowed?: boolean;
+    gifs_allowed?: boolean;
+    polls_allowed?: boolean;
+    location_sharing_allowed?: boolean;
+    voice_allowed?: boolean;
+};
+
 type ChatAttachmentMenuProps = {
     onImageUpload?: () => void;
     onPixelArt?: () => void;
@@ -20,6 +29,7 @@ type ChatAttachmentMenuProps = {
     showVoice?: boolean;
     disabled?: boolean;
     className?: string;
+    chatRules?: ChatRulesConfig | null;
 };
 
 export function ChatAttachmentMenu({
@@ -35,7 +45,15 @@ export function ChatAttachmentMenu({
     showVoice = false,
     disabled = false,
     className = "",
+    chatRules,
 }: ChatAttachmentMenuProps) {
+    // Apply chat rules - if a rule disables a feature, hide the option
+    const photosAllowed = chatRules?.photos_allowed !== false;
+    const pixelArtAllowed = chatRules?.pixel_art_allowed !== false;
+    const gifsAllowed = chatRules?.gifs_allowed !== false;
+    const pollsAllowed = chatRules?.polls_allowed !== false;
+    const locationAllowed = chatRules?.location_sharing_allowed !== false;
+    const voiceAllowed = chatRules?.voice_allowed !== false;
     const [isExpanded, setIsExpanded] = useState(false);
     const [showGifPicker, setShowGifPicker] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
@@ -68,8 +86,14 @@ export function ChatAttachmentMenu({
         setIsExpanded(false);
     };
 
-    // Count available actions to determine layout
-    const actionCount = [onImageUpload, onPixelArt, onGif, showPoll && onPoll].filter(Boolean).length;
+    // Count available actions to determine layout (respecting rules)
+    const effectiveImageUpload = photosAllowed ? onImageUpload : undefined;
+    const effectivePixelArt = pixelArtAllowed ? onPixelArt : undefined;
+    const effectiveGif = gifsAllowed ? onGif : undefined;
+    const effectivePoll = pollsAllowed && showPoll ? onPoll : undefined;
+    const effectiveLocation = locationAllowed && showLocation ? onLocation : undefined;
+    const effectiveVoice = voiceAllowed && showVoice ? onVoice : undefined;
+    const actionCount = [effectiveImageUpload, effectivePixelArt, effectiveGif, effectivePoll].filter(Boolean).length;
 
     return (
         <div ref={menuRef} className={`relative ${className}`}>
@@ -104,9 +128,9 @@ export function ChatAttachmentMenu({
                         className="absolute bottom-full left-0 mb-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
                     >
                         <div className="p-2 flex flex-col gap-1 min-w-[140px]">
-                            {onImageUpload && (
+                            {effectiveImageUpload && (
                                 <button
-                                    onClick={() => handleAction(onImageUpload)}
+                                    onClick={() => handleAction(effectiveImageUpload)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
                                     <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -116,9 +140,9 @@ export function ChatAttachmentMenu({
                                 </button>
                             )}
                             
-                            {onPixelArt && (
+                            {effectivePixelArt && (
                                 <button
-                                    onClick={() => handleAction(onPixelArt)}
+                                    onClick={() => handleAction(effectivePixelArt)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
                                     <svg className="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
@@ -136,7 +160,7 @@ export function ChatAttachmentMenu({
                                 </button>
                             )}
                             
-                            {onGif && (
+                            {effectiveGif && (
                                 <button
                                     onClick={() => {
                                         setShowGifPicker(true);
@@ -151,9 +175,9 @@ export function ChatAttachmentMenu({
                                 </button>
                             )}
                             
-                            {showPoll && onPoll && (
+                            {effectivePoll && (
                                 <button
-                                    onClick={() => handleAction(onPoll)}
+                                    onClick={() => handleAction(effectivePoll)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
                                     <span className="w-5 h-5 flex items-center justify-center text-amber-400">🗳️</span>
@@ -161,7 +185,7 @@ export function ChatAttachmentMenu({
                                 </button>
                             )}
                             
-                            {showLocation && onLocation && (
+                            {effectiveLocation && onLocation && (
                                 <button
                                     onClick={() => {
                                         setIsExpanded(false);
@@ -210,7 +234,7 @@ export function ChatAttachmentMenu({
                                 </button>
                             )}
                             
-                            {showVoice && onVoice && (
+                            {effectiveVoice && onVoice && (
                                 <button
                                     onClick={() => handleAction(onVoice)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"

@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { isUserBanned } from "@/lib/banCheck";
+import { validateMessageAgainstRules } from "@/lib/chatRules";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -131,6 +132,14 @@ export async function POST(
                 { error: "You must join this chat first" },
                 { status: 403 }
             );
+        }
+
+        // Check chat rules (room bans, read-only mode, content type restrictions, links)
+        const ruleViolation = await validateMessageAgainstRules(
+            "location", id, session.userAddress, content, messageType || "text"
+        );
+        if (ruleViolation) {
+            return NextResponse.json({ error: ruleViolation }, { status: 403 });
         }
 
         // Check for duplicate (if wakuMessageId provided)

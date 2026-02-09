@@ -21,6 +21,8 @@ import {
     type LocationData,
 } from "./LocationMessage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { ChatRulesPanel } from "./ChatRulesPanel";
+import { useChatRules } from "@/hooks/useChatRules";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { LinkPreview, detectUrls } from "./LinkPreview";
@@ -122,6 +124,8 @@ export function LocationChatModal({
     const [showInfo, setShowInfo] = useState(false);
     const [showMembersList, setShowMembersList] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
+    const [showRulesPanel, setShowRulesPanel] = useState(false);
+    const { rules: chatRules } = useChatRules("location", locationChat.id);
     const [isUploading, setIsUploading] = useState(false);
     const [replyingTo, setReplyingTo] = useState<LocationChatMessage | null>(
         null
@@ -650,6 +654,17 @@ export function LocationChatModal({
                                             1
                                         )}
                                     </span>
+                                )}
+                                {canModerateChat && (
+                                    <button
+                                        onClick={() => setShowRulesPanel(true)}
+                                        className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                                        aria-label="Room rules"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                        </svg>
+                                    </button>
                                 )}
                                 <button
                                     onClick={() => setShowInfo(!showInfo)}
@@ -1463,6 +1478,7 @@ export function LocationChatModal({
                                             showLocation={true}
                                             isUploading={isUploading}
                                             disabled={isSending}
+                                            chatRules={chatRules}
                                         />
 
                                         <MentionInput
@@ -1562,6 +1578,15 @@ export function LocationChatModal({
                 onUserClick={onOpenUserCard}
                 getUserInfo={getUserInfo}
                 currentUserAddress={userAddress}
+            />
+
+            {/* Room Rules Panel */}
+            <ChatRulesPanel
+                isOpen={showRulesPanel}
+                onClose={() => setShowRulesPanel(false)}
+                chatType="location"
+                chatId={locationChat.id}
+                chatName={locationChat.name}
             />
         </AnimatePresence>,
         document.body

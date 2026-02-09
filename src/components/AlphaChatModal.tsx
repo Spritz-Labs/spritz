@@ -20,8 +20,10 @@ import {
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { ChatRulesPanel } from "./ChatRulesPanel";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
+import { useChatRules } from "@/hooks/useChatRules";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
 import { LinkPreview, detectUrls } from "./LinkPreview";
@@ -249,6 +251,8 @@ export function AlphaChatModal({
     const [isUploadingImage, setIsUploadingImage] = useState(false);
     const imageFileInputRef = useRef<HTMLInputElement>(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showRulesPanel, setShowRulesPanel] = useState(false);
+    const { rules: chatRules } = useChatRules("alpha", null);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -1443,6 +1447,21 @@ export function AlphaChatModal({
                                                                 />
                                                             </>
                                                         )}
+                                                        {/* Room Rules - admin only */}
+                                                        {isAdmin && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowSettings(false);
+                                                                    setShowRulesPanel(true);
+                                                                }}
+                                                                className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                                                            >
+                                                                <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                                </svg>
+                                                                Room Rules
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => {
                                                                 setShowSettings(
@@ -2450,6 +2469,7 @@ export function AlphaChatModal({
                                                     isUploadingPixelArt || isUploadingImage
                                                 }
                                                 disabled={isCurrentUserMuted}
+                                                chatRules={chatRules}
                                             />
                                             {isCurrentUserMuted ? (
                                                 <div
@@ -2944,6 +2964,14 @@ export function AlphaChatModal({
                     />
                 </>
             )}
+
+            {/* Room Rules Panel */}
+            <ChatRulesPanel
+                isOpen={showRulesPanel}
+                onClose={() => setShowRulesPanel(false)}
+                chatType="alpha"
+                chatName="Spritz Global Chat"
+            />
         </AnimatePresence>
     );
 }

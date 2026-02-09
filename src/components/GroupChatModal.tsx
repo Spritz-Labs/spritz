@@ -23,6 +23,8 @@ import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { LinkPreview, detectUrls } from "./LinkPreview";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { ChatRulesPanel } from "./ChatRulesPanel";
+import { useChatRules } from "@/hooks/useChatRules";
 import {
     LocationMessage,
     isLocationMessage,
@@ -141,6 +143,8 @@ export function GroupChatModal({
     const [error, setError] = useState<string | null>(null);
     const [showMembers, setShowMembers] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
+    const [showRulesPanel, setShowRulesPanel] = useState(false);
+    const { rules: chatRules } = useChatRules("group", group?.id);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [showAddMember, setShowAddMember] = useState(false);
     const [isAddingMember, setIsAddingMember] = useState(false);
@@ -1312,6 +1316,20 @@ export function GroupChatModal({
                                                         </svg>
                                                         Add Member
                                                     </button>
+                                                    {isAdmin && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setShowManageMenu(false);
+                                                                setShowRulesPanel(true);
+                                                            }}
+                                                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
+                                                        >
+                                                            <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                            </svg>
+                                                            Room Rules
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => {
                                                             setShowManageMenu(
@@ -2185,6 +2203,7 @@ export function GroupChatModal({
                                         showLocation={true}
                                         isUploading={isUploadingPixelArt}
                                         disabled={!isInitialized}
+                                        chatRules={chatRules}
                                     />
                                     <MentionInput
                                         value={newMessage}
@@ -2621,6 +2640,17 @@ export function GroupChatModal({
                         reactions={MESSAGE_REACTION_EMOJIS}
                     />
                 </>
+            )}
+
+            {/* Room Rules Panel */}
+            {group && (
+                <ChatRulesPanel
+                    isOpen={showRulesPanel}
+                    onClose={() => setShowRulesPanel(false)}
+                    chatType="group"
+                    chatId={group.id}
+                    chatName={group.name}
+                />
             )}
         </AnimatePresence>
     );

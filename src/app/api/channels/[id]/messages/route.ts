@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeMessageContent } from "@/lib/sanitize";
 import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 import { isUserBanned } from "@/lib/banCheck";
+import { validateMessageAgainstRules } from "@/lib/chatRules";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -157,6 +158,14 @@ export async function POST(
                 { error: "You must be a member to send messages" },
                 { status: 403 }
             );
+        }
+
+        // Check chat rules (room bans, read-only mode, content type restrictions, links)
+        const ruleViolation = await validateMessageAgainstRules(
+            "channel", id, normalizedAddress, content, messageType || "text"
+        );
+        if (ruleViolation) {
+            return NextResponse.json({ error: ruleViolation }, { status: 403 });
         }
 
         // Sanitize and validate content
