@@ -319,6 +319,13 @@ export function MessageActionBar({
             show: !!config.isPixelArt,
             highlight: true
         },
+        { 
+            id: "delete", 
+            icon: <DeleteIcon />, 
+            label: "Delete",
+            show: (config.canDelete ?? config.isOwn) && !!callbacks.onDelete,
+            danger: true
+        },
     ].filter(a => a.show);
 
     const moreActions: { id: string; icon: React.ReactNode; label: string; show: boolean; danger?: boolean }[] = [
@@ -326,22 +333,25 @@ export function MessageActionBar({
         { id: config.isPinned ? "unpin" : "pin", icon: <PinIcon />, label: config.isPinned ? "Unpin" : "Pin", show: !!callbacks.onPin || !!callbacks.onUnpin },
         { id: config.isStarred ? "unstar" : "star", icon: <StarIcon filled={config.isStarred} />, label: config.isStarred ? "Unstar" : "Star", show: !!callbacks.onStar || !!callbacks.onUnstar },
         { id: "edit", icon: <EditIcon />, label: "Edit", show: config.isOwn && !!config.canEdit && !!callbacks.onEdit },
-        { id: "delete", icon: <DeleteIcon />, label: "Delete", show: (config.canDelete ?? config.isOwn) && !!callbacks.onDelete, danger: true },
         { id: "report", icon: <ReportIcon />, label: "Report", show: !config.isOwn && !!callbacks.onReport, danger: true },
     ].filter(a => a.show);
+    
+    // Debug logging
+    console.log('[MessageActionBar] More actions:', moreActions.map(a => a.label));
 
     return createPortal(
         <AnimatePresence>
             {isOpen && (
                 <>
-                    {/* Backdrop - tap to close */}
+                    {/* Backdrop - tap to close (but allow clicks through to action bar) */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[9998]"
+                        className="fixed inset-0 z-[9998] pointer-events-auto"
                         onClick={(e) => {
                             e.stopPropagation();
+                            console.log('[MessageActionBar] Backdrop clicked, closing');
                             onClose();
                         }}
                     />
@@ -407,7 +417,11 @@ export function MessageActionBar({
                             {/* More button */}
                             {moreActions.length > 0 && (
                                 <button
-                                    onClick={() => setShowMoreActions(!showMoreActions)}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        console.log('[MessageActionBar] More clicked, current state:', showMoreActions, 'toggling to:', !showMoreActions);
+                                        setShowMoreActions(!showMoreActions);
+                                    }}
                                     className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all touch-manipulation active:scale-95 min-w-[60px] ${
                                         showMoreActions ? "text-[#FF5500]" : "text-zinc-300"
                                     }`}

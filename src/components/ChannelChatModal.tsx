@@ -3549,7 +3549,13 @@ export function ChannelChatModal({
                                   if (msg) setReplyingTo(msg);
                               }
                             : undefined,
-                        onCopy: () => {},
+                        onCopy: selectedMessageConfig
+                            ? () => {
+                                  if (selectedMessageConfig.messageContent) {
+                                      navigator.clipboard.writeText(selectedMessageConfig.messageContent);
+                                  }
+                              }
+                            : undefined,
                         onForward: selectedMessageConfig
                             ? () => {
                                   const msg = messages.find(
@@ -3608,6 +3614,16 @@ export function ChannelChatModal({
                             : undefined,
                         onUnstar: selectedMessageConfig?.isStarred
                             ? () => unstarMessage(selectedMessageConfig.messageId)
+                            : undefined,
+                        onReport: selectedMessageConfig && !selectedMessageConfig.isOwn
+                            ? () => {
+                                  const msg = messages.find(m => m.id === selectedMessageConfig.messageId);
+                                  if (msg) {
+                                      // TODO: Implement report modal
+                                      console.log("Report message:", msg.id, "from", msg.sender_address);
+                                      alert("Report functionality coming soon");
+                                  }
+                              }
                             : undefined,
                     }}
                 />
