@@ -283,14 +283,23 @@ async function checkBlockedWordsPermission(
 ): Promise<boolean> {
     if (!supabase) return false;
 
-    // Global scope requires admin
+    // Global scope: admin or global moderator
     if (scope === "global") {
         const { data: adminData } = await supabase
             .from("shout_admins")
             .select("id")
             .eq("wallet_address", userAddress)
             .single();
-        return !!adminData;
+        if (adminData) return true;
+
+        // Also allow global moderators to manage global blocked words
+        const { data: modData } = await supabase
+            .from("shout_moderators")
+            .select("id")
+            .eq("user_address", userAddress)
+            .is("channel_id", null)
+            .single();
+        return !!modData;
     }
 
     // Room scope: admin, owner, or moderator with manage perms

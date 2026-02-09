@@ -436,6 +436,7 @@ export function useBlockedWords(
                 return true;
             } catch (err) {
                 console.error("[useBlockedWords] Add error:", err);
+                alert("Network error - failed to add blocked word");
                 return false;
             }
         },

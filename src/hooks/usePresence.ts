@@ -29,7 +29,6 @@ export function usePresence(userAddress: string | null) {
                 );
         } catch (err) {
             // Silently fail - presence is non-critical
-            console.warn("[usePresence] Heartbeat failed");
         }
     }, [userAddress]);
 

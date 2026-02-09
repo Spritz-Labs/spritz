@@ -380,7 +380,7 @@ export function GroupChatModal({
     // Handle mention click
     const handleMentionClick = useCallback((address: string) => {
         // Could open a user profile or similar
-        console.log("[GroupChat] Mention clicked:", address);
+        // Could open a user profile or similar
     }, []);
 
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
@@ -727,10 +727,6 @@ export function GroupChatModal({
 
         if (addressesToResolve.length === 0) return;
 
-        console.log(
-            `[GroupChat] Resolving ENS for ${addressesToResolve.length} members`,
-        );
-
         resolveAddresses(addressesToResolve).then((results) => {
             if (results.size > 0) {
                 setMemberENSData((prev) => {
@@ -964,9 +960,7 @@ export function GroupChatModal({
         setError(null);
 
         try {
-            console.log("[GroupChat] Attempting to leave group:", group.id);
             const result = await leaveGroup(group.id);
-            console.log("[GroupChat] Leave result:", result);
 
             if (result.success) {
                 onGroupDeleted?.();

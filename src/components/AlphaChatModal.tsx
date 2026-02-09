@@ -1472,7 +1472,7 @@ export function AlphaChatModal({
                                                         {(isAdmin ||
                                                             moderation
                                                                 .permissions
-                                                                .canMute ||
+                                                                .isModerator ||
                                                             moderation
                                                                 .permissions
                                                                 .isAdmin) && (

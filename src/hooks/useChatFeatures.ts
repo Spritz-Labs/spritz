@@ -243,7 +243,6 @@ export function useReadReceipts(
                 }
 
                 if (data && data.length > 0) {
-                    console.log("[ReadReceipts] Fetched", data.length, "receipts for", messageIds.length, "messages");
                     const rows = data as { message_id: string; reader_address: string; read_at?: string }[];
                     setReadReceipts((prev) => {
                         const updated = { ...prev };
@@ -340,11 +339,6 @@ export function useReadReceipts(
 
             const readers = readReceipts[messageId] || [];
             const isRead = readers.some((r) => r.toLowerCase() === peerAddress.toLowerCase());
-            
-            // Debug logging
-            if (readers.length > 0) {
-                console.log("[ReadReceipts] Message", messageId.slice(0, 8), "readers:", readers, "peer:", peerAddress.slice(0, 8), "isRead:", isRead);
-            }
             
             return isRead ? "read" : "sent";
         },

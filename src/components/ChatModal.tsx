@@ -795,11 +795,6 @@ export function ChatModal({
             try {
                 // Force refresh to get latest messages from the network
                 const newMessages = await getMessages(peerAddress, true);
-                console.log(
-                    "[Chat] Polling returned",
-                    newMessages.length,
-                    "messages"
-                );
 
                 if (newMessages.length > 0) {
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -808,14 +803,7 @@ export function ChatModal({
                             const valid =
                                 typeof msg.content === "string" &&
                                 msg.content.trim() !== "";
-                            if (!valid && msg.id) {
-                                console.log(
-                                    "[Chat] Filtered out message with invalid content:",
-                                    msg.id,
-                                    "content type:",
-                                    typeof msg.content
-                                );
-                            }
+                            // Skip messages with invalid content
                             return valid;
                         })
                         .map((msg: any) => ({
@@ -825,26 +813,11 @@ export function ChatModal({
                             sentAt: new Date(Number(msg.sentAtNs) / 1000000),
                         }));
 
-                    console.log(
-                        "[Chat] After content filter:",
-                        formattedMessages.length,
-                        "messages"
-                    );
-
                     setMessages((prev) => {
                         // Merge new messages, avoiding duplicates
                         const existingIds = new Set(prev.map((m) => m.id));
                         const newOnes = formattedMessages.filter(
                             (m) => !existingIds.has(m.id)
-                        );
-
-                        console.log(
-                            "[Chat] Polling: existing IDs count:",
-                            existingIds.size,
-                            "formatted:",
-                            formattedMessages.length,
-                            "new messages:",
-                            newOnes.length
                         );
 
                         if (newOnes.length > 0) {
