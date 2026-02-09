@@ -340,3 +340,118 @@ export function useRoomBans(chatType: string | null, chatId?: string | null) {
         refresh: fetchBans,
     };
 }
+
+// Blocked words management hook
+export type BlockedWordEntry = {
+    id: string;
+    word: string;
+    scope: "global" | "room";
+    chat_type: string | null;
+    chat_id: string | null;
+    action: "block" | "flag" | "mute";
+    is_regex: boolean;
+    added_by: string;
+    added_at: string;
+};
+
+export function useBlockedWords(
+    scope: "global" | "room",
+    chatType?: string | null,
+    chatId?: string | null,
+) {
+    const [words, setWords] = useState<BlockedWordEntry[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    const fetchWords = useCallback(async () => {
+        try {
+            const params = new URLSearchParams({ scope });
+            if (chatType) params.set("chatType", chatType);
+            if (chatId) params.set("chatId", chatId);
+
+            const res = await fetch(
+                `/api/blocked-words?${params.toString()}`,
+            );
+            const data = await res.json();
+            setWords(data.words || []);
+        } catch (err) {
+            console.error("[useBlockedWords] Error:", err);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [scope, chatType, chatId]);
+
+    useEffect(() => {
+        fetchWords();
+    }, [fetchWords]);
+
+    const addWord = useCallback(
+        async (
+            word: string,
+            options?: {
+                action?: "block" | "flag" | "mute";
+                isRegex?: boolean;
+            },
+        ): Promise<boolean> => {
+            try {
+                const res = await fetch("/api/blocked-words", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        word,
+                        scope,
+                        chatType: scope === "room" ? chatType : undefined,
+                        chatId: scope === "room" ? chatId : undefined,
+                        action: options?.action || "block",
+                        isRegex: options?.isRegex || false,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || "Failed to add blocked word");
+                    return false;
+                }
+
+                await fetchWords();
+                return true;
+            } catch (err) {
+                console.error("[useBlockedWords] Add error:", err);
+                return false;
+            }
+        },
+        [scope, chatType, chatId, fetchWords],
+    );
+
+    const removeWord = useCallback(
+        async (id: string): Promise<boolean> => {
+            try {
+                const res = await fetch("/api/blocked-words", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || "Failed to remove blocked word");
+                    return false;
+                }
+
+                await fetchWords();
+                return true;
+            } catch (err) {
+                console.error("[useBlockedWords] Remove error:", err);
+                return false;
+            }
+        },
+        [fetchWords],
+    );
+
+    return {
+        words,
+        isLoading,
+        addWord,
+        removeWord,
+        refresh: fetchWords,
+    };
+}

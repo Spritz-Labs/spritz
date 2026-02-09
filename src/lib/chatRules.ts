@@ -234,5 +234,94 @@ export async function validateMessageAgainstRules(
         return `Message exceeds maximum length of ${rules.max_message_length} characters`;
     }
 
+    // Check blocked words (global + room-specific)
+    if (messageType === "text" && content) {
+        const blockedWordViolation = await checkBlockedWords(chatType, chatId, content);
+        if (blockedWordViolation) {
+            return blockedWordViolation;
+        }
+    }
+
     return null; // Valid
+}
+
+/**
+ * Check message content against blocked words (global + room-specific).
+ * Returns an error string if a blocked word is found, or null if clean.
+ */
+export async function checkBlockedWords(
+    chatType: string,
+    chatId: string | null,
+    content: string,
+): Promise<string | null> {
+    if (!supabase) return null;
+
+    try {
+        // Fetch global blocked words
+        const { data: globalWords } = await supabase
+            .from("shout_blocked_words")
+            .select("word, is_regex, action")
+            .eq("scope", "global")
+            .eq("is_active", true);
+
+        // Fetch room-specific blocked words
+        let roomWords: typeof globalWords = [];
+        if (chatType && chatId) {
+            const roomQuery = supabase
+                .from("shout_blocked_words")
+                .select("word, is_regex, action")
+                .eq("scope", "room")
+                .eq("chat_type", chatType)
+                .eq("chat_id", chatId)
+                .eq("is_active", true);
+
+            const { data } = await roomQuery;
+            roomWords = data || [];
+        }
+
+        const allWords = [...(globalWords || []), ...(roomWords || [])];
+        if (allWords.length === 0) return null;
+
+        const normalizedContent = content.toLowerCase();
+
+        for (const entry of allWords) {
+            let matched = false;
+
+            if (entry.is_regex) {
+                try {
+                    const regex = new RegExp(entry.word, "i");
+                    matched = regex.test(content);
+                } catch {
+                    // Invalid regex, skip
+                    continue;
+                }
+            } else {
+                // Plain text matching - check word boundaries to reduce false positives
+                const escapedWord = entry.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+                const wordRegex = new RegExp(`\\b${escapedWord}\\b`, "i");
+                matched = wordRegex.test(normalizedContent);
+
+                // Also do a simple includes check for phrases with special chars
+                if (!matched) {
+                    matched = normalizedContent.includes(entry.word.toLowerCase());
+                }
+            }
+
+            if (matched) {
+                if (entry.action === "block") {
+                    return "Your message contains a blocked word or phrase";
+                }
+                // "flag" and "mute" actions could be handled upstream
+                // For now, block is the only action that prevents sending
+                if (entry.action === "mute") {
+                    return "Your message contains a restricted word or phrase";
+                }
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error("[chatRules] Failed to check blocked words:", error);
+        return null; // Don't block on errors
+    }
 }

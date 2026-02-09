@@ -7,7 +7,19 @@ import { AdminLayout, AdminAuthWrapper, AdminLoading } from "@/components/AdminL
 import type { AdminChat, AdminChatsResponse } from "@/app/api/admin/chats/route";
 
 type FilterType = "all" | "standard" | "waku" | "poap_event" | "poap_collection" | "location";
-type ViewTab = "channels" | "locations" | "official";
+type ViewTab = "channels" | "locations" | "official" | "blocked-words";
+
+type BlockedWordEntry = {
+    id: string;
+    word: string;
+    scope: "global" | "room";
+    chat_type: string | null;
+    chat_id: string | null;
+    action: "block" | "flag" | "mute";
+    is_regex: boolean;
+    added_by: string;
+    added_at: string;
+};
 
 const TYPE_LABELS: Record<string, { label: string; emoji: string; color: string }> = {
     standard: { label: "Standard", emoji: "☁️", color: "bg-blue-500/20 text-blue-400" },
@@ -41,6 +53,15 @@ export default function AdminChatsPage() {
     const [slugSaving, setSlugSaving] = useState(false);
     const [officialSearch, setOfficialSearch] = useState("");
 
+    // Blocked words state
+    const [blockedWords, setBlockedWords] = useState<BlockedWordEntry[]>([]);
+    const [isLoadingWords, setIsLoadingWords] = useState(false);
+    const [newWord, setNewWord] = useState("");
+    const [newWordAction, setNewWordAction] = useState<"block" | "mute">("block");
+    const [isNewWordRegex, setIsNewWordRegex] = useState(false);
+    const [isAddingWord, setIsAddingWord] = useState(false);
+    const [wordSearch, setWordSearch] = useState("");
+
     const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
     const formatDate = (date: string) => new Date(date).toLocaleDateString();
 
@@ -63,11 +84,71 @@ export default function AdminChatsPage() {
         }
     }, [isReady, getAuthHeaders]);
 
+    const fetchBlockedWords = useCallback(async () => {
+        setIsLoadingWords(true);
+        try {
+            const res = await fetch("/api/blocked-words?scope=global");
+            if (res.ok) {
+                const data = await res.json();
+                setBlockedWords(data.words || []);
+            }
+        } catch (err) {
+            console.error("[Admin Chats] Error fetching blocked words:", err);
+        } finally {
+            setIsLoadingWords(false);
+        }
+    }, []);
+
+    const addBlockedWord = async () => {
+        if (!newWord.trim()) return;
+        setIsAddingWord(true);
+        try {
+            const res = await fetch("/api/blocked-words", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    word: newWord.trim(),
+                    scope: "global",
+                    action: newWordAction,
+                    isRegex: isNewWordRegex,
+                }),
+            });
+            if (res.ok) {
+                setNewWord("");
+                setIsNewWordRegex(false);
+                fetchBlockedWords();
+            } else {
+                const data = await res.json();
+                alert(data.error || "Failed to add word");
+            }
+        } catch (err) {
+            console.error("[Admin Chats] Error adding blocked word:", err);
+        } finally {
+            setIsAddingWord(false);
+        }
+    };
+
+    const removeBlockedWord = async (id: string) => {
+        try {
+            const res = await fetch("/api/blocked-words", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id }),
+            });
+            if (res.ok) {
+                fetchBlockedWords();
+            }
+        } catch (err) {
+            console.error("[Admin Chats] Error removing blocked word:", err);
+        }
+    };
+
     useEffect(() => {
         if (isAuthenticated && isAdmin) {
             fetchData();
+            fetchBlockedWords();
         }
-    }, [isAuthenticated, isAdmin, fetchData]);
+    }, [isAuthenticated, isAdmin, fetchData, fetchBlockedWords]);
 
     const updateChat = async (id: string, type: string, updates: { isActive?: boolean; isOfficial?: boolean }) => {
         const authHeaders = getAuthHeaders();
@@ -223,6 +304,14 @@ export default function AdminChatsPage() {
                             }`}
                         >
                             📍 Locations ({data?.locationChats.length || 0})
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("blocked-words")}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                                activeTab === "blocked-words" ? "bg-[#FF5500] text-white" : "text-zinc-400 hover:text-white"
+                            }`}
+                        >
+                            🚫 Blocked Words ({blockedWords.length})
                         </button>
                     </div>
 
@@ -656,6 +745,148 @@ export default function AdminChatsPage() {
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
+
+                    {activeTab === "blocked-words" && (
+                        <motion.div
+                            key="blocked-words"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -10 }}
+                        >
+                            {/* Description */}
+                            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800 p-4 mb-4">
+                                <p className="text-sm text-zinc-400">
+                                    Manage the <span className="text-white font-medium">global blocked words list</span>. These words and phrases are blocked across all chats platform-wide.
+                                    Room owners and moderators can also add room-specific blocked words from the Room Settings panel.
+                                </p>
+                            </div>
+
+                            {/* Add Word Form */}
+                            <div className="bg-zinc-900 rounded-2xl border border-zinc-800 p-5 mb-4">
+                                <h3 className="text-sm font-medium text-white mb-3">Add Blocked Word or Phrase</h3>
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <input
+                                        type="text"
+                                        placeholder="Word or phrase to block..."
+                                        value={newWord}
+                                        onChange={(e) => setNewWord(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter" && newWord.trim()) {
+                                                addBlockedWord();
+                                            }
+                                        }}
+                                        className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
+                                    />
+                                    <select
+                                        value={newWordAction}
+                                        onChange={(e) => setNewWordAction(e.target.value as "block" | "mute")}
+                                        className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-[#FF5500]"
+                                    >
+                                        <option value="block">Block message</option>
+                                        <option value="mute">Mute sender</option>
+                                    </select>
+                                    <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer px-2">
+                                        <input
+                                            type="checkbox"
+                                            checked={isNewWordRegex}
+                                            onChange={(e) => setIsNewWordRegex(e.target.checked)}
+                                            className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                        />
+                                        Regex
+                                    </label>
+                                    <button
+                                        onClick={addBlockedWord}
+                                        disabled={!newWord.trim() || isAddingWord}
+                                        className="px-5 py-2 bg-[#FF5500] hover:bg-[#E04D00] disabled:bg-zinc-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                                    >
+                                        {isAddingWord ? "Adding..." : "Add Word"}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Search */}
+                            <div className="relative max-w-xs mb-4">
+                                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                                <input
+                                    type="text"
+                                    placeholder="Search blocked words..."
+                                    value={wordSearch}
+                                    onChange={(e) => setWordSearch(e.target.value)}
+                                    className="w-full pl-10 pr-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm placeholder-zinc-500"
+                                />
+                            </div>
+
+                            {/* Words List */}
+                            {isLoadingWords ? (
+                                <div className="text-center py-12 text-zinc-500">Loading...</div>
+                            ) : blockedWords.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <p className="text-zinc-500 text-lg mb-2">No blocked words yet</p>
+                                    <p className="text-zinc-600 text-sm">Add words or phrases above to protect your chats from scammers.</p>
+                                </div>
+                            ) : (
+                                <div className="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-zinc-800 text-left text-xs text-zinc-500 uppercase tracking-wider">
+                                                <th className="px-4 py-3">Word / Phrase</th>
+                                                <th className="px-4 py-3">Type</th>
+                                                <th className="px-4 py-3">Action</th>
+                                                <th className="px-4 py-3">Added By</th>
+                                                <th className="px-4 py-3">Date</th>
+                                                <th className="px-4 py-3"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-zinc-800">
+                                            {blockedWords
+                                                .filter((w) => !wordSearch || w.word.toLowerCase().includes(wordSearch.toLowerCase()))
+                                                .map((entry) => (
+                                                <tr key={entry.id} className="hover:bg-zinc-800/30 transition-colors">
+                                                    <td className="px-4 py-3">
+                                                        <code className="text-sm text-white bg-zinc-800 px-2 py-0.5 rounded">{entry.word}</code>
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        {entry.is_regex ? (
+                                                            <span className="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-400">Regex</span>
+                                                        ) : (
+                                                            <span className="text-xs px-2 py-1 rounded-full bg-zinc-700 text-zinc-300">Exact</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`text-xs px-2 py-1 rounded-full ${
+                                                            entry.action === "block"
+                                                                ? "bg-red-500/20 text-red-400"
+                                                                : entry.action === "mute"
+                                                                ? "bg-amber-500/20 text-amber-400"
+                                                                : "bg-blue-500/20 text-blue-400"
+                                                        }`}>
+                                                            {entry.action === "block" ? "Block" : entry.action === "mute" ? "Mute" : "Flag"}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-zinc-400 font-mono">
+                                                        {entry.added_by ? formatAddress(entry.added_by) : "-"}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-zinc-400">
+                                                        {formatDate(entry.added_at)}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <button
+                                                            onClick={() => removeBlockedWord(entry.id)}
+                                                            className="text-xs px-2 py-1 bg-red-500/10 text-red-400 rounded hover:bg-red-500/20 transition-colors"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             )}
                         </motion.div>

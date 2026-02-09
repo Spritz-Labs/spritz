@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { useChatRules, useRoomBans, useBlockedWords } from "@/hooks/useChatRules";
 import { MUTE_DURATION_OPTIONS } from "@/hooks/useModeration";
 import { createPortal } from "react-dom";
 
@@ -209,7 +209,13 @@ export function ChatRulesPanel({
         unbanUser,
         isLoading: bansLoading,
     } = useRoomBans(chatType, chatId);
-    const [activeTab, setActiveTab] = useState<"rules" | "guidelines" | "bans">(
+    const {
+        words: blockedWords,
+        addWord: addBlockedWord,
+        removeWord: removeBlockedWord,
+        isLoading: wordsLoading,
+    } = useBlockedWords("room", chatType, chatId);
+    const [activeTab, setActiveTab] = useState<"rules" | "guidelines" | "bans" | "words">(
         "rules",
     );
     const [banAddress, setBanAddress] = useState("");
@@ -220,6 +226,10 @@ export function ChatRulesPanel({
     const [isSavingRules, setIsSavingRules] = useState(false);
     const [rulesTextSaved, setRulesTextSaved] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [newBlockedWord, setNewBlockedWord] = useState("");
+    const [blockedWordAction, setBlockedWordAction] = useState<"block" | "mute">("block");
+    const [isBlockedWordRegex, setIsBlockedWordRegex] = useState(false);
+    const [isAddingWord, setIsAddingWord] = useState(false);
 
     // Client-side only mount
     useState(() => {
@@ -250,6 +260,20 @@ export function ChatRulesPanel({
 
     const handleReadOnly = async (value: boolean) => {
         await updateRule("read_only" as keyof typeof rules, value);
+    };
+
+    const handleAddBlockedWord = async () => {
+        if (!newBlockedWord.trim()) return;
+        setIsAddingWord(true);
+        const success = await addBlockedWord(newBlockedWord.trim(), {
+            action: blockedWordAction,
+            isRegex: isBlockedWordRegex,
+        });
+        if (success) {
+            setNewBlockedWord("");
+            setIsBlockedWordRegex(false);
+        }
+        setIsAddingWord(false);
     };
 
     const handleBanUser = async () => {
@@ -344,6 +368,16 @@ export function ChatRulesPanel({
                                 }`}
                             >
                                 Rules
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("words")}
+                                className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                                    activeTab === "words"
+                                        ? "text-[#FF5500] border-b-2 border-[#FF5500]"
+                                        : "text-zinc-400 hover:text-zinc-200"
+                                }`}
+                            >
+                                Words
                             </button>
                             <button
                                 onClick={() => setActiveTab("bans")}
@@ -627,6 +661,108 @@ export function ChatRulesPanel({
                                                 </button>
                                             ))}
                                         </div>
+                                    </div>
+                                </div>
+                            ) : activeTab === "words" ? (
+                                /* Blocked Words Tab */
+                                <div className="p-4 space-y-4">
+                                    {/* Add blocked word */}
+                                    <div className="bg-zinc-800/50 rounded-xl p-4 space-y-3">
+                                        <h3 className="text-sm font-medium text-zinc-300">
+                                            Block a Word or Phrase
+                                        </h3>
+                                        <p className="text-xs text-zinc-500">
+                                            Messages containing blocked words will be prevented from sending. Global blocked words set by admins also apply.
+                                        </p>
+                                        <input
+                                            type="text"
+                                            placeholder="Word or phrase to block..."
+                                            value={newBlockedWord}
+                                            onChange={(e) => setNewBlockedWord(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter" && newBlockedWord.trim()) {
+                                                    handleAddBlockedWord();
+                                                }
+                                            }}
+                                            className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
+                                        />
+                                        <div className="flex items-center gap-3">
+                                            <select
+                                                value={blockedWordAction}
+                                                onChange={(e) => setBlockedWordAction(e.target.value as "block" | "mute")}
+                                                className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-[#FF5500]"
+                                            >
+                                                <option value="block">Block message</option>
+                                                <option value="mute">Mute sender</option>
+                                            </select>
+                                            <label className="flex items-center gap-2 text-xs text-zinc-400 cursor-pointer shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isBlockedWordRegex}
+                                                    onChange={(e) => setIsBlockedWordRegex(e.target.checked)}
+                                                    className="w-3.5 h-3.5 rounded border-zinc-600 bg-zinc-800 text-[#FF5500] focus:ring-[#FF5500]"
+                                                />
+                                                Regex
+                                            </label>
+                                            <button
+                                                onClick={handleAddBlockedWord}
+                                                disabled={!newBlockedWord.trim() || isAddingWord}
+                                                className="px-4 py-2 bg-[#FF5500] hover:bg-[#FF6600] disabled:bg-zinc-700 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+                                            >
+                                                {isAddingWord ? "..." : "Add"}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Blocked Words List */}
+                                    <div>
+                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                                            Room Blocked Words ({blockedWords.length})
+                                        </h3>
+                                        {wordsLoading ? (
+                                            <div className="flex justify-center py-4">
+                                                <div className="w-5 h-5 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
+                                            </div>
+                                        ) : blockedWords.length === 0 ? (
+                                            <p className="text-sm text-zinc-500 text-center py-4">
+                                                No blocked words for this room
+                                            </p>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {blockedWords.map((entry) => (
+                                                    <div
+                                                        key={entry.id}
+                                                        className="flex items-center justify-between px-3 py-2.5 bg-zinc-800/50 rounded-lg"
+                                                    >
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="text-sm text-white font-mono truncate">
+                                                                    {entry.word}
+                                                                </p>
+                                                                {entry.is_regex && (
+                                                                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded">
+                                                                        regex
+                                                                    </span>
+                                                                )}
+                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                                                                    entry.action === "block"
+                                                                        ? "bg-red-500/20 text-red-400"
+                                                                        : "bg-amber-500/20 text-amber-400"
+                                                                }`}>
+                                                                    {entry.action}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeBlockedWord(entry.id)}
+                                                            className="ml-2 px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors shrink-0"
+                                                        >
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ) : (
