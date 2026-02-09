@@ -20,12 +20,16 @@ import {
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
-import { ChatRulesPanel } from "./ChatRulesPanel";
+import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
-import { useChatRules } from "@/hooks/useChatRules";
+import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
-import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
+import {
+    AgentMarkdown,
+    AgentMessageWrapper,
+    AgentThinkingIndicator,
+} from "./AgentMarkdown";
 import { LinkPreview, detectUrls } from "./LinkPreview";
 import {
     LocationMessage,
@@ -64,7 +68,7 @@ const isEmojiOnly = (text: string): boolean => {
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
     const emojiCount = [...trimmed].filter(
-        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char)
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
     ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
@@ -88,7 +92,7 @@ interface AlphaChatModalProps {
         sendMessage: (
             content: string,
             messageType?: "text" | "pixel_art" | "image",
-            replyToId?: string
+            replyToId?: string,
         ) => Promise<boolean>;
         markAsRead: () => Promise<void>;
         toggleNotifications: () => Promise<boolean>;
@@ -98,11 +102,16 @@ interface AlphaChatModalProps {
         toggleReaction: (messageId: string, emoji: string) => Promise<boolean>;
         togglePinMessage: (
             messageId: string,
-            shouldPin: boolean
+            shouldPin: boolean,
         ) => Promise<boolean>;
         refreshMessages?: () => Promise<void>;
         loadMoreMessages: () => Promise<void>;
-        thinkingAgents?: { id: string; name: string; emoji?: string; avatarUrl?: string }[];
+        thinkingAgents?: {
+            id: string;
+            name: string;
+            emoji?: string;
+            avatarUrl?: string;
+        }[];
     };
     // For displaying usernames/avatars
     getUserInfo?: (address: string) => {
@@ -164,7 +173,7 @@ export function AlphaChatModal({
     const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
     const messages = useMemo(
         () => rawMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
-        [rawMessages, isUserBlocked]
+        [rawMessages, isUserBlocked],
     );
 
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -197,7 +206,7 @@ export function AlphaChatModal({
         if (typeof window === "undefined") return [];
         try {
             return JSON.parse(
-                window.localStorage.getItem(HIDDEN_POLLS_KEY) ?? "[]"
+                window.localStorage.getItem(HIDDEN_POLLS_KEY) ?? "[]",
             );
         } catch {
             return [];
@@ -216,7 +225,7 @@ export function AlphaChatModal({
                         m.message_type === "text" &&
                         !m.content.startsWith("[PIXEL_ART]") &&
                         !m.content.startsWith("[GIF]") &&
-                        !m.content.startsWith("[IMAGE]")
+                        !m.content.startsWith("[IMAGE]"),
                 )
                 .map((m) => ({
                     id: m.id,
@@ -224,7 +233,7 @@ export function AlphaChatModal({
                     senderAddress: m.sender_address,
                     sentAt: new Date(m.created_at),
                 })),
-        [messages]
+        [messages],
     );
 
     const handleSelectSearchMessage = useCallback((messageId: string) => {
@@ -241,7 +250,7 @@ export function AlphaChatModal({
         "global",
         "global",
         userAddress,
-        getUserInfo?.(userAddress)?.name || undefined
+        getUserInfo?.(userAddress)?.name || undefined,
     );
 
     const [newMessage, setNewMessage] = useState("");
@@ -253,6 +262,8 @@ export function AlphaChatModal({
     const [showSettings, setShowSettings] = useState(false);
     const [showRulesPanel, setShowRulesPanel] = useState(false);
     const { rules: chatRules } = useChatRules("alpha", null);
+    const roomBans = useRoomBans("alpha", null);
+    const [banningUser, setBanningUser] = useState<string | null>(null);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -262,7 +273,7 @@ export function AlphaChatModal({
     } | null>(null);
     const [isAddingFriend, setIsAddingFriend] = useState(false);
     const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null
+        null,
     );
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
@@ -272,14 +283,16 @@ export function AlphaChatModal({
         Record<string, boolean>
     >({});
     const [showMembersList, setShowMembersList] = useState(false);
-    const [globalMemberCount, setGlobalMemberCount] = useState<number | null>(null);
+    const [globalMemberCount, setGlobalMemberCount] = useState<number | null>(
+        null,
+    );
     const userTimezone = useUserTimezone();
 
     // Fetch global chat member count when modal opens (for "X members" in header)
     useEffect(() => {
         if (!isOpen) return;
         fetch("/api/channels/global/members?limit=1&offset=0")
-            .then((res) => res.ok ? res.json() : null)
+            .then((res) => (res.ok ? res.json() : null))
             .then((data) => {
                 if (data && typeof data.total === "number") {
                     setGlobalMemberCount(data.total);
@@ -311,7 +324,7 @@ export function AlphaChatModal({
         async function fetchGlobalChatIcon() {
             try {
                 const res = await fetch(
-                    "/api/admin/settings?key=global_chat_icon"
+                    "/api/admin/settings?key=global_chat_icon",
                 );
                 if (res.ok) {
                     const data = await res.json();
@@ -327,7 +340,7 @@ export function AlphaChatModal({
     }, []);
 
     const handleGlobalIconUpload = async (
-        e: React.ChangeEvent<HTMLInputElement>
+        e: React.ChangeEvent<HTMLInputElement>,
     ) => {
         const file = e.target.files?.[0];
         if (!file || !isAdmin) return;
@@ -382,7 +395,7 @@ export function AlphaChatModal({
                 `/api/admin/settings/global-chat-icon?userAddress=${userAddress}`,
                 {
                     method: "DELETE",
-                }
+                },
             );
 
             if (!res.ok) {
@@ -410,7 +423,7 @@ export function AlphaChatModal({
     const { draft, saveDraft, clearDraft } = useDraftMessages(
         "alpha",
         "global",
-        userAddress
+        userAddress,
     );
 
     // Apply draft when modal opens
@@ -516,14 +529,14 @@ export function AlphaChatModal({
                             avatar: agent.avatar_url || null,
                             avatarEmoji: agent.avatar_emoji,
                             isAgent: true,
-                        })
+                        }),
                     );
                     setChannelAgents(agents);
                 }
             } catch (err) {
                 console.error(
                     "[AlphaChat] Error fetching channel agents:",
-                    err
+                    err,
                 );
             }
         }
@@ -571,7 +584,7 @@ export function AlphaChatModal({
             }
             setSelectedUser(address);
         },
-        []
+        [],
     );
 
     // Handle user click: open full user card if handler provided, else show popover
@@ -597,7 +610,7 @@ export function AlphaChatModal({
             });
             setSelectedUser(address);
         },
-        [onOpenUserCard]
+        [onOpenUserCard],
     );
 
     // Auto-scroll on new messages (with column-reverse: scrollTop=0 is bottom)
@@ -744,7 +757,7 @@ export function AlphaChatModal({
     // Handle pin message (admin or moderator with pin permission)
     const handlePinMessage = async (
         messageId: string,
-        currentlyPinned: boolean
+        currentlyPinned: boolean,
     ) => {
         if ((!isAdmin && !moderation.permissions.canPin) || pinningMessage)
             return;
@@ -763,13 +776,15 @@ export function AlphaChatModal({
 
         // Find the message to check ownership
         const targetMsg = messages.find((m) => m.id === messageId);
-        const isOwnMessage = targetMsg?.sender_address?.toLowerCase() === userAddress?.toLowerCase();
+        const isOwnMessage =
+            targetMsg?.sender_address?.toLowerCase() ===
+            userAddress?.toLowerCase();
 
         // Must be own message or have moderation delete permission
         if (!isOwnMessage && !moderation.permissions.canDelete) return;
 
         const confirmed = window.confirm(
-            "Delete this message? This action will be logged."
+            "Delete this message? This action will be logged.",
         );
         if (!confirmed) return;
 
@@ -777,7 +792,10 @@ export function AlphaChatModal({
         try {
             if (moderation.permissions.canDelete) {
                 // Use moderation delete (works for both own and others' messages)
-                const success = await moderation.deleteMessage(messageId, "alpha");
+                const success = await moderation.deleteMessage(
+                    messageId,
+                    "alpha",
+                );
                 if (success) {
                     refreshMessages?.();
                 }
@@ -806,7 +824,7 @@ export function AlphaChatModal({
     // Handle mute user
     const handleMuteUser = async (
         duration: string,
-        reason?: string
+        reason?: string,
     ): Promise<boolean> => {
         if (!muteTarget) return false;
         const success = await moderation.muteUser(muteTarget.address, {
@@ -833,7 +851,7 @@ export function AlphaChatModal({
         const success = await sendMessage(
             newMessage.trim(),
             "text",
-            replyingTo?.id
+            replyingTo?.id,
         );
         if (success) {
             setNewMessage("");
@@ -908,7 +926,7 @@ export function AlphaChatModal({
                 console.error("Failed to send GIF:", err);
             }
         },
-        [sendMessage, isSending]
+        [sendMessage, isSending],
     );
 
     // Handle pixel art send
@@ -940,7 +958,7 @@ export function AlphaChatModal({
                 setIsUploadingPixelArt(false);
             }
         },
-        [userAddress, sendMessage]
+        [userAddress, sendMessage],
     );
 
     // Handle image upload (admin only)
@@ -951,9 +969,12 @@ export function AlphaChatModal({
 
             // Validate file type
             if (
-                !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
-                    file.type
-                )
+                ![
+                    "image/jpeg",
+                    "image/png",
+                    "image/gif",
+                    "image/webp",
+                ].includes(file.type)
             ) {
                 alert("Only JPEG, PNG, GIF, and WebP images are allowed");
                 return;
@@ -998,13 +1019,13 @@ export function AlphaChatModal({
                 }
             }
         },
-        [userAddress, isAdmin, sendMessage, onMessageSent]
+        [userAddress, isAdmin, sendMessage, onMessageSent],
     );
 
     // Handle leave
     const handleLeave = async () => {
         const confirmed = window.confirm(
-            "Are you sure you want to leave the Alpha channel? You can rejoin anytime from the menu."
+            "Are you sure you want to leave the Alpha channel? You can rejoin anytime from the menu.",
         );
         if (!confirmed) return;
 
@@ -1063,7 +1084,7 @@ export function AlphaChatModal({
                             name: agent.name,
                             avatar_url: agent.avatar_url,
                             avatar_emoji: agent.avatar_emoji || "🤖",
-                        })
+                        }),
                     );
                 }
             } catch (err) {
@@ -1209,7 +1230,7 @@ export function AlphaChatModal({
                                         <button
                                             onClick={() =>
                                                 setShowPinnedMessages(
-                                                    !showPinnedMessages
+                                                    !showPinnedMessages,
                                                 )
                                             }
                                             className={`p-2.5 rounded-xl flex items-center gap-1 transition-colors ${
@@ -1324,7 +1345,7 @@ export function AlphaChatModal({
                                             <button
                                                 onClick={() =>
                                                     setShowSettings(
-                                                        !showSettings
+                                                        !showSettings,
                                                     )
                                                 }
                                                 className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white -mr-1"
@@ -1405,7 +1426,7 @@ export function AlphaChatModal({
                                                                         onClick={() => {
                                                                             handleRemoveGlobalIcon();
                                                                             setShowSettings(
-                                                                                false
+                                                                                false,
                                                                             );
                                                                         }}
                                                                         disabled={
@@ -1447,17 +1468,39 @@ export function AlphaChatModal({
                                                                 />
                                                             </>
                                                         )}
-                                                        {/* Room Rules - admin only */}
-                                                        {isAdmin && (
+                                                        {/* Room Rules - admin/moderator only */}
+                                                        {(isAdmin ||
+                                                            moderation
+                                                                .permissions
+                                                                .canMute ||
+                                                            moderation
+                                                                .permissions
+                                                                .isAdmin) && (
                                                             <button
                                                                 onClick={() => {
-                                                                    setShowSettings(false);
-                                                                    setShowRulesPanel(true);
+                                                                    setShowSettings(
+                                                                        false,
+                                                                    );
+                                                                    setShowRulesPanel(
+                                                                        true,
+                                                                    );
                                                                 }}
                                                                 className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-2"
                                                             >
-                                                                <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                                <svg
+                                                                    className="w-4 h-4 text-zinc-400"
+                                                                    fill="none"
+                                                                    viewBox="0 0 24 24"
+                                                                    stroke="currentColor"
+                                                                >
+                                                                    <path
+                                                                        strokeLinecap="round"
+                                                                        strokeLinejoin="round"
+                                                                        strokeWidth={
+                                                                            2
+                                                                        }
+                                                                        d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+                                                                    />
                                                                 </svg>
                                                                 Room Rules
                                                             </button>
@@ -1465,7 +1508,7 @@ export function AlphaChatModal({
                                                         <button
                                                             onClick={() => {
                                                                 setShowSettings(
-                                                                    false
+                                                                    false,
                                                                 );
                                                                 handleLeave();
                                                             }}
@@ -1583,7 +1626,7 @@ export function AlphaChatModal({
                                                         onVote={(optionIndex) =>
                                                             vote(
                                                                 poll.id,
-                                                                optionIndex
+                                                                optionIndex,
                                                             )
                                                         }
                                                         compact
@@ -1593,10 +1636,10 @@ export function AlphaChatModal({
                                                         }
                                                         onDelete={async (p) => {
                                                             await deletePoll(
-                                                                p.id
+                                                                p.id,
                                                             );
                                                             setEditingPoll(
-                                                                null
+                                                                null,
                                                             );
                                                         }}
                                                         onHide={(pollId) => {
@@ -1611,12 +1654,12 @@ export function AlphaChatModal({
                                                                         window.localStorage.setItem(
                                                                             HIDDEN_POLLS_KEY,
                                                                             JSON.stringify(
-                                                                                next
-                                                                            )
+                                                                                next,
+                                                                            ),
                                                                         );
                                                                     } catch {}
                                                                     return next;
-                                                                }
+                                                                },
                                                             );
                                                         }}
                                                     />
@@ -1640,7 +1683,7 @@ export function AlphaChatModal({
                                             if (editingPoll) {
                                                 await updatePoll(
                                                     editingPoll.id,
-                                                    updates
+                                                    updates,
                                                 );
                                                 setEditingPoll(null);
                                             }
@@ -1680,7 +1723,7 @@ export function AlphaChatModal({
                                                             <button
                                                                 onClick={() =>
                                                                     setShowPinnedMessages(
-                                                                        false
+                                                                        false,
                                                                     )
                                                                 }
                                                                 className="text-zinc-500 hover:text-white"
@@ -1714,27 +1757,27 @@ export function AlphaChatModal({
                                                                         <div className="flex-1 min-w-0">
                                                                             <p className="text-xs text-orange-400 font-medium mb-1">
                                                                                 {formatSender(
-                                                                                    msg.sender_address
+                                                                                    msg.sender_address,
                                                                                 )}
                                                                             </p>
                                                                             <p className="text-sm text-white break-words line-clamp-2">
                                                                                 {msg.content.startsWith(
-                                                                                    "[PIXEL_ART]"
+                                                                                    "[PIXEL_ART]",
                                                                                 )
                                                                                     ? "🎨 Pixel Art"
                                                                                     : msg.content.startsWith(
-                                                                                          "[GIF]"
-                                                                                      )
-                                                                                    ? "🎬 GIF"
-                                                                                    : msg.content.startsWith(
-                                                                                          "[IMAGE]"
-                                                                                      )
-                                                                                    ? "📷 Photo"
-                                                                                    : msg.content.startsWith(
-                                                                                          "[LOCATION]"
-                                                                                      )
-                                                                                    ? "📍 Location"
-                                                                                    : msg.content}
+                                                                                            "[GIF]",
+                                                                                        )
+                                                                                      ? "🎬 GIF"
+                                                                                      : msg.content.startsWith(
+                                                                                              "[IMAGE]",
+                                                                                          )
+                                                                                        ? "📷 Photo"
+                                                                                        : msg.content.startsWith(
+                                                                                                "[LOCATION]",
+                                                                                            )
+                                                                                          ? "📍 Location"
+                                                                                          : msg.content}
                                                                             </p>
                                                                         </div>
                                                                         {isAdmin && (
@@ -1742,7 +1785,7 @@ export function AlphaChatModal({
                                                                                 onClick={() =>
                                                                                     handlePinMessage(
                                                                                         msg.id,
-                                                                                        true
+                                                                                        true,
                                                                                     )
                                                                                 }
                                                                                 disabled={
@@ -1775,13 +1818,19 @@ export function AlphaChatModal({
                                                                             </button>
                                                                         )}
                                                                     </div>
-                                                                )
+                                                                ),
                                                             )}
                                                         </div>
                                                     </div>
                                                 </motion.div>
                                             )}
                                     </AnimatePresence>
+
+                                    {/* Room Rules Banner */}
+                                    <ChatRulesBanner
+                                        chatType="alpha"
+                                        chatId={null}
+                                    />
 
                                     <div
                                         ref={messagesContainerRef}
@@ -1810,51 +1859,51 @@ export function AlphaChatModal({
                                                     {messages
                                                         .filter(
                                                             (msg) =>
-                                                                !msg.is_deleted
+                                                                !msg.is_deleted,
                                                         ) // Hide deleted messages
                                                         .map(
                                                             (
                                                                 msg,
                                                                 msgIndex,
-                                                                filteredMsgs
+                                                                filteredMsgs,
                                                             ) => {
                                                                 const isOwn =
                                                                     msg.sender_address.toLowerCase() ===
                                                                     userAddress.toLowerCase();
                                                                 const isAgent =
                                                                     isAgentMessage(
-                                                                        msg.sender_address
+                                                                        msg.sender_address,
                                                                     );
                                                                 const isPixelArt =
                                                                     isPixelArtMessage(
-                                                                        msg.content
+                                                                        msg.content,
                                                                     );
                                                                 const senderAvatar =
                                                                     getSenderAvatar(
-                                                                        msg.sender_address
+                                                                        msg.sender_address,
                                                                     );
                                                                 const senderAvatarEmoji =
                                                                     getSenderAvatarEmoji(
-                                                                        msg.sender_address
+                                                                        msg.sender_address,
                                                                     );
                                                                 const isSenderMuted =
                                                                     !isAgent &&
                                                                     moderation.isUserMuted(
-                                                                        msg.sender_address
+                                                                        msg.sender_address,
                                                                     );
                                                                 // Only show user popup on the FIRST message from this sender to avoid duplicates
                                                                 const isFirstMessageFromSender =
                                                                     messages.findIndex(
                                                                         (m) =>
                                                                             m.sender_address.toLowerCase() ===
-                                                                            msg.sender_address.toLowerCase()
+                                                                            msg.sender_address.toLowerCase(),
                                                                     ) ===
                                                                     msgIndex;
 
                                                                 // Check if we need a date divider
                                                                 const msgDate =
                                                                     new Date(
-                                                                        msg.created_at
+                                                                        msg.created_at,
                                                                     );
                                                                 const prevMsg =
                                                                     msgIndex > 0
@@ -1866,7 +1915,7 @@ export function AlphaChatModal({
                                                                 const prevMsgDate =
                                                                     prevMsg
                                                                         ? new Date(
-                                                                              prevMsg.created_at
+                                                                              prevMsg.created_at,
                                                                           )
                                                                         : null;
                                                                 const showDateDivider =
@@ -1937,11 +1986,11 @@ export function AlphaChatModal({
                                                                                         <div className="relative">
                                                                                             <button
                                                                                                 onClick={(
-                                                                                                    e
+                                                                                                    e,
                                                                                                 ) =>
                                                                                                     handleUserClick(
                                                                                                         msg.sender_address,
-                                                                                                        e
+                                                                                                        e,
                                                                                                     )
                                                                                                 }
                                                                                                 className="focus:outline-none focus:ring-2 focus:ring-orange-500/50 rounded-full"
@@ -1957,11 +2006,11 @@ export function AlphaChatModal({
                                                                                                 ) : (
                                                                                                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
                                                                                                         {formatSender(
-                                                                                                            msg.sender_address
+                                                                                                            msg.sender_address,
                                                                                                         )
                                                                                                             .slice(
                                                                                                                 0,
-                                                                                                                2
+                                                                                                                2,
                                                                                                             )
                                                                                                             .toUpperCase()}
                                                                                                     </div>
@@ -1985,7 +2034,7 @@ export function AlphaChatModal({
                                                                                         selectedMessage ===
                                                                                             msg.id
                                                                                             ? null
-                                                                                            : msg.id
+                                                                                            : msg.id,
                                                                                     );
                                                                                     setSelectedMessageConfig(
                                                                                         selectedMessage ===
@@ -1997,7 +2046,11 @@ export function AlphaChatModal({
                                                                                                   messageContent:
                                                                                                       msg.content,
                                                                                                   isOwn,
-                                                                                                  canDelete: isOwn || moderation.permissions.canDelete,
+                                                                                                  canDelete:
+                                                                                                      isOwn ||
+                                                                                                      moderation
+                                                                                                          .permissions
+                                                                                                          .canDelete,
                                                                                                   isPinned:
                                                                                                       msg.is_pinned,
                                                                                                   hasMedia:
@@ -2006,10 +2059,10 @@ export function AlphaChatModal({
                                                                                                   mediaUrl:
                                                                                                       isPixelArt
                                                                                                           ? getPixelArtUrl(
-                                                                                                                msg.content
+                                                                                                                msg.content,
                                                                                                             )
                                                                                                           : undefined,
-                                                                                              }
+                                                                                              },
                                                                                     );
                                                                                 }}
                                                                                 className={`${
@@ -2020,8 +2073,8 @@ export function AlphaChatModal({
                                                                                     isOwn
                                                                                         ? "bg-[#FF5500] text-white rounded-br-md"
                                                                                         : isAgent
-                                                                                        ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
-                                                                                        : "bg-zinc-800 text-white rounded-bl-md"
+                                                                                          ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
+                                                                                          : "bg-zinc-800 text-white rounded-bl-md"
                                                                                 } ${
                                                                                     selectedMessage ===
                                                                                     msg.id
@@ -2064,7 +2117,7 @@ export function AlphaChatModal({
                                                                                                 {formatSender(
                                                                                                     msg
                                                                                                         .reply_to
-                                                                                                        .sender_address
+                                                                                                        .sender_address,
                                                                                                 )}
                                                                                             </span>
                                                                                         </div>
@@ -2075,15 +2128,25 @@ export function AlphaChatModal({
                                                                                                     : "text-zinc-400"
                                                                                             }`}
                                                                                         >
-                                                                                            {msg.reply_to.content.startsWith("[PIXEL_ART]")
+                                                                                            {msg.reply_to.content.startsWith(
+                                                                                                "[PIXEL_ART]",
+                                                                                            )
                                                                                                 ? "🎨 Pixel Art"
-                                                                                                : msg.reply_to.content.startsWith("[GIF]")
-                                                                                                ? "🎬 GIF"
-                                                                                                : msg.reply_to.content.startsWith("[IMAGE]")
-                                                                                                ? "📷 Photo"
-                                                                                                : msg.reply_to.content.startsWith("[LOCATION]")
-                                                                                                ? "📍 Location"
-                                                                                                : msg.reply_to.content}
+                                                                                                : msg.reply_to.content.startsWith(
+                                                                                                        "[GIF]",
+                                                                                                    )
+                                                                                                  ? "🎬 GIF"
+                                                                                                  : msg.reply_to.content.startsWith(
+                                                                                                          "[IMAGE]",
+                                                                                                      )
+                                                                                                    ? "📷 Photo"
+                                                                                                    : msg.reply_to.content.startsWith(
+                                                                                                            "[LOCATION]",
+                                                                                                        )
+                                                                                                      ? "📍 Location"
+                                                                                                      : msg
+                                                                                                            .reply_to
+                                                                                                            .content}
                                                                                         </p>
                                                                                     </div>
                                                                                 )}
@@ -2094,7 +2157,7 @@ export function AlphaChatModal({
                                                                                         <div className="flex items-center gap-1.5 mb-1">
                                                                                             <span className="text-xs text-purple-300 font-medium">
                                                                                                 {formatSender(
-                                                                                                    msg.sender_address
+                                                                                                    msg.sender_address,
                                                                                                 )}
                                                                                             </span>
                                                                                             <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
@@ -2105,18 +2168,18 @@ export function AlphaChatModal({
                                                                                         // User sender - clickable
                                                                                         <button
                                                                                             onClick={(
-                                                                                                e
+                                                                                                e,
                                                                                             ) => {
                                                                                                 e.stopPropagation();
                                                                                                 handleUserClick(
                                                                                                     msg.sender_address,
-                                                                                                    e
+                                                                                                    e,
                                                                                                 );
                                                                                             }}
                                                                                             className="text-xs text-orange-300 mb-1 font-medium hover:text-orange-200 transition-colors"
                                                                                         >
                                                                                             {formatSender(
-                                                                                                msg.sender_address
+                                                                                                msg.sender_address,
                                                                                             )}
                                                                                         </button>
                                                                                     ))}
@@ -2124,7 +2187,7 @@ export function AlphaChatModal({
                                                                                     <div className="relative group">
                                                                                         <PixelArtImage
                                                                                             src={getPixelArtUrl(
-                                                                                                msg.content
+                                                                                                msg.content,
                                                                                             )}
                                                                                             size="md"
                                                                                         />
@@ -2137,14 +2200,14 @@ export function AlphaChatModal({
                                                                                                     : "opacity-0 group-hover:opacity-100"
                                                                                             }`}
                                                                                             onClick={(
-                                                                                                e
+                                                                                                e,
                                                                                             ) =>
                                                                                                 e.stopPropagation()
                                                                                             }
                                                                                         >
                                                                                             <PixelArtShare
                                                                                                 imageUrl={getPixelArtUrl(
-                                                                                                    msg.content
+                                                                                                    msg.content,
                                                                                                 )}
                                                                                                 showQuickActions
                                                                                             />
@@ -2152,16 +2215,26 @@ export function AlphaChatModal({
                                                                                     </div>
                                                                                 ) : isAgent ? (
                                                                                     // Agent messages - rich markdown with copy button
-                                                                                    <AgentMessageWrapper content={msg.content} theme="channel">
-                                                                                        <AgentMarkdown content={msg.content} theme="channel" />
+                                                                                    <AgentMessageWrapper
+                                                                                        content={
+                                                                                            msg.content
+                                                                                        }
+                                                                                        theme="channel"
+                                                                                    >
+                                                                                        <AgentMarkdown
+                                                                                            content={
+                                                                                                msg.content
+                                                                                            }
+                                                                                            theme="channel"
+                                                                                        />
                                                                                     </AgentMessageWrapper>
                                                                                 ) : isGifMessage(
-                                                                                      msg.content
+                                                                                      msg.content,
                                                                                   ) ? (
                                                                                     <div className="relative max-w-[280px] rounded-xl overflow-hidden">
                                                                                         <img
                                                                                             src={getGifUrl(
-                                                                                                msg.content
+                                                                                                msg.content,
                                                                                             )}
                                                                                             alt="GIF"
                                                                                             className="w-full h-auto rounded-xl"
@@ -2169,18 +2242,24 @@ export function AlphaChatModal({
                                                                                         />
                                                                                     </div>
                                                                                 ) : isImageMessage(
-                                                                                      msg.content
+                                                                                      msg.content,
                                                                                   ) ? (
                                                                                     <div className="relative max-w-[320px] rounded-xl overflow-hidden">
                                                                                         <a
-                                                                                            href={getImageUrl(msg.content)}
+                                                                                            href={getImageUrl(
+                                                                                                msg.content,
+                                                                                            )}
                                                                                             target="_blank"
                                                                                             rel="noopener noreferrer"
-                                                                                            onClick={(e) => e.stopPropagation()}
+                                                                                            onClick={(
+                                                                                                e,
+                                                                                            ) =>
+                                                                                                e.stopPropagation()
+                                                                                            }
                                                                                         >
                                                                                             <img
                                                                                                 src={getImageUrl(
-                                                                                                    msg.content
+                                                                                                    msg.content,
                                                                                                 )}
                                                                                                 alt="Shared image"
                                                                                                 className="w-full h-auto rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
@@ -2189,14 +2268,20 @@ export function AlphaChatModal({
                                                                                         </a>
                                                                                     </div>
                                                                                 ) : isLocationMessage(
-                                                                                      msg.content
+                                                                                      msg.content,
                                                                                   ) ? (
                                                                                     <LocationMessage
-                                                                                        location={parseLocationMessage(msg.content)!}
-                                                                                        isOwn={isOwn}
+                                                                                        location={
+                                                                                            parseLocationMessage(
+                                                                                                msg.content,
+                                                                                            )!
+                                                                                        }
+                                                                                        isOwn={
+                                                                                            isOwn
+                                                                                        }
                                                                                     />
                                                                                 ) : hasMarkdown(
-                                                                                      msg.content
+                                                                                      msg.content,
                                                                                   ) ? (
                                                                                     <ChatMarkdown
                                                                                         content={
@@ -2211,7 +2296,7 @@ export function AlphaChatModal({
                                                                                         <p
                                                                                             className={`break-words ${
                                                                                                 isEmojiOnly(
-                                                                                                    msg.content
+                                                                                                    msg.content,
                                                                                                 )
                                                                                                     ? "text-4xl leading-tight"
                                                                                                     : ""
@@ -2230,15 +2315,15 @@ export function AlphaChatModal({
                                                                                             />
                                                                                         </p>
                                                                                         {detectUrls(
-                                                                                            msg.content
+                                                                                            msg.content,
                                                                                         )
                                                                                             .slice(
                                                                                                 0,
-                                                                                                1
+                                                                                                1,
                                                                                             )
                                                                                             .map(
                                                                                                 (
-                                                                                                    url
+                                                                                                    url,
                                                                                                 ) => (
                                                                                                     <LinkPreview
                                                                                                         key={
@@ -2248,7 +2333,7 @@ export function AlphaChatModal({
                                                                                                             url
                                                                                                         }
                                                                                                     />
-                                                                                                )
+                                                                                                ),
                                                                                             )}
                                                                                     </>
                                                                                 )}
@@ -2263,11 +2348,11 @@ export function AlphaChatModal({
                                                                                         []
                                                                                     }
                                                                                     onReaction={(
-                                                                                        emoji
+                                                                                        emoji,
                                                                                     ) =>
                                                                                         handleReaction(
                                                                                             msg.id,
-                                                                                            emoji
+                                                                                            emoji,
                                                                                         )
                                                                                     }
                                                                                     isOwnMessage={
@@ -2299,9 +2384,9 @@ export function AlphaChatModal({
                                                                                     <span>
                                                                                         {formatTimeInTimezone(
                                                                                             new Date(
-                                                                                                msg.created_at
+                                                                                                msg.created_at,
                                                                                             ),
-                                                                                            userTimezone
+                                                                                            userTimezone,
                                                                                         )}
                                                                                     </span>
                                                                                 </div>
@@ -2309,7 +2394,7 @@ export function AlphaChatModal({
                                                                         </motion.div>
                                                                     </div>
                                                                 );
-                                                            }
+                                                            },
                                                         )}
                                                 </div>
 
@@ -2344,19 +2429,27 @@ export function AlphaChatModal({
                                                     userAddress.toLowerCase()
                                                         ? "yourself"
                                                         : formatSender(
-                                                              replyingTo.sender_address
+                                                              replyingTo.sender_address,
                                                           )}
                                                 </p>
                                                 <p className="text-xs text-zinc-400 truncate">
-                                                    {replyingTo.content.startsWith("[PIXEL_ART]")
+                                                    {replyingTo.content.startsWith(
+                                                        "[PIXEL_ART]",
+                                                    )
                                                         ? "🎨 Pixel Art"
-                                                        : replyingTo.content.startsWith("[GIF]")
-                                                        ? "🎬 GIF"
-                                                        : replyingTo.content.startsWith("[IMAGE]")
-                                                        ? "📷 Photo"
-                                                        : replyingTo.content.startsWith("[LOCATION]")
-                                                        ? "📍 Location"
-                                                        : replyingTo.content}
+                                                        : replyingTo.content.startsWith(
+                                                                "[GIF]",
+                                                            )
+                                                          ? "🎬 GIF"
+                                                          : replyingTo.content.startsWith(
+                                                                  "[IMAGE]",
+                                                              )
+                                                            ? "📷 Photo"
+                                                            : replyingTo.content.startsWith(
+                                                                    "[LOCATION]",
+                                                                )
+                                                              ? "📍 Location"
+                                                              : replyingTo.content}
                                                 </p>
                                             </div>
                                             <button
@@ -2390,7 +2483,9 @@ export function AlphaChatModal({
                                                     key={agent.id}
                                                     agentName={agent.name}
                                                     agentEmoji={agent.emoji}
-                                                    agentAvatarUrl={agent.avatarUrl}
+                                                    agentAvatarUrl={
+                                                        agent.avatarUrl
+                                                    }
                                                 />
                                             ))}
                                         </div>
@@ -2405,8 +2500,8 @@ export function AlphaChatModal({
                                                         u.name ||
                                                         `${u.address.slice(
                                                             0,
-                                                            6
-                                                        )}...`
+                                                            6,
+                                                        )}...`,
                                                 )}
                                                 className="border-t border-zinc-800/50"
                                             />
@@ -2444,29 +2539,39 @@ export function AlphaChatModal({
                                             <ChatAttachmentMenu
                                                 onImageUpload={
                                                     isAdmin
-                                                        ? () => imageFileInputRef.current?.click()
+                                                        ? () =>
+                                                              imageFileInputRef.current?.click()
                                                         : undefined
                                                 }
                                                 onPixelArt={() =>
                                                     setShowPixelArt(true)
                                                 }
                                                 onGif={handleSendGif}
-                                                onLocation={async (location: LocationData) => {
-                                                    const locationMsg = formatLocationMessage(location);
-                                                    await alphaChat.sendMessage(locationMsg, "text");
+                                                onLocation={async (
+                                                    location: LocationData,
+                                                ) => {
+                                                    const locationMsg =
+                                                        formatLocationMessage(
+                                                            location,
+                                                        );
+                                                    await alphaChat.sendMessage(
+                                                        locationMsg,
+                                                        "text",
+                                                    );
                                                 }}
                                                 onPoll={
                                                     canCreatePoll
                                                         ? () =>
                                                               setShowPollCreator(
-                                                                  true
+                                                                  true,
                                                               )
                                                         : undefined
                                                 }
                                                 showPoll={canCreatePoll}
                                                 showLocation={true}
                                                 isUploading={
-                                                    isUploadingPixelArt || isUploadingImage
+                                                    isUploadingPixelArt ||
+                                                    isUploadingImage
                                                 }
                                                 disabled={isCurrentUserMuted}
                                                 chatRules={chatRules}
@@ -2517,9 +2622,9 @@ export function AlphaChatModal({
                                                             replyingTo
                                                                 ? replyingTo.content?.slice(
                                                                       0,
-                                                                      80
+                                                                      80,
                                                                   )
-                                                                : undefined
+                                                                : undefined,
                                                         );
                                                         if (val.trim())
                                                             setTyping();
@@ -2639,14 +2744,14 @@ export function AlphaChatModal({
                             options,
                             allowsMultiple,
                             endsAt,
-                            isAnonymous
+                            isAnonymous,
                         ) => {
                             await createPoll(
                                 question,
                                 options,
                                 allowsMultiple,
                                 endsAt,
-                                isAnonymous
+                                isAnonymous,
                             );
                         }}
                     />
@@ -2659,7 +2764,7 @@ export function AlphaChatModal({
                             style={{
                                 left: Math.min(
                                     userPopupPosition.x,
-                                    window.innerWidth - 290
+                                    window.innerWidth - 290,
                                 ),
                                 top: userPopupPosition.y,
                             }}
@@ -2694,9 +2799,9 @@ export function AlphaChatModal({
                                                     {userInfo?.name ||
                                                         `${selectedUser.slice(
                                                             0,
-                                                            6
+                                                            6,
                                                         )}...${selectedUser.slice(
-                                                            -4
+                                                            -4,
                                                         )}`}
                                                 </p>
                                                 <p className="text-zinc-500 text-xs truncate font-mono">
@@ -2714,10 +2819,10 @@ export function AlphaChatModal({
                                                             type="button"
                                                             onClick={() => {
                                                                 onOpenDM(
-                                                                    selectedUser
+                                                                    selectedUser,
                                                                 );
                                                                 setSelectedUser(
-                                                                    null
+                                                                    null,
                                                                 );
                                                             }}
                                                             className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors mb-2"
@@ -2761,7 +2866,7 @@ export function AlphaChatModal({
                                                 <button
                                                     onClick={() =>
                                                         handleAddFriend(
-                                                            selectedUser
+                                                            selectedUser,
                                                         )
                                                     }
                                                     disabled={isAddingFriend}
@@ -2793,7 +2898,7 @@ export function AlphaChatModal({
                                                 <button
                                                     onClick={async () => {
                                                         await moderation.unmuteUser(
-                                                            selectedUser
+                                                            selectedUser,
                                                         );
                                                         setSelectedUser(null);
                                                     }}
@@ -2824,7 +2929,7 @@ export function AlphaChatModal({
                                                                 userInfo?.name ||
                                                                 selectedUser.slice(
                                                                     0,
-                                                                    10
+                                                                    10,
                                                                 ),
                                                         });
                                                         setSelectedUser(null);
@@ -2854,10 +2959,57 @@ export function AlphaChatModal({
                                                 </button>
                                             ))}
 
+                                        {/* Ban from room */}
+                                        {(moderation.permissions.canMute ||
+                                            moderation.permissions.isAdmin) &&
+                                            selectedUser.toLowerCase() !==
+                                                userAddress?.toLowerCase() && (
+                                                <button
+                                                    onClick={async () => {
+                                                        setBanningUser(
+                                                            selectedUser,
+                                                        );
+                                                        await roomBans.banUser(
+                                                            selectedUser,
+                                                            {
+                                                                reason: "Banned by moderator",
+                                                            },
+                                                        );
+                                                        setBanningUser(null);
+                                                        setSelectedUser(null);
+                                                    }}
+                                                    disabled={
+                                                        banningUser ===
+                                                        selectedUser
+                                                    }
+                                                    className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                                >
+                                                    {banningUser ===
+                                                    selectedUser ? (
+                                                        <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <svg
+                                                            className="w-4 h-4"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                                                            />
+                                                        </svg>
+                                                    )}
+                                                    Ban from Chat
+                                                </button>
+                                            )}
+
                                         <button
                                             onClick={() => {
                                                 navigator.clipboard.writeText(
-                                                    selectedUser
+                                                    selectedUser,
                                                 );
                                                 setSelectedUser(null);
                                             }}
@@ -2908,7 +3060,7 @@ export function AlphaChatModal({
                                 ? (emoji) =>
                                       alphaChat.toggleReaction(
                                           selectedMessageConfig.messageId,
-                                          emoji
+                                          emoji,
                                       )
                                 : undefined,
                             onReply: selectedMessageConfig
@@ -2916,7 +3068,7 @@ export function AlphaChatModal({
                                       const msg = messages.find(
                                           (m) =>
                                               m.id ===
-                                              selectedMessageConfig.messageId
+                                              selectedMessageConfig.messageId,
                                       );
                                       if (msg) alphaChat.setReplyingTo(msg);
                                   }
@@ -2928,7 +3080,7 @@ export function AlphaChatModal({
                                           handlePinMessage(
                                               selectedMessageConfig?.messageId ||
                                                   "",
-                                              false
+                                              false,
                                           )
                                     : undefined,
                             onUnpin: selectedMessageConfig?.isPinned
@@ -2936,15 +3088,18 @@ export function AlphaChatModal({
                                       handlePinMessage(
                                           selectedMessageConfig?.messageId ||
                                               "",
-                                          true
+                                          true,
                                       )
                                 : undefined,
-                            onDelete: (selectedMessageConfig?.isOwn || moderation.permissions.canDelete)
-                                ? () =>
-                                      handleDeleteMessage(
-                                          selectedMessageConfig?.messageId || ""
-                                      )
-                                : undefined,
+                            onDelete:
+                                selectedMessageConfig?.isOwn ||
+                                moderation.permissions.canDelete
+                                    ? () =>
+                                          handleDeleteMessage(
+                                              selectedMessageConfig?.messageId ||
+                                                  "",
+                                          )
+                                    : undefined,
                         }}
                         reactions={ALPHA_REACTION_EMOJIS}
                     />

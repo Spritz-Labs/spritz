@@ -20,6 +20,7 @@ const DEFAULT_RULES = {
     slow_mode_seconds: 0,
     read_only: false,
     max_message_length: 0,
+    rules_text: null as string | null,
 };
 
 export function useChatRules(chatType: string | null, chatId?: string | null) {
@@ -50,7 +51,11 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
             }
         } catch (err) {
             console.error("[useChatRules] Error:", err);
-            setState({ rules: null, isLoading: false, error: "Failed to load rules" });
+            setState({
+                rules: null,
+                isLoading: false,
+                error: "Failed to load rules",
+            });
         }
     }, [chatType, chatId]);
 
@@ -59,88 +64,135 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
     }, [fetchRules]);
 
     // Update a single rule
-    const updateRule = useCallback(async (
-        field: keyof typeof DEFAULT_RULES,
-        value: boolean | number
-    ): Promise<boolean> => {
-        if (!chatType) return false;
+    const updateRule = useCallback(
+        async (
+            field: keyof typeof DEFAULT_RULES,
+            value: boolean | number,
+        ): Promise<boolean> => {
+            if (!chatType) return false;
 
-        try {
-            const res = await fetch("/api/chat-rules", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    chatType,
-                    chatId: chatId || null,
-                    rules: { [field]: value },
-                }),
-            });
+            try {
+                const res = await fetch("/api/chat-rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chatType,
+                        chatId: chatId || null,
+                        rules: { [field]: value },
+                    }),
+                });
 
-            if (!res.ok) {
+                if (!res.ok) {
+                    const data = await res.json();
+                    console.error("[useChatRules] Update error:", data.error);
+                    return false;
+                }
+
                 const data = await res.json();
-                console.error("[useChatRules] Update error:", data.error);
+                setState((prev) => ({
+                    ...prev,
+                    rules: data.rules || prev.rules,
+                }));
+                return true;
+            } catch (err) {
+                console.error("[useChatRules] Update error:", err);
                 return false;
             }
-
-            const data = await res.json();
-            setState(prev => ({
-                ...prev,
-                rules: data.rules || prev.rules,
-            }));
-            return true;
-        } catch (err) {
-            console.error("[useChatRules] Update error:", err);
-            return false;
-        }
-    }, [chatType, chatId]);
+        },
+        [chatType, chatId],
+    );
 
     // Update multiple rules at once
-    const updateRules = useCallback(async (
-        updates: Partial<typeof DEFAULT_RULES>
-    ): Promise<boolean> => {
-        if (!chatType) return false;
+    const updateRules = useCallback(
+        async (updates: Partial<typeof DEFAULT_RULES>): Promise<boolean> => {
+            if (!chatType) return false;
 
-        try {
-            const res = await fetch("/api/chat-rules", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    chatType,
-                    chatId: chatId || null,
-                    rules: updates,
-                }),
-            });
+            try {
+                const res = await fetch("/api/chat-rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chatType,
+                        chatId: chatId || null,
+                        rules: updates,
+                    }),
+                });
 
-            if (!res.ok) {
+                if (!res.ok) {
+                    const data = await res.json();
+                    console.error("[useChatRules] Update error:", data.error);
+                    return false;
+                }
+
                 const data = await res.json();
-                console.error("[useChatRules] Update error:", data.error);
+                setState((prev) => ({
+                    ...prev,
+                    rules: data.rules || prev.rules,
+                }));
+                return true;
+            } catch (err) {
+                console.error("[useChatRules] Update error:", err);
                 return false;
             }
-
-            const data = await res.json();
-            setState(prev => ({
-                ...prev,
-                rules: data.rules || prev.rules,
-            }));
-            return true;
-        } catch (err) {
-            console.error("[useChatRules] Update error:", err);
-            return false;
-        }
-    }, [chatType, chatId]);
+        },
+        [chatType, chatId],
+    );
 
     // Helper to check if a specific feature is allowed
-    const isAllowed = useCallback((feature: keyof typeof DEFAULT_RULES): boolean => {
-        if (!state.rules) return DEFAULT_RULES[feature] as boolean;
-        const value = state.rules[feature as keyof ChatRules];
-        if (typeof value === "boolean") return value;
-        return DEFAULT_RULES[feature] as boolean;
-    }, [state.rules]);
+    const isAllowed = useCallback(
+        (feature: keyof typeof DEFAULT_RULES): boolean => {
+            if (!state.rules) return DEFAULT_RULES[feature] as boolean;
+            const value = state.rules[feature as keyof ChatRules];
+            if (typeof value === "boolean") return value;
+            return DEFAULT_RULES[feature] as boolean;
+        },
+        [state.rules],
+    );
+
+    // Update rules text (room guidelines)
+    const updateRulesText = useCallback(
+        async (text: string | null): Promise<boolean> => {
+            if (!chatType) return false;
+
+            try {
+                const res = await fetch("/api/chat-rules", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        chatType,
+                        chatId: chatId || null,
+                        rules: { rules_text: text },
+                    }),
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    console.error(
+                        "[useChatRules] Update rules text error:",
+                        data.error,
+                    );
+                    return false;
+                }
+
+                const data = await res.json();
+                setState((prev) => ({
+                    ...prev,
+                    rules: data.rules || prev.rules,
+                }));
+                return true;
+            } catch (err) {
+                console.error("[useChatRules] Update rules text error:", err);
+                return false;
+            }
+        },
+        [chatType, chatId],
+    );
 
     return {
         ...state,
         updateRule,
         updateRules,
+        updateRulesText,
         isAllowed,
         refresh: fetchRules,
     };
@@ -148,14 +200,16 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
 
 // Room ban management hook
 export function useRoomBans(chatType: string | null, chatId?: string | null) {
-    const [bans, setBans] = useState<Array<{
-        id: string;
-        user_address: string;
-        banned_by: string;
-        reason: string | null;
-        banned_at: string;
-        banned_until: string | null;
-    }>>([]);
+    const [bans, setBans] = useState<
+        Array<{
+            id: string;
+            user_address: string;
+            banned_by: string;
+            reason: string | null;
+            banned_at: string;
+            banned_until: string | null;
+        }>
+    >([]);
     const [isLoading, setIsLoading] = useState(true);
 
     const fetchBans = useCallback(async () => {
@@ -184,87 +238,98 @@ export function useRoomBans(chatType: string | null, chatId?: string | null) {
         fetchBans();
     }, [fetchBans]);
 
-    const banUser = useCallback(async (
-        targetAddress: string,
-        options?: { reason?: string; duration?: string }
-    ): Promise<boolean> => {
-        if (!chatType) return false;
+    const banUser = useCallback(
+        async (
+            targetAddress: string,
+            options?: { reason?: string; duration?: string },
+        ): Promise<boolean> => {
+            if (!chatType) return false;
 
-        try {
-            const res = await fetch("/api/chat-rules/ban", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "ban",
-                    chatType,
-                    chatId: chatId || null,
-                    targetAddress,
-                    reason: options?.reason,
-                    duration: options?.duration || "permanent",
-                }),
-            });
+            try {
+                const res = await fetch("/api/chat-rules/ban", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "ban",
+                        chatType,
+                        chatId: chatId || null,
+                        targetAddress,
+                        reason: options?.reason,
+                        duration: options?.duration || "permanent",
+                    }),
+                });
 
-            if (!res.ok) {
-                const data = await res.json();
-                alert(data.error || "Failed to ban user");
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || "Failed to ban user");
+                    return false;
+                }
+
+                await fetchBans();
+                return true;
+            } catch (err) {
+                console.error("[useRoomBans] Ban error:", err);
                 return false;
             }
+        },
+        [chatType, chatId, fetchBans],
+    );
 
-            await fetchBans();
-            return true;
-        } catch (err) {
-            console.error("[useRoomBans] Ban error:", err);
-            return false;
-        }
-    }, [chatType, chatId, fetchBans]);
+    const unbanUser = useCallback(
+        async (targetAddress: string): Promise<boolean> => {
+            if (!chatType) return false;
 
-    const unbanUser = useCallback(async (targetAddress: string): Promise<boolean> => {
-        if (!chatType) return false;
+            try {
+                const res = await fetch("/api/chat-rules/ban", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: "unban",
+                        chatType,
+                        chatId: chatId || null,
+                        targetAddress,
+                    }),
+                });
 
-        try {
-            const res = await fetch("/api/chat-rules/ban", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    action: "unban",
-                    chatType,
-                    chatId: chatId || null,
-                    targetAddress,
-                }),
-            });
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || "Failed to unban user");
+                    return false;
+                }
 
-            if (!res.ok) {
-                const data = await res.json();
-                alert(data.error || "Failed to unban user");
+                await fetchBans();
+                return true;
+            } catch (err) {
+                console.error("[useRoomBans] Unban error:", err);
                 return false;
             }
+        },
+        [chatType, chatId, fetchBans],
+    );
 
-            await fetchBans();
-            return true;
-        } catch (err) {
-            console.error("[useRoomBans] Unban error:", err);
-            return false;
-        }
-    }, [chatType, chatId, fetchBans]);
+    const checkBanned = useCallback(
+        async (userAddress: string): Promise<boolean> => {
+            if (!chatType) return false;
 
-    const checkBanned = useCallback(async (userAddress: string): Promise<boolean> => {
-        if (!chatType) return false;
+            try {
+                const params = new URLSearchParams({
+                    chatType,
+                    action: "check",
+                    userAddress,
+                });
+                if (chatId) params.set("chatId", chatId);
 
-        try {
-            const params = new URLSearchParams({
-                chatType,
-                action: "check",
-                userAddress,
-            });
-            if (chatId) params.set("chatId", chatId);
-
-            const res = await fetch(`/api/chat-rules/ban?${params.toString()}`);
-            const data = await res.json();
-            return data.isBanned || false;
-        } catch {
-            return false;
-        }
-    }, [chatType, chatId]);
+                const res = await fetch(
+                    `/api/chat-rules/ban?${params.toString()}`,
+                );
+                const data = await res.json();
+                return data.isBanned || false;
+            } catch {
+                return false;
+            }
+        },
+        [chatType, chatId],
+    );
 
     return {
         bans,

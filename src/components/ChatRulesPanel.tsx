@@ -20,13 +20,48 @@ const RULE_TOGGLES: {
     description: string;
     icon: string;
 }[] = [
-    { key: "links_allowed", label: "Links", description: "Allow sharing URLs and links", icon: "🔗" },
-    { key: "photos_allowed", label: "Photos", description: "Allow uploading photos", icon: "📷" },
-    { key: "pixel_art_allowed", label: "Pixel Art", description: "Allow sending pixel art", icon: "🎨" },
-    { key: "gifs_allowed", label: "GIFs", description: "Allow sending GIFs", icon: "🎬" },
-    { key: "polls_allowed", label: "Polls", description: "Allow creating polls", icon: "🗳️" },
-    { key: "location_sharing_allowed", label: "Location", description: "Allow sharing location", icon: "📍" },
-    { key: "voice_allowed", label: "Voice", description: "Allow voice messages", icon: "🎤" },
+    {
+        key: "links_allowed",
+        label: "Links",
+        description: "Allow sharing URLs and links",
+        icon: "🔗",
+    },
+    {
+        key: "photos_allowed",
+        label: "Photos",
+        description: "Allow uploading photos",
+        icon: "📷",
+    },
+    {
+        key: "pixel_art_allowed",
+        label: "Pixel Art",
+        description: "Allow sending pixel art",
+        icon: "🎨",
+    },
+    {
+        key: "gifs_allowed",
+        label: "GIFs",
+        description: "Allow sending GIFs",
+        icon: "🎬",
+    },
+    {
+        key: "polls_allowed",
+        label: "Polls",
+        description: "Allow creating polls",
+        icon: "🗳️",
+    },
+    {
+        key: "location_sharing_allowed",
+        label: "Location",
+        description: "Allow sharing location",
+        icon: "📍",
+    },
+    {
+        key: "voice_allowed",
+        label: "Voice",
+        description: "Allow voice messages",
+        icon: "🎤",
+    },
 ];
 
 const SLOW_MODE_OPTIONS = [
@@ -47,18 +82,161 @@ const BAN_DURATION_OPTIONS = [
     { value: "permanent", label: "Permanent" },
 ];
 
-export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: ChatRulesPanelProps) {
-    const { rules, isLoading, updateRule } = useChatRules(chatType, chatId);
-    const { bans, banUser, unbanUser, isLoading: bansLoading } = useRoomBans(chatType, chatId);
-    const [activeTab, setActiveTab] = useState<"rules" | "bans">("rules");
+// Member-facing component: shows the room rules/guidelines as a banner or dialog
+export function ChatRulesBanner({
+    chatType,
+    chatId,
+}: {
+    chatType: string;
+    chatId?: string | null;
+}) {
+    const { rules } = useChatRules(chatType, chatId);
+    const [showRules, setShowRules] = useState(false);
+
+    if (!rules?.rules_text) return null;
+
+    return (
+        <>
+            <button
+                onClick={() => setShowRules(true)}
+                className="flex items-center gap-2 px-3 py-1.5 mx-4 mt-2 mb-1 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/50 rounded-lg text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+                <svg
+                    className="w-3.5 h-3.5 text-[#FF5500]"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                </svg>
+                View Room Rules
+            </button>
+
+            <AnimatePresence>
+                {showRules && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/60 z-[9998]"
+                            onClick={() => setShowRules(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed left-4 right-4 top-1/2 -translate-y-1/2 max-w-md mx-auto bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl z-[9999] overflow-hidden"
+                        >
+                            <div className="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <svg
+                                        className="w-5 h-5 text-[#FF5500]"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                        />
+                                    </svg>
+                                    <h3 className="text-base font-semibold text-white">
+                                        Room Rules
+                                    </h3>
+                                </div>
+                                <button
+                                    onClick={() => setShowRules(false)}
+                                    className="p-1.5 text-zinc-400 hover:text-white rounded-lg transition-colors"
+                                >
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="px-5 py-4 max-h-80 overflow-y-auto">
+                                <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                                    {rules.rules_text}
+                                </p>
+                            </div>
+                            <div className="px-5 py-3 border-t border-zinc-800">
+                                <button
+                                    onClick={() => setShowRules(false)}
+                                    className="w-full py-2.5 bg-[#FF5500] hover:bg-[#FF6600] text-white font-medium rounded-lg text-sm transition-colors"
+                                >
+                                    Got it
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+        </>
+    );
+}
+
+export function ChatRulesPanel({
+    isOpen,
+    onClose,
+    chatType,
+    chatId,
+    chatName,
+}: ChatRulesPanelProps) {
+    const { rules, isLoading, updateRule, updateRulesText } = useChatRules(
+        chatType,
+        chatId,
+    );
+    const {
+        bans,
+        banUser,
+        unbanUser,
+        isLoading: bansLoading,
+    } = useRoomBans(chatType, chatId);
+    const [activeTab, setActiveTab] = useState<"rules" | "guidelines" | "bans">(
+        "rules",
+    );
     const [banAddress, setBanAddress] = useState("");
     const [banReason, setBanReason] = useState("");
     const [banDuration, setBanDuration] = useState("permanent");
     const [isBanning, setIsBanning] = useState(false);
+    const [rulesText, setRulesText] = useState("");
+    const [isSavingRules, setIsSavingRules] = useState(false);
+    const [rulesTextSaved, setRulesTextSaved] = useState(false);
     const [mounted, setMounted] = useState(false);
 
     // Client-side only mount
-    useState(() => { setMounted(true); });
+    useState(() => {
+        setMounted(true);
+    });
+
+    // Sync rules text from server
+    useState(() => {
+        if (rules?.rules_text) {
+            setRulesText(rules.rules_text);
+        }
+    });
+
+    // Keep rulesText in sync when rules load
+    if (rules?.rules_text && rulesText === "" && !isSavingRules) {
+        setRulesText(rules.rules_text);
+    }
 
     if (!mounted) return null;
 
@@ -106,23 +284,41 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                         initial={{ x: "100%" }}
                         animate={{ x: 0 }}
                         exit={{ x: "100%" }}
-                        transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                        transition={{
+                            type: "spring",
+                            damping: 25,
+                            stiffness: 300,
+                        }}
                         className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-zinc-900 z-[9999] overflow-hidden flex flex-col"
                     >
                         {/* Header */}
                         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
                             <div>
-                                <h2 className="text-lg font-semibold text-white">Room Settings</h2>
+                                <h2 className="text-lg font-semibold text-white">
+                                    Room Settings
+                                </h2>
                                 {chatName && (
-                                    <p className="text-xs text-zinc-400 mt-0.5">{chatName}</p>
+                                    <p className="text-xs text-zinc-400 mt-0.5">
+                                        {chatName}
+                                    </p>
                                 )}
                             </div>
                             <button
                                 onClick={onClose}
                                 className="p-2 text-zinc-400 hover:text-white rounded-lg transition-colors"
                             >
-                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                <svg
+                                    className="w-5 h-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M6 18L18 6M6 6l12 12"
+                                    />
                                 </svg>
                             </button>
                         </div>
@@ -137,7 +333,17 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                         : "text-zinc-400 hover:text-zinc-200"
                                 }`}
                             >
-                                Content Rules
+                                Content
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("guidelines")}
+                                className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                                    activeTab === "guidelines"
+                                        ? "text-[#FF5500] border-b-2 border-[#FF5500]"
+                                        : "text-zinc-400 hover:text-zinc-200"
+                                }`}
+                            >
+                                Rules
                             </button>
                             <button
                                 onClick={() => setActiveTab("bans")}
@@ -157,15 +363,148 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                 <div className="flex items-center justify-center py-12">
                                     <div className="w-6 h-6 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
                                 </div>
+                            ) : activeTab === "guidelines" ? (
+                                /* Guidelines Tab */
+                                <div className="p-4 space-y-4">
+                                    <div>
+                                        <h3 className="text-sm font-medium text-zinc-300 mb-1">
+                                            Room Rules & Guidelines
+                                        </h3>
+                                        <p className="text-xs text-zinc-500 mb-3">
+                                            Set rules that members will see when
+                                            they view this room. These
+                                            guidelines help set expectations.
+                                        </p>
+                                    </div>
+
+                                    <textarea
+                                        value={rulesText}
+                                        onChange={(e) => {
+                                            setRulesText(e.target.value);
+                                            setRulesTextSaved(false);
+                                        }}
+                                        placeholder={`Example rules:\n\n1. Be respectful to all members\n2. No spam or self-promotion\n3. Stay on topic\n4. No NSFW content\n5. English only`}
+                                        className="w-full h-48 px-4 py-3 bg-zinc-800/50 border border-zinc-700 rounded-xl text-sm text-white placeholder-zinc-600 resize-none focus:outline-none focus:border-[#FF5500] transition-colors"
+                                    />
+
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-xs text-zinc-500">
+                                            {rulesText.length > 0
+                                                ? `${rulesText.length} characters`
+                                                : "No rules set"}
+                                        </p>
+                                        <div className="flex gap-2">
+                                            {rulesText.length > 0 && (
+                                                <button
+                                                    onClick={() => {
+                                                        setRulesText("");
+                                                        setRulesTextSaved(
+                                                            false,
+                                                        );
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+                                                >
+                                                    Clear
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={async () => {
+                                                    setIsSavingRules(true);
+                                                    const success =
+                                                        await updateRulesText(
+                                                            rulesText.trim() ||
+                                                                null,
+                                                        );
+                                                    setIsSavingRules(false);
+                                                    if (success) {
+                                                        setRulesTextSaved(true);
+                                                        setTimeout(
+                                                            () =>
+                                                                setRulesTextSaved(
+                                                                    false,
+                                                                ),
+                                                            2000,
+                                                        );
+                                                    }
+                                                }}
+                                                disabled={isSavingRules}
+                                                className="px-4 py-1.5 bg-[#FF5500] hover:bg-[#FF6600] disabled:bg-zinc-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
+                                            >
+                                                {isSavingRules ? (
+                                                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                ) : rulesTextSaved ? (
+                                                    <>
+                                                        <svg
+                                                            className="w-3.5 h-3.5"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M5 13l4 4L19 7"
+                                                            />
+                                                        </svg>
+                                                        Saved
+                                                    </>
+                                                ) : (
+                                                    "Save Rules"
+                                                )}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Preview */}
+                                    {rulesText.trim() && (
+                                        <div className="mt-4 border-t border-zinc-800 pt-4">
+                                            <h4 className="text-xs font-medium text-zinc-400 mb-2 uppercase tracking-wider">
+                                                Preview (what members see)
+                                            </h4>
+                                            <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <svg
+                                                        className="w-4 h-4 text-[#FF5500]"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                                        />
+                                                    </svg>
+                                                    <span className="text-xs font-medium text-white">
+                                                        Room Rules
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-zinc-400 whitespace-pre-wrap leading-relaxed">
+                                                    {rulesText}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             ) : activeTab === "rules" ? (
                                 <div className="p-4 space-y-6">
                                     {/* Content Type Toggles */}
                                     <div>
-                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">Allowed Content</h3>
+                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                                            Allowed Content
+                                        </h3>
                                         <div className="space-y-1">
                                             {RULE_TOGGLES.map((toggle) => {
-                                                const value = rules?.[toggle.key as keyof typeof rules];
-                                                const isEnabled = typeof value === "boolean" ? value : true;
+                                                const value =
+                                                    rules?.[
+                                                        toggle.key as keyof typeof rules
+                                                    ];
+                                                const isEnabled =
+                                                    typeof value === "boolean"
+                                                        ? value
+                                                        : true;
 
                                                 return (
                                                     <div
@@ -173,21 +512,40 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                                         className="flex items-center justify-between px-3 py-3 rounded-lg hover:bg-zinc-800/50 transition-colors"
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            <span className="text-lg">{toggle.icon}</span>
+                                                            <span className="text-lg">
+                                                                {toggle.icon}
+                                                            </span>
                                                             <div>
-                                                                <p className="text-sm font-medium text-white">{toggle.label}</p>
-                                                                <p className="text-xs text-zinc-500">{toggle.description}</p>
+                                                                <p className="text-sm font-medium text-white">
+                                                                    {
+                                                                        toggle.label
+                                                                    }
+                                                                </p>
+                                                                <p className="text-xs text-zinc-500">
+                                                                    {
+                                                                        toggle.description
+                                                                    }
+                                                                </p>
                                                             </div>
                                                         </div>
                                                         <button
-                                                            onClick={() => handleToggle(toggle.key, isEnabled)}
+                                                            onClick={() =>
+                                                                handleToggle(
+                                                                    toggle.key,
+                                                                    isEnabled,
+                                                                )
+                                                            }
                                                             className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                                                                isEnabled ? "bg-[#FF5500]" : "bg-zinc-700"
+                                                                isEnabled
+                                                                    ? "bg-[#FF5500]"
+                                                                    : "bg-zinc-700"
                                                             }`}
                                                         >
                                                             <span
                                                                 className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                                                                    isEnabled ? "translate-x-5" : "translate-x-0"
+                                                                    isEnabled
+                                                                        ? "translate-x-5"
+                                                                        : "translate-x-0"
                                                                 }`}
                                                             />
                                                         </button>
@@ -199,24 +557,41 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
 
                                     {/* Read-Only Mode */}
                                     <div>
-                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">Access Control</h3>
+                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                                            Access Control
+                                        </h3>
                                         <div className="flex items-center justify-between px-3 py-3 rounded-lg hover:bg-zinc-800/50 transition-colors">
                                             <div className="flex items-center gap-3">
-                                                <span className="text-lg">🔒</span>
+                                                <span className="text-lg">
+                                                    🔒
+                                                </span>
                                                 <div>
-                                                    <p className="text-sm font-medium text-white">Read-Only Mode</p>
-                                                    <p className="text-xs text-zinc-500">Only admins & mods can post</p>
+                                                    <p className="text-sm font-medium text-white">
+                                                        Read-Only Mode
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        Only admins & mods can
+                                                        post
+                                                    </p>
                                                 </div>
                                             </div>
                                             <button
-                                                onClick={() => handleReadOnly(!rules?.read_only)}
+                                                onClick={() =>
+                                                    handleReadOnly(
+                                                        !rules?.read_only,
+                                                    )
+                                                }
                                                 className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
-                                                    rules?.read_only ? "bg-[#FF5500]" : "bg-zinc-700"
+                                                    rules?.read_only
+                                                        ? "bg-[#FF5500]"
+                                                        : "bg-zinc-700"
                                                 }`}
                                             >
                                                 <span
                                                     className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
-                                                        rules?.read_only ? "translate-x-5" : "translate-x-0"
+                                                        rules?.read_only
+                                                            ? "translate-x-5"
+                                                            : "translate-x-0"
                                                     }`}
                                                 />
                                             </button>
@@ -225,17 +600,25 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
 
                                     {/* Slow Mode */}
                                     <div>
-                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">Slow Mode</h3>
+                                        <h3 className="text-sm font-medium text-zinc-300 mb-3">
+                                            Slow Mode
+                                        </h3>
                                         <p className="text-xs text-zinc-500 mb-3 px-3">
-                                            Limit how often users can send messages
+                                            Limit how often users can send
+                                            messages
                                         </p>
                                         <div className="flex flex-wrap gap-2 px-3">
                                             {SLOW_MODE_OPTIONS.map((option) => (
                                                 <button
                                                     key={option.value}
-                                                    onClick={() => handleSlowMode(option.value)}
+                                                    onClick={() =>
+                                                        handleSlowMode(
+                                                            option.value,
+                                                        )
+                                                    }
                                                     className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                                                        (rules?.slow_mode_seconds || 0) === option.value
+                                                        (rules?.slow_mode_seconds ||
+                                                            0) === option.value
                                                             ? "bg-[#FF5500] text-white"
                                                             : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                                                     }`}
@@ -251,36 +634,54 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                 <div className="p-4 space-y-4">
                                     {/* Ban a user */}
                                     <div className="bg-zinc-800/50 rounded-xl p-4 space-y-3">
-                                        <h3 className="text-sm font-medium text-zinc-300">Ban a User</h3>
+                                        <h3 className="text-sm font-medium text-zinc-300">
+                                            Ban a User
+                                        </h3>
                                         <input
                                             type="text"
                                             placeholder="User address (0x...)"
                                             value={banAddress}
-                                            onChange={(e) => setBanAddress(e.target.value)}
+                                            onChange={(e) =>
+                                                setBanAddress(e.target.value)
+                                            }
                                             className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
                                         />
                                         <input
                                             type="text"
                                             placeholder="Reason (optional)"
                                             value={banReason}
-                                            onChange={(e) => setBanReason(e.target.value)}
+                                            onChange={(e) =>
+                                                setBanReason(e.target.value)
+                                            }
                                             className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-[#FF5500]"
                                         />
                                         <div className="flex gap-2">
                                             <select
                                                 value={banDuration}
-                                                onChange={(e) => setBanDuration(e.target.value)}
+                                                onChange={(e) =>
+                                                    setBanDuration(
+                                                        e.target.value,
+                                                    )
+                                                }
                                                 className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-[#FF5500]"
                                             >
-                                                {BAN_DURATION_OPTIONS.map((opt) => (
-                                                    <option key={opt.value} value={opt.value}>
-                                                        {opt.label}
-                                                    </option>
-                                                ))}
+                                                {BAN_DURATION_OPTIONS.map(
+                                                    (opt) => (
+                                                        <option
+                                                            key={opt.value}
+                                                            value={opt.value}
+                                                        >
+                                                            {opt.label}
+                                                        </option>
+                                                    ),
+                                                )}
                                             </select>
                                             <button
                                                 onClick={handleBanUser}
-                                                disabled={!banAddress.trim() || isBanning}
+                                                disabled={
+                                                    !banAddress.trim() ||
+                                                    isBanning
+                                                }
                                                 className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 text-white text-sm font-medium rounded-lg transition-colors"
                                             >
                                                 {isBanning ? "..." : "Ban"}
@@ -298,7 +699,9 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                                 <div className="w-5 h-5 border-2 border-zinc-600 border-t-white rounded-full animate-spin" />
                                             </div>
                                         ) : bans.length === 0 ? (
-                                            <p className="text-sm text-zinc-500 text-center py-4">No active bans</p>
+                                            <p className="text-sm text-zinc-500 text-center py-4">
+                                                No active bans
+                                            </p>
                                         ) : (
                                             <div className="space-y-2">
                                                 {bans.map((ban) => (
@@ -308,11 +711,22 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                                     >
                                                         <div className="min-w-0 flex-1">
                                                             <p className="text-sm text-white font-mono truncate">
-                                                                {ban.user_address.slice(0, 6)}...{ban.user_address.slice(-4)}
+                                                                {ban.user_address.slice(
+                                                                    0,
+                                                                    6,
+                                                                )}
+                                                                ...
+                                                                {ban.user_address.slice(
+                                                                    -4,
+                                                                )}
                                                             </p>
                                                             <div className="flex items-center gap-2 mt-0.5">
                                                                 {ban.reason && (
-                                                                    <p className="text-xs text-zinc-500 truncate">{ban.reason}</p>
+                                                                    <p className="text-xs text-zinc-500 truncate">
+                                                                        {
+                                                                            ban.reason
+                                                                        }
+                                                                    </p>
                                                                 )}
                                                                 <p className="text-xs text-zinc-600">
                                                                     {ban.banned_until
@@ -322,7 +736,11 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                                                             </div>
                                                         </div>
                                                         <button
-                                                            onClick={() => unbanUser(ban.user_address)}
+                                                            onClick={() =>
+                                                                unbanUser(
+                                                                    ban.user_address,
+                                                                )
+                                                            }
                                                             className="ml-2 px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-lg transition-colors shrink-0"
                                                         >
                                                             Unban
@@ -339,6 +757,6 @@ export function ChatRulesPanel({ isOpen, onClose, chatType, chatId, chatName }: 
                 </>
             )}
         </AnimatePresence>,
-        document.body
+        document.body,
     );
 }

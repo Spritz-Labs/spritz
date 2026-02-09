@@ -5,9 +5,10 @@ import { getAuthenticatedUser } from "@/lib/session";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const supabase = supabaseUrl && supabaseServiceKey
-    ? createClient(supabaseUrl, supabaseServiceKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseServiceKey
+        ? createClient(supabaseUrl, supabaseServiceKey)
+        : null;
 
 export type ChatRules = {
     id: string;
@@ -23,12 +24,16 @@ export type ChatRules = {
     slow_mode_seconds: number;
     read_only: boolean;
     max_message_length: number;
+    rules_text: string | null;
     updated_by: string | null;
     updated_at: string;
 };
 
 // Default rules (everything allowed)
-const DEFAULT_CHAT_RULES: Omit<ChatRules, "id" | "chat_type" | "chat_id" | "updated_by" | "updated_at"> = {
+const DEFAULT_CHAT_RULES: Omit<
+    ChatRules,
+    "id" | "chat_type" | "chat_id" | "updated_by" | "updated_at"
+> = {
     links_allowed: true,
     photos_allowed: true,
     pixel_art_allowed: true,
@@ -39,12 +44,16 @@ const DEFAULT_CHAT_RULES: Omit<ChatRules, "id" | "chat_type" | "chat_id" | "upda
     slow_mode_seconds: 0,
     read_only: false,
     max_message_length: 0,
+    rules_text: null,
 };
 
 // GET /api/chat-rules?chatType=channel&chatId=xxx
 export async function GET(request: NextRequest) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     const { searchParams } = new URL(request.url);
@@ -52,7 +61,10 @@ export async function GET(request: NextRequest) {
     const chatId = searchParams.get("chatId"); // null for alpha
 
     if (!chatType) {
-        return NextResponse.json({ error: "chatType required" }, { status: 400 });
+        return NextResponse.json(
+            { error: "chatType required" },
+            { status: 400 },
+        );
     }
 
     try {
@@ -71,7 +83,10 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error("[ChatRules] Fetch error:", error);
-            return NextResponse.json({ error: "Failed to fetch rules" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to fetch rules" },
+                { status: 500 },
+            );
         }
 
         // Return rules or defaults
@@ -98,35 +113,59 @@ export async function GET(request: NextRequest) {
 // POST /api/chat-rules - Update rules (admin/moderator only)
 export async function POST(request: NextRequest) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     try {
         const session = await getAuthenticatedUser(request);
         if (!session?.userAddress) {
-            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
         }
 
         const body = await request.json();
         const { chatType, chatId, rules } = body;
 
         if (!chatType) {
-            return NextResponse.json({ error: "chatType required" }, { status: 400 });
+            return NextResponse.json(
+                { error: "chatType required" },
+                { status: 400 },
+            );
         }
 
         const userAddress = session.userAddress.toLowerCase();
 
         // Check if user is admin or has moderator permissions
-        const isAuthorized = await checkRulesPermission(userAddress, chatType, chatId);
+        const isAuthorized = await checkRulesPermission(
+            userAddress,
+            chatType,
+            chatId,
+        );
         if (!isAuthorized) {
-            return NextResponse.json({ error: "Not authorized to manage room rules" }, { status: 403 });
+            return NextResponse.json(
+                { error: "Not authorized to manage room rules" },
+                { status: 403 },
+            );
         }
 
         // Validate rule fields
         const allowedFields = [
-            "links_allowed", "photos_allowed", "pixel_art_allowed", "gifs_allowed",
-            "polls_allowed", "location_sharing_allowed", "voice_allowed",
-            "slow_mode_seconds", "read_only", "max_message_length",
+            "links_allowed",
+            "photos_allowed",
+            "pixel_art_allowed",
+            "gifs_allowed",
+            "polls_allowed",
+            "location_sharing_allowed",
+            "voice_allowed",
+            "slow_mode_seconds",
+            "read_only",
+            "max_message_length",
+            "rules_text",
         ];
 
         const updateData: Record<string, unknown> = {
@@ -151,7 +190,10 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             console.error("[ChatRules] Update error:", error);
-            return NextResponse.json({ error: "Failed to update rules" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to update rules" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({ success: true, rules: data });
@@ -165,7 +207,7 @@ export async function POST(request: NextRequest) {
 async function checkRulesPermission(
     userAddress: string,
     chatType: string,
-    chatId: string | null
+    chatId: string | null,
 ): Promise<boolean> {
     if (!supabase) return false;
 

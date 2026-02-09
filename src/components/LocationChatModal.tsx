@@ -21,8 +21,10 @@ import {
     type LocationData,
 } from "./LocationMessage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
-import { ChatRulesPanel } from "./ChatRulesPanel";
-import { useChatRules } from "@/hooks/useChatRules";
+import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
+import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { useModeration } from "@/hooks/useModeration";
+import { QuickMuteDialog } from "./ModerationPanel";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { LinkPreview, detectUrls } from "./LinkPreview";
@@ -40,7 +42,11 @@ import { ChatMembersList } from "./ChatMembersList";
 import { MentionInput, type MentionUser } from "./MentionInput";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
-import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
+import {
+    AgentMarkdown,
+    AgentMessageWrapper,
+    AgentThinkingIndicator,
+} from "./AgentMarkdown";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
@@ -51,7 +57,7 @@ type LocationChatModalProps = {
     locationChat: LocationChat;
     userAddress: string;
     getUserInfo?: (
-        address: string
+        address: string,
     ) => { name: string | null; avatar: string | null } | null;
     onOpenUserCard?: (address: string) => void;
 };
@@ -126,9 +132,21 @@ export function LocationChatModal({
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [showRulesPanel, setShowRulesPanel] = useState(false);
     const { rules: chatRules } = useChatRules("location", locationChat.id);
+    const roomBans = useRoomBans("location", locationChat.id);
+    const moderation = useModeration(userAddress, locationChat.id);
+    const [selectedUser, setSelectedUser] = useState<string | null>(null);
+    const [userPopupPosition, setUserPopupPosition] = useState<{
+        x: number;
+        y: number;
+    } | null>(null);
+    const [muteTarget, setMuteTarget] = useState<{
+        address: string;
+        name: string;
+    } | null>(null);
+    const [banningUser, setBanningUser] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [replyingTo, setReplyingTo] = useState<LocationChatMessage | null>(
-        null
+        null,
     );
     const [selectedMessage, setSelectedMessage] =
         useState<MessageActionConfig | null>(null);
@@ -160,12 +178,14 @@ export function LocationChatModal({
     const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
     const messages = useMemo(
         () => rawMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
-        [rawMessages, isUserBlocked]
+        [rawMessages, isUserBlocked],
     );
 
     // Admin check: global admin or chat creator
     const { isAdmin: isGlobalAdmin } = useAdminCheck(userAddress);
-    const isChatCreator = locationChat.creator_address?.toLowerCase() === userAddress?.toLowerCase();
+    const isChatCreator =
+        locationChat.creator_address?.toLowerCase() ===
+        userAddress?.toLowerCase();
     const canModerateChat = isGlobalAdmin || isChatCreator;
 
     // Message reactions hook (using location chat id as conversation_id)
@@ -188,7 +208,9 @@ export function LocationChatModal({
     useEffect(() => {
         async function fetchAgents() {
             try {
-                const res = await fetch(`/api/channels/${locationChat.id}/agents`);
+                const res = await fetch(
+                    `/api/channels/${locationChat.id}/agents`,
+                );
                 if (res.ok) {
                     const data = await res.json();
                     const agents: MentionUser[] = (data.agents || []).map(
@@ -198,7 +220,7 @@ export function LocationChatModal({
                             avatar: agent.avatar_url || null,
                             avatarEmoji: agent.avatar_emoji,
                             isAgent: true,
-                        })
+                        }),
                     );
                     setLocationAgents(agents);
                 }
@@ -242,7 +264,10 @@ export function LocationChatModal({
 
     // Cache agent info (name, avatar) for agent messages
     const [agentInfoCache, setAgentInfoCache] = useState<
-        Map<string, { name: string; avatar_url?: string; avatar_emoji?: string }>
+        Map<
+            string,
+            { name: string; avatar_url?: string; avatar_emoji?: string }
+        >
     >(new Map());
 
     useEffect(() => {
@@ -272,7 +297,9 @@ export function LocationChatModal({
                 }
             } catch {
                 // Fallback — check locationAgents list
-                const localAgent = locationAgents.find((a) => a.address === agentId);
+                const localAgent = locationAgents.find(
+                    (a) => a.address === agentId,
+                );
                 if (localAgent) {
                     setAgentInfoCache((prev) => {
                         const next = new Map(prev);
@@ -380,7 +407,11 @@ export function LocationChatModal({
             let match;
             while ((match = mentionRegex.exec(content)) !== null) {
                 const mentionId = match[2];
-                if (mentionId && !mentionId.startsWith("0x") && !mentionId.startsWith("00")) {
+                if (
+                    mentionId &&
+                    !mentionId.startsWith("0x") &&
+                    !mentionId.startsWith("00")
+                ) {
                     mentionedAgents.push({ id: mentionId, name: match[1] });
                 }
             }
@@ -388,7 +419,9 @@ export function LocationChatModal({
             if (mentionedAgents.length > 0) {
                 setThinkingAgents((prev) => [
                     ...prev,
-                    ...mentionedAgents.filter((a) => !prev.some((p) => p.id === a.id)),
+                    ...mentionedAgents.filter(
+                        (a) => !prev.some((p) => p.id === a.id),
+                    ),
                 ]);
             }
 
@@ -403,24 +436,34 @@ export function LocationChatModal({
                 }),
             })
                 .catch((err) =>
-                    console.error("[LocationChat] Agent response error:", err)
+                    console.error("[LocationChat] Agent response error:", err),
                 )
                 .finally(() => {
                     if (mentionedAgents.length > 0) {
                         setThinkingAgents((prev) =>
-                            prev.filter((a) => !mentionedAgents.some((m) => m.id === a.id))
+                            prev.filter(
+                                (a) =>
+                                    !mentionedAgents.some((m) => m.id === a.id),
+                            ),
                         );
                     }
                 });
         }
-    }, [newMessage, isSending, sendMessage, replyingTo, userAddress, locationChat.id]);
+    }, [
+        newMessage,
+        isSending,
+        sendMessage,
+        replyingTo,
+        userAddress,
+        locationChat.id,
+    ]);
 
     // Handle GIF sending
     const handleSendGif = useCallback(
         async (gifUrl: string) => {
             await sendMessage(gifUrl, "gif");
         },
-        [sendMessage]
+        [sendMessage],
     );
 
     // Handle pixel art sending
@@ -449,7 +492,7 @@ export function LocationChatModal({
                 setIsUploading(false);
             }
         },
-        [sendMessage]
+        [sendMessage],
     );
 
     // Handle sharing location
@@ -458,7 +501,7 @@ export function LocationChatModal({
             const content = formatLocationMessage(location);
             sendMessage(content, "location");
         },
-        [sendMessage]
+        [sendMessage],
     );
 
     // Handle share invite link
@@ -509,7 +552,7 @@ export function LocationChatModal({
             });
             setShowMessageActions(true);
         },
-        [userAddress, canModerateChat]
+        [userAddress, canModerateChat],
     );
 
     // Message action callbacks
@@ -519,7 +562,7 @@ export function LocationChatModal({
             : undefined,
         onReply: () => {
             const msg = messages.find(
-                (m) => m.id === selectedMessage?.messageId
+                (m) => m.id === selectedMessage?.messageId,
             );
             if (msg) {
                 setReplyingTo(msg);
@@ -651,7 +694,7 @@ export function LocationChatModal({
                                     <span className="text-xs text-amber-400 flex items-center gap-1 px-1">
                                         ⭐{" "}
                                         {displayChat.google_place_rating.toFixed(
-                                            1
+                                            1,
                                         )}
                                     </span>
                                 )}
@@ -661,8 +704,18 @@ export function LocationChatModal({
                                         className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                                         aria-label="Room rules"
                                     >
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                        <svg
+                                            className="w-5 h-5"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+                                            />
                                         </svg>
                                     </button>
                                 )}
@@ -756,7 +809,7 @@ export function LocationChatModal({
                                                             <span className="text-xs text-zinc-300 capitalize">
                                                                 {displayChat.google_place_types[0].replace(
                                                                     /_/g,
-                                                                    " "
+                                                                    " ",
                                                                 )}
                                                             </span>
                                                         )}
@@ -769,7 +822,7 @@ export function LocationChatModal({
                                                         </span>
                                                         <span className="text-white font-semibold text-sm">
                                                             {displayChat.google_place_rating.toFixed(
-                                                                1
+                                                                1,
                                                             )}
                                                         </span>
                                                         {displayChat.google_place_user_ratings_total && (
@@ -781,7 +834,7 @@ export function LocationChatModal({
                                                                           displayChat.google_place_user_ratings_total /
                                                                           1000
                                                                       ).toFixed(
-                                                                          1
+                                                                          1,
                                                                       )}k`
                                                                     : displayChat.google_place_user_ratings_total}
                                                                 )
@@ -905,10 +958,10 @@ export function LocationChatModal({
                                                                 </p>
                                                                 <p className="text-sm text-zinc-200 truncate group-hover:text-blue-400 transition-colors">
                                                                     {new URL(
-                                                                        displayChat.google_place_website
+                                                                        displayChat.google_place_website,
                                                                     ).hostname.replace(
                                                                         "www.",
-                                                                        ""
+                                                                        "",
                                                                     )}
                                                                 </p>
                                                             </div>
@@ -957,51 +1010,51 @@ export function LocationChatModal({
                                                         <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
                                                             <p className="text-2xl">
                                                                 {displayChat.google_place_types[0]?.includes(
-                                                                    "restaurant"
+                                                                    "restaurant",
                                                                 )
                                                                     ? "🍽️"
                                                                     : displayChat.google_place_types[0]?.includes(
-                                                                          "cafe"
-                                                                      )
-                                                                    ? "☕"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "bar"
-                                                                      )
-                                                                    ? "🍺"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "hotel"
-                                                                      )
-                                                                    ? "🏨"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "park"
-                                                                      )
-                                                                    ? "🌳"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "museum"
-                                                                      )
-                                                                    ? "🏛️"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "store"
-                                                                      )
-                                                                    ? "🛍️"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "gym"
-                                                                      )
-                                                                    ? "💪"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "airport"
-                                                                      )
-                                                                    ? "✈️"
-                                                                    : displayChat.google_place_types[0]?.includes(
-                                                                          "hospital"
-                                                                      )
-                                                                    ? "🏥"
-                                                                    : "📍"}
+                                                                            "cafe",
+                                                                        )
+                                                                      ? "☕"
+                                                                      : displayChat.google_place_types[0]?.includes(
+                                                                              "bar",
+                                                                          )
+                                                                        ? "🍺"
+                                                                        : displayChat.google_place_types[0]?.includes(
+                                                                                "hotel",
+                                                                            )
+                                                                          ? "🏨"
+                                                                          : displayChat.google_place_types[0]?.includes(
+                                                                                  "park",
+                                                                              )
+                                                                            ? "🌳"
+                                                                            : displayChat.google_place_types[0]?.includes(
+                                                                                    "museum",
+                                                                                )
+                                                                              ? "🏛️"
+                                                                              : displayChat.google_place_types[0]?.includes(
+                                                                                      "store",
+                                                                                  )
+                                                                                ? "🛍️"
+                                                                                : displayChat.google_place_types[0]?.includes(
+                                                                                        "gym",
+                                                                                    )
+                                                                                  ? "💪"
+                                                                                  : displayChat.google_place_types[0]?.includes(
+                                                                                          "airport",
+                                                                                      )
+                                                                                    ? "✈️"
+                                                                                    : displayChat.google_place_types[0]?.includes(
+                                                                                            "hospital",
+                                                                                        )
+                                                                                      ? "🏥"
+                                                                                      : "📍"}
                                                             </p>
                                                             <p className="text-xs text-zinc-500 capitalize truncate">
                                                                 {displayChat.google_place_types[0]?.replace(
                                                                     /_/g,
-                                                                    " "
+                                                                    " ",
                                                                 )}
                                                             </p>
                                                         </div>
@@ -1052,7 +1105,7 @@ export function LocationChatModal({
                                                 <button
                                                     onClick={() =>
                                                         leaveChat().then(() =>
-                                                            onClose()
+                                                            onClose(),
                                                         )
                                                     }
                                                     className="py-3 px-4 bg-zinc-800 hover:bg-red-500/20 hover:text-red-400 text-zinc-400 text-sm font-medium rounded-xl transition-all border border-zinc-700 hover:border-red-500/50"
@@ -1065,6 +1118,12 @@ export function LocationChatModal({
                                 </motion.div>
                             )}
                         </AnimatePresence>
+
+                        {/* Room Rules Banner */}
+                        <ChatRulesBanner
+                            chatType="location"
+                            chatId={locationChat.id}
+                        />
 
                         {/* Messages */}
                         <div
@@ -1092,14 +1151,14 @@ export function LocationChatModal({
 
                                     // Check message types
                                     const isLocation = isLocationMessage(
-                                        msg.content
+                                        msg.content,
                                     );
                                     const locationData = isLocation
                                         ? parseLocationMessage(msg.content)
                                         : null;
                                     const isGif = isGifMessage(msg.content);
                                     const isPixelArt = isPixelArtMessage(
-                                        msg.content
+                                        msg.content,
                                     );
                                     const pixelArtUrl = isPixelArt
                                         ? extractPixelArtUrl(msg.content)
@@ -1109,8 +1168,12 @@ export function LocationChatModal({
                                             ? detectUrls(msg.content)
                                             : [];
 
-                                    const isAgent = isAgentMessage(msg.sender_address);
-                                    const agentEmoji = getAgentEmoji(msg.sender_address);
+                                    const isAgent = isAgentMessage(
+                                        msg.sender_address,
+                                    );
+                                    const agentEmoji = getAgentEmoji(
+                                        msg.sender_address,
+                                    );
 
                                     return (
                                         <div
@@ -1124,9 +1187,15 @@ export function LocationChatModal({
                                                 isAgent ? (
                                                     // Agent avatar - not clickable, with purple ring
                                                     <div className="flex-shrink-0 relative">
-                                                        {getAvatar(msg.sender_address) ? (
+                                                        {getAvatar(
+                                                            msg.sender_address,
+                                                        ) ? (
                                                             <img
-                                                                src={getAvatar(msg.sender_address)!}
+                                                                src={
+                                                                    getAvatar(
+                                                                        msg.sender_address,
+                                                                    )!
+                                                                }
                                                                 alt=""
                                                                 className="w-8 h-8 rounded-full object-cover ring-2 ring-purple-500/50"
                                                             />
@@ -1140,24 +1209,54 @@ export function LocationChatModal({
                                                             </div>
                                                         )}
                                                         <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-purple-600 rounded-full flex items-center justify-center border-2 border-zinc-900">
-                                                            <svg className="w-2 h-2 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
+                                                            <svg
+                                                                className="w-2 h-2 text-white"
+                                                                fill="currentColor"
+                                                                viewBox="0 0 24 24"
+                                                            >
+                                                                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                                                            </svg>
                                                         </span>
                                                     </div>
                                                 ) : (
                                                     <button
-                                                        onClick={() =>
-                                                            onOpenUserCard?.(
-                                                                msg.sender_address
-                                                            )
-                                                        }
+                                                        onClick={(e) => {
+                                                            if (
+                                                                moderation
+                                                                    .permissions
+                                                                    .canMute ||
+                                                                moderation
+                                                                    .permissions
+                                                                    .isAdmin
+                                                            ) {
+                                                                const rect = (
+                                                                    e.target as HTMLElement
+                                                                ).getBoundingClientRect();
+                                                                setUserPopupPosition(
+                                                                    {
+                                                                        x:
+                                                                            rect.right +
+                                                                            8,
+                                                                        y: rect.top,
+                                                                    },
+                                                                );
+                                                                setSelectedUser(
+                                                                    msg.sender_address,
+                                                                );
+                                                            } else {
+                                                                onOpenUserCard?.(
+                                                                    msg.sender_address,
+                                                                );
+                                                            }
+                                                        }}
                                                         className="flex-shrink-0"
                                                     >
                                                         <AvatarWithStatus
                                                             name={getDisplayName(
-                                                                msg.sender_address
+                                                                msg.sender_address,
                                                             )}
                                                             src={getAvatar(
-                                                                msg.sender_address
+                                                                msg.sender_address,
                                                             )}
                                                             size="sm"
                                                         />
@@ -1175,11 +1274,14 @@ export function LocationChatModal({
                                                 } max-w-[75%]`}
                                             >
                                                 {/* Sender name */}
-                                                {showAvatar && !isOwn && (
-                                                    isAgent ? (
+                                                {showAvatar &&
+                                                    !isOwn &&
+                                                    (isAgent ? (
                                                         <div className="flex items-center gap-1.5 mb-1 ml-1">
                                                             <span className="text-xs text-purple-300 font-medium">
-                                                                {getDisplayName(msg.sender_address)}
+                                                                {getDisplayName(
+                                                                    msg.sender_address,
+                                                                )}
                                                             </span>
                                                             <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-medium border border-purple-500/30">
                                                                 AI
@@ -1188,11 +1290,10 @@ export function LocationChatModal({
                                                     ) : (
                                                         <span className="text-xs text-zinc-500 mb-1 ml-1">
                                                             {getDisplayName(
-                                                                msg.sender_address
+                                                                msg.sender_address,
                                                             )}
                                                         </span>
-                                                    )
-                                                )}
+                                                    ))}
 
                                                 {/* Reply Preview */}
                                                 {msg.reply_to_message && (
@@ -1229,7 +1330,7 @@ export function LocationChatModal({
                                                                 {getDisplayName(
                                                                     msg
                                                                         .reply_to_message
-                                                                        .sender_address
+                                                                        .sender_address,
                                                                 )}
                                                             </span>
                                                         </div>
@@ -1304,8 +1405,18 @@ export function LocationChatModal({
                                                     ) : isAgent ? (
                                                         /* Agent message - rich markdown */
                                                         <div className="px-4 py-2.5 rounded-2xl rounded-bl-md min-w-0 overflow-hidden bg-gradient-to-br from-purple-950/60 to-zinc-800 border border-purple-500/20">
-                                                            <AgentMessageWrapper content={msg.content} theme="channel">
-                                                                <AgentMarkdown content={msg.content} theme="channel" />
+                                                            <AgentMessageWrapper
+                                                                content={
+                                                                    msg.content
+                                                                }
+                                                                theme="channel"
+                                                            >
+                                                                <AgentMarkdown
+                                                                    content={
+                                                                        msg.content
+                                                                    }
+                                                                    theme="channel"
+                                                                />
                                                             </AgentMessageWrapper>
                                                         </div>
                                                     ) : (
@@ -1317,14 +1428,29 @@ export function LocationChatModal({
                                                                     : "bg-zinc-800 text-white rounded-bl-md"
                                                             }`}
                                                         >
-                                                            {hasMarkdown(msg.content) ? (
-                                                                <ChatMarkdown content={msg.content} isOwnMessage={isOwn} />
+                                                            {hasMarkdown(
+                                                                msg.content,
+                                                            ) ? (
+                                                                <ChatMarkdown
+                                                                    content={
+                                                                        msg.content
+                                                                    }
+                                                                    isOwnMessage={
+                                                                        isOwn
+                                                                    }
+                                                                />
                                                             ) : (
                                                                 <div className="text-sm whitespace-pre-wrap break-words">
                                                                     <MentionText
-                                                                        text={msg.content}
-                                                                        currentUserAddress={userAddress}
-                                                                        onMentionClick={onOpenUserCard}
+                                                                        text={
+                                                                            msg.content
+                                                                        }
+                                                                        currentUserAddress={
+                                                                            userAddress
+                                                                        }
+                                                                        onMentionClick={
+                                                                            onOpenUserCard
+                                                                        }
                                                                     />
                                                                 </div>
                                                             )}
@@ -1335,11 +1461,11 @@ export function LocationChatModal({
                                                                     {urls
                                                                         .slice(
                                                                             0,
-                                                                            1
+                                                                            1,
                                                                         )
                                                                         .map(
                                                                             (
-                                                                                url
+                                                                                url,
                                                                             ) => (
                                                                                 <LinkPreview
                                                                                     key={
@@ -1349,7 +1475,7 @@ export function LocationChatModal({
                                                                                         url
                                                                                     }
                                                                                 />
-                                                                            )
+                                                                            ),
                                                                         )}
                                                                 </div>
                                                             )}
@@ -1366,7 +1492,7 @@ export function LocationChatModal({
                                                     onReaction={(emoji) => {
                                                         toggleMsgReaction(
                                                             msg.id,
-                                                            emoji
+                                                            emoji,
                                                         );
                                                     }}
                                                     isOwnMessage={isOwn}
@@ -1375,7 +1501,7 @@ export function LocationChatModal({
                                                 {/* Time */}
                                                 <span className="text-[10px] text-zinc-600 mt-1 mx-1">
                                                     {formatMessageTime(
-                                                        msg.created_at
+                                                        msg.created_at,
                                                     )}
                                                 </span>
                                             </div>
@@ -1417,23 +1543,23 @@ export function LocationChatModal({
                                             <p className="text-xs text-[#FF5500] font-medium">
                                                 Replying to{" "}
                                                 {getDisplayName(
-                                                    replyingTo.sender_address
+                                                    replyingTo.sender_address,
                                                 )}
                                             </p>
                                             <p className="text-xs text-zinc-400 truncate">
                                                 {isGifMessage(
-                                                    replyingTo.content
+                                                    replyingTo.content,
                                                 )
                                                     ? "GIF"
                                                     : isPixelArtMessage(
-                                                          replyingTo.content
-                                                      )
-                                                    ? "Pixel Art"
-                                                    : isLocationMessage(
-                                                          replyingTo.content
-                                                      )
-                                                    ? "Location"
-                                                    : replyingTo.content}
+                                                            replyingTo.content,
+                                                        )
+                                                      ? "Pixel Art"
+                                                      : isLocationMessage(
+                                                              replyingTo.content,
+                                                          )
+                                                        ? "Location"
+                                                        : replyingTo.content}
                                             </p>
                                         </div>
                                         <button
@@ -1588,7 +1714,253 @@ export function LocationChatModal({
                 chatId={locationChat.id}
                 chatName={locationChat.name}
             />
+
+            {/* User Popup with Mute/Ban for Admins/Mods */}
+            {selectedUser && userPopupPosition && (
+                <>
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 0.5 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[99]"
+                        onClick={() => setSelectedUser(null)}
+                    />
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="fixed z-[100] bg-zinc-800 border border-zinc-700 rounded-xl shadow-2xl p-3 min-w-[220px] max-w-[280px]"
+                        style={{
+                            left: Math.min(
+                                userPopupPosition.x,
+                                typeof window !== "undefined"
+                                    ? window.innerWidth - 290
+                                    : 0,
+                            ),
+                            top: userPopupPosition.y,
+                        }}
+                    >
+                        {(() => {
+                            const userInfo = getUserInfo?.(selectedUser);
+                            const isMuted =
+                                moderation.isUserMuted(selectedUser);
+                            return (
+                                <>
+                                    <div className="flex items-center gap-3 mb-3 pb-3 border-b border-zinc-700">
+                                        {userInfo?.avatar ? (
+                                            <img
+                                                src={userInfo.avatar}
+                                                alt=""
+                                                className="w-10 h-10 rounded-full"
+                                            />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
+                                                {(
+                                                    userInfo?.name ||
+                                                    selectedUser
+                                                )
+                                                    .slice(0, 2)
+                                                    .toUpperCase()}
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-white font-medium text-sm truncate">
+                                                {userInfo?.name ||
+                                                    `${selectedUser.slice(0, 6)}...${selectedUser.slice(-4)}`}
+                                            </p>
+                                            <p className="text-zinc-500 text-xs truncate font-mono">
+                                                {selectedUser.slice(0, 10)}...
+                                                {selectedUser.slice(-6)}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        onClick={() => {
+                                            onOpenUserCard?.(selectedUser);
+                                            setSelectedUser(null);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm transition-colors"
+                                    >
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                            />
+                                        </svg>
+                                        View Profile
+                                    </button>
+
+                                    {moderation.permissions.canMute &&
+                                        selectedUser.toLowerCase() !==
+                                            userAddress.toLowerCase() &&
+                                        (isMuted ? (
+                                            <button
+                                                onClick={async () => {
+                                                    await moderation.unmuteUser(
+                                                        selectedUser,
+                                                    );
+                                                    setSelectedUser(null);
+                                                }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
+                                            >
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                    />
+                                                </svg>
+                                                Unmute User
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => {
+                                                    setMuteTarget({
+                                                        address: selectedUser,
+                                                        name:
+                                                            userInfo?.name ||
+                                                            selectedUser.slice(
+                                                                0,
+                                                                10,
+                                                            ),
+                                                    });
+                                                    setSelectedUser(null);
+                                                }}
+                                                className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
+                                            >
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                                                    />
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                                                    />
+                                                </svg>
+                                                Mute User
+                                            </button>
+                                        ))}
+
+                                    {(moderation.permissions.canMute ||
+                                        moderation.permissions.isAdmin) &&
+                                        selectedUser.toLowerCase() !==
+                                            userAddress.toLowerCase() && (
+                                            <button
+                                                onClick={async () => {
+                                                    setBanningUser(
+                                                        selectedUser,
+                                                    );
+                                                    await roomBans.banUser(
+                                                        selectedUser,
+                                                        {
+                                                            reason: "Banned by moderator",
+                                                        },
+                                                    );
+                                                    setBanningUser(null);
+                                                    setSelectedUser(null);
+                                                }}
+                                                disabled={
+                                                    banningUser === selectedUser
+                                                }
+                                                className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors disabled:opacity-50"
+                                            >
+                                                {banningUser ===
+                                                selectedUser ? (
+                                                    <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                                                ) : (
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+                                                        />
+                                                    </svg>
+                                                )}
+                                                Ban from Chat
+                                            </button>
+                                        )}
+
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(
+                                                selectedUser,
+                                            );
+                                            setSelectedUser(null);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
+                                    >
+                                        <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                            />
+                                        </svg>
+                                        Copy Address
+                                    </button>
+                                </>
+                            );
+                        })()}
+                    </motion.div>
+                </>
+            )}
+
+            {/* Quick Mute Dialog */}
+            {muteTarget && (
+                <QuickMuteDialog
+                    isOpen={!!muteTarget}
+                    onClose={() => setMuteTarget(null)}
+                    targetAddress={muteTarget.address}
+                    targetName={muteTarget.name}
+                    onMute={async (duration: string, reason?: string) => {
+                        if (!muteTarget) return false;
+                        const success = await moderation.muteUser(muteTarget.address, {
+                            duration,
+                            reason,
+                        });
+                        if (success) setMuteTarget(null);
+                        return success;
+                    }}
+                />
+            )}
         </AnimatePresence>,
-        document.body
+        document.body,
     );
 }
