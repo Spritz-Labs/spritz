@@ -154,15 +154,27 @@ export function useAlphaChat(
                 return;
             }
 
-            // Get messages with reply_to data
-            // Order descending first to get newest, then reverse for display
-            const { data: messagesDesc, error: messagesError } = await client
-                .from("shout_alpha_messages")
-                .select(
-                    "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
-                )
-                .order("created_at", { ascending: false })
-                .limit(PAGE_SIZE);
+            // Fetch messages and pinned messages in parallel for faster loading
+            const [messagesResult, pinnedResult] = await Promise.all([
+                client
+                    .from("shout_alpha_messages")
+                    .select(
+                        "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                    )
+                    .order("created_at", { ascending: false })
+                    .limit(PAGE_SIZE),
+                client
+                    .from("shout_alpha_messages")
+                    .select(
+                        "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
+                    )
+                    .eq("is_pinned", true)
+                    .order("pinned_at", { ascending: false })
+                    .limit(20),
+            ]);
+
+            const { data: messagesDesc, error: messagesError } = messagesResult;
+            const { data: pinnedData, error: pinnedError } = pinnedResult;
 
             // Reverse to get chronological order for display
             const messages = messagesDesc?.reverse() || [];
@@ -174,16 +186,6 @@ export function useAlphaChat(
                     messagesError
                 );
             }
-
-            // Get pinned messages
-            const { data: pinnedData, error: pinnedError } = await client
-                .from("shout_alpha_messages")
-                .select(
-                    "*, reply_to:reply_to_id(id, sender_address, content, message_type)"
-                )
-                .eq("is_pinned", true)
-                .order("pinned_at", { ascending: false });
-
             if (pinnedError) {
                 console.error(
                     "[AlphaChat] Pinned messages query error:",
@@ -191,12 +193,6 @@ export function useAlphaChat(
                 );
             }
             const pinnedMessages = pinnedData || [];
-
-            console.log(
-                "[AlphaChat] Loaded",
-                messages?.length || 0,
-                "messages"
-            );
 
             // Get reactions for these messages
             const messageIds = messages?.map((m) => m.id) || [];

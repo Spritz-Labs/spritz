@@ -67,15 +67,19 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "Failed to fetch chats" }, { status: 500 });
         }
 
-        // Get the last message for each chat
+        // Get the last message for each chat (limit per chat to avoid fetching all messages)
+        const lastMessageMap = new Map<string, { content: string; created_at: string }>();
+        
+        // Fetch latest messages efficiently - get a small batch per chat
+        // Use a single query with limit proportional to number of chats
+        const msgLimit = Math.min(chatIds.length * 3, 100); // At most 3 messages per chat, capped at 100
         const { data: lastMessages, error: messagesError } = await supabase
             .from("shout_location_chat_messages")
             .select("location_chat_id, content, created_at")
             .in("location_chat_id", chatIds)
-            .order("created_at", { ascending: false });
+            .order("created_at", { ascending: false })
+            .limit(msgLimit);
 
-        // Group messages by location_chat_id and get the most recent
-        const lastMessageMap = new Map<string, { content: string; created_at: string }>();
         if (lastMessages && !messagesError) {
             for (const msg of lastMessages) {
                 if (!lastMessageMap.has(msg.location_chat_id)) {

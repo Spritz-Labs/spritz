@@ -849,11 +849,11 @@ export function useChannelMessages(
         };
     }, [channelId, supabase]);
 
-    // Poll for new messages every 5 seconds (fallback)
+    // Poll for new messages every 15 seconds (fallback for missed realtime events)
     useEffect(() => {
         if (!channelId) return;
 
-        const interval = setInterval(fetchMessages, 5000);
+        const interval = setInterval(fetchMessages, 15000);
         return () => clearInterval(interval);
     }, [channelId, fetchMessages]);
 

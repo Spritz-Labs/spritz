@@ -39,13 +39,13 @@ export async function GET(
                 return NextResponse.json({ error: "Failed to fetch members" }, { status: 500 });
             }
 
-            // Also get recent message senders (last 1000 messages) to catch active users
+            // Also get recent message senders (last 200 messages) to catch active users
             const { data: recentMessages, error: messagesError } = await supabase
-                .from("alpha_chat_messages")
+                .from("shout_alpha_messages")
                 .select("sender_address, created_at")
                 .not("sender_address", "like", "agent:%")
                 .order("created_at", { ascending: false })
-                .limit(1000);
+                .limit(200);
 
             if (messagesError) {
                 console.error("[Channel Members] Error fetching global messages:", messagesError);

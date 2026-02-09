@@ -241,13 +241,13 @@ export function useLocationChat(chatId: string | null, userAddress: string) {
         };
     }, [chatId]);
 
-    // Poll for new messages every 5 seconds (fallback for missed realtime events, e.g. agent responses)
+    // Poll for new messages every 10 seconds (fallback for missed realtime events, e.g. agent responses)
     useEffect(() => {
         if (!chatId) return;
 
         const interval = setInterval(async () => {
             try {
-                const response = await fetch(`/api/location-chats/${chatId}/messages?limit=100`);
+                const response = await fetch(`/api/location-chats/${chatId}/messages?limit=50`);
                 if (!response.ok) return;
                 const data = await response.json();
                 const freshMessages = data.messages || [];
@@ -262,7 +262,7 @@ export function useLocationChat(chatId: string | null, userAddress: string) {
             } catch {
                 // Silent fallback - don't spam errors
             }
-        }, 5000);
+        }, 10000);
 
         return () => clearInterval(interval);
     }, [chatId]);
