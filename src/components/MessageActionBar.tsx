@@ -277,8 +277,6 @@ export function MessageActionBar({
         }
     }, [callbacks, onClose, handleCopy, handleShare, handleDownload, handleDownloadHD]);
 
-    if (!config) return null;
-    
     // Use portal to render outside of any transformed parent (fixes PWA z-index issues)
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
@@ -286,7 +284,7 @@ export function MessageActionBar({
         return () => setMounted(false);
     }, []);
 
-    if (!mounted) return null;
+    if (!config || !mounted) return null;
 
     // Build action list
     const primaryActions: { id: string; icon: React.ReactNode; label: string; show: boolean; danger?: boolean; highlight?: boolean }[] = [
