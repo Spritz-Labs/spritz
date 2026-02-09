@@ -335,23 +335,19 @@ export function MessageActionBar({
         { id: "edit", icon: <EditIcon />, label: "Edit", show: config.isOwn && !!config.canEdit && !!callbacks.onEdit },
         { id: "report", icon: <ReportIcon />, label: "Report", show: !config.isOwn && !!callbacks.onReport, danger: true },
     ].filter(a => a.show);
-    
-    // Debug logging
-    console.log('[MessageActionBar] More actions:', moreActions.map(a => a.label));
 
     return createPortal(
         <AnimatePresence>
             {isOpen && (
                 <>
-                    {/* Backdrop - tap to close (but allow clicks through to action bar) */}
+                    {/* Backdrop - tap to close */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[9998] pointer-events-auto"
+                        className="fixed inset-0 z-[9998]"
                         onClick={(e) => {
                             e.stopPropagation();
-                            console.log('[MessageActionBar] Backdrop clicked, closing');
                             onClose();
                         }}
                     />
@@ -419,7 +415,6 @@ export function MessageActionBar({
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        console.log('[MessageActionBar] More clicked, current state:', showMoreActions, 'toggling to:', !showMoreActions);
                                         setShowMoreActions(!showMoreActions);
                                     }}
                                     className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all touch-manipulation active:scale-95 min-w-[60px] ${
