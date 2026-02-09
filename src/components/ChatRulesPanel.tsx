@@ -230,6 +230,7 @@ export function ChatRulesPanel({
     const [blockedWordAction, setBlockedWordAction] = useState<"block" | "mute">("block");
     const [isBlockedWordRegex, setIsBlockedWordRegex] = useState(false);
     const [isAddingWord, setIsAddingWord] = useState(false);
+    const [updatingField, setUpdatingField] = useState<string | null>(null);
 
     // Client-side only mount
     useState(() => {
@@ -249,8 +250,6 @@ export function ChatRulesPanel({
     }
 
     if (!mounted) return null;
-
-    const [updatingField, setUpdatingField] = useState<string | null>(null);
 
     const handleContentPermission = async (field: string, value: string) => {
         setUpdatingField(field);
