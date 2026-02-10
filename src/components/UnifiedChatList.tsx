@@ -538,20 +538,75 @@ const ChatRow = memo(
                                         </span>
                                     )}
                                 </div>
-                                {chat.lastMessageAt && (
-                                    <span
-                                        className={`text-[10px] sm:text-[11px] shrink-0 tabular-nums ${
-                                            chat.unreadCount > 0
-                                                ? "text-[#FF5500] font-semibold"
-                                                : "text-zinc-500"
-                                        }`}
-                                    >
-                                        {formatTime(
-                                            chat.lastMessageAt,
-                                            userTimezone
-                                        )}
-                                    </span>
-                                )}
+                                <div className="flex items-center gap-1 shrink-0">
+                                    {/* Call/Video quick actions for DMs - inline with timestamp */}
+                                    {chat.type === "dm" && (
+                                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            {onCallClick && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onCallClick(chat);
+                                                    }}
+                                                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/25 transition-colors"
+                                                >
+                                                    <svg
+                                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            {onVideoClick && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onVideoClick(chat);
+                                                    }}
+                                                    className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#FF5500]/15 text-[#FF5500] flex items-center justify-center hover:bg-[#FF5500]/25 transition-colors"
+                                                >
+                                                    <svg
+                                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3"
+                                                        fill="none"
+                                                        viewBox="0 0 24 24"
+                                                        stroke="currentColor"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                    {chat.lastMessageAt && (
+                                        <span
+                                            className={`text-[10px] sm:text-[11px] shrink-0 tabular-nums ${
+                                                chat.unreadCount > 0
+                                                    ? "text-[#FF5500] font-semibold"
+                                                    : "text-zinc-500"
+                                            }`}
+                                        >
+                                            {formatTime(
+                                                chat.lastMessageAt,
+                                                userTimezone
+                                            )}
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                             <div className="flex items-center gap-1.5 mt-0.5">
                                 <p
@@ -573,59 +628,6 @@ const ChatRow = memo(
                             </div>
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-1.5 self-center">
-                            {/* Desktop-only quick actions for DMs */}
-                            {chat.type === "dm" && (
-                                <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {onCallClick && (
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onCallClick(chat);
-                                            }}
-                                            className="w-7 h-7 rounded-full bg-emerald-500/15 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/25 transition-colors"
-                                        >
-                                            <svg
-                                                className="w-3.5 h-3.5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                                                />
-                                            </svg>
-                                        </button>
-                                    )}
-                                    {onVideoClick && (
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onVideoClick(chat);
-                                            }}
-                                            className="w-7 h-7 rounded-full bg-[#FF5500]/15 text-[#FF5500] flex items-center justify-center hover:bg-[#FF5500]/25 transition-colors"
-                                        >
-                                            <svg
-                                                className="w-3.5 h-3.5"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                                />
-                                            </svg>
-                                        </button>
-                                    )}
-                                </div>
-                            )}
                             {/* Folder button - hidden by default, visible on hover or when assigned */}
                             <button
                                 type="button"

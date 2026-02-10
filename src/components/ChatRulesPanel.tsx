@@ -328,8 +328,8 @@ export function ChatRulesPanel({
                         }}
                         className="fixed right-0 top-0 bottom-0 w-full max-w-md bg-zinc-900 z-[9999] overflow-hidden flex flex-col"
                     >
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                        {/* Header - pt includes safe area for PWA notch */}
+                        <div className="flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] border-b border-zinc-800">
                             <div>
                                 <h2 className="text-lg font-semibold text-white">
                                     Room Settings
