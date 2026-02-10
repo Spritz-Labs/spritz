@@ -26,6 +26,7 @@ import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide } from "@/lib/clientChatRules";
 import { toast } from "sonner";
 import { useModeration } from "@/hooks/useModeration";
+import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import { QuickMuteDialog } from "./ModerationPanel";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
@@ -136,6 +137,7 @@ export function LocationChatModal({
     const { rules: chatRules } = useChatRules("location", locationChat.id);
     const roomBans = useRoomBans("location", locationChat.id);
     const moderation = useModeration(userAddress, locationChat.id);
+    const { getRoleBadge } = useRoleBadges();
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [userPopupPosition, setUserPopupPosition] = useState<{
         x: number;
@@ -1316,10 +1318,11 @@ export function LocationChatModal({
                                                             </span>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-xs text-zinc-500 mb-1 ml-1">
+                                                        <span className="text-xs text-zinc-500 mb-1 ml-1 flex items-center gap-1">
                                                             {getDisplayName(
                                                                 msg.sender_address,
                                                             )}
+                                                            <RoleBadgeTag role={getRoleBadge(msg.sender_address)} />
                                                         </span>
                                                     ))}
 

@@ -24,6 +24,7 @@ import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide } from "@/lib/clientChatRules";
 import { toast } from "sonner";
 import { useModeration } from "@/hooks/useModeration";
+import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import { QuickMuteDialog } from "./ModerationPanel";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay, type DisplayPoll } from "./PollDisplay";
@@ -612,6 +613,7 @@ export function ChannelChatModal({
     const { rules: chatRules } = useChatRules("channel", channel.id);
     const moderation = useModeration(userAddress, channel.id);
     const roomBans = useRoomBans("channel", channel.id);
+    const { getRoleBadge } = useRoleBadges(channel.id);
     const [muteTarget, setMuteTarget] = useState<{
         address: string;
         name: string;
@@ -2454,6 +2456,9 @@ export function ChannelChatModal({
                                                                         <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
                                                                             AI
                                                                         </span>
+                                                                    )}
+                                                                    {!isAgent && (
+                                                                        <RoleBadgeTag role={getRoleBadge(msg.sender_address)} />
                                                                     )}
                                                                     {msg.is_pinned && (
                                                                         <span

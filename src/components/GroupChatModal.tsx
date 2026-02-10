@@ -27,6 +27,7 @@ import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide } from "@/lib/clientChatRules";
 import { toast } from "sonner";
+import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import {
     LocationMessage,
     isLocationMessage,
@@ -148,6 +149,7 @@ export function GroupChatModal({
     const [showRulesPanel, setShowRulesPanel] = useState(false);
     const { rules: chatRules } = useChatRules("group", group?.id);
     const roomBans = useRoomBans("group", group?.id);
+    const { getRoleBadge } = useRoleBadges();
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [userPopupPosition, setUserPopupPosition] = useState<{
         x: number;
@@ -1894,12 +1896,15 @@ export function GroupChatModal({
                                                                         }`}
                                                                     >
                                                                         {!isOwn && (
-                                                                            <p className="text-xs text-zinc-400 mb-1">
+                                                                            <p className="text-xs text-zinc-400 mb-1 flex items-center gap-1">
                                                                                 {senderAddress
                                                                                     ? formatAddress(
                                                                                           senderAddress,
                                                                                       )
                                                                                     : "Unknown"}
+                                                                                {senderAddress && (
+                                                                                    <RoleBadgeTag role={getRoleBadge(senderAddress)} />
+                                                                                )}
                                                                             </p>
                                                                         )}
 

@@ -26,6 +26,7 @@ import { useModeration } from "@/hooks/useModeration";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide } from "@/lib/clientChatRules";
 import { toast } from "sonner";
+import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import {
     AgentMarkdown,
@@ -265,6 +266,7 @@ export function AlphaChatModal({
     const [showRulesPanel, setShowRulesPanel] = useState(false);
     const { rules: chatRules } = useChatRules("alpha", null);
     const roomBans = useRoomBans("alpha", null);
+    const { getRoleBadge } = useRoleBadges();
     const [banningUser, setBanningUser] = useState<string | null>(null);
     const [isLeaving, setIsLeaving] = useState(false);
     const [isJoining, setIsJoining] = useState(false);
@@ -2201,22 +2203,25 @@ export function AlphaChatModal({
                                                                                         </div>
                                                                                     ) : (
                                                                                         // User sender - clickable
-                                                                                        <button
-                                                                                            onClick={(
-                                                                                                e,
-                                                                                            ) => {
-                                                                                                e.stopPropagation();
-                                                                                                handleUserClick(
-                                                                                                    msg.sender_address,
+                                                                                        <div className="flex items-center gap-1 mb-1">
+                                                                                            <button
+                                                                                                onClick={(
                                                                                                     e,
-                                                                                                );
-                                                                                            }}
-                                                                                            className="text-xs text-orange-300 mb-1 font-medium hover:text-orange-200 transition-colors"
-                                                                                        >
-                                                                                            {formatSender(
-                                                                                                msg.sender_address,
-                                                                                            )}
-                                                                                        </button>
+                                                                                                ) => {
+                                                                                                    e.stopPropagation();
+                                                                                                    handleUserClick(
+                                                                                                        msg.sender_address,
+                                                                                                        e,
+                                                                                                    );
+                                                                                                }}
+                                                                                                className="text-xs text-orange-300 font-medium hover:text-orange-200 transition-colors"
+                                                                                            >
+                                                                                                {formatSender(
+                                                                                                    msg.sender_address,
+                                                                                                )}
+                                                                                            </button>
+                                                                                            <RoleBadgeTag role={getRoleBadge(msg.sender_address)} />
+                                                                                        </div>
                                                                                     ))}
                                                                                 {isPixelArt ? (
                                                                                     <div className="relative group">
