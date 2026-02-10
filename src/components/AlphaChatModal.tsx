@@ -24,6 +24,7 @@ import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { validateMessageClientSide } from "@/lib/clientChatRules";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import {
     AgentMarkdown,
@@ -840,9 +841,19 @@ export function AlphaChatModal({
     // Check if current user is muted
     const isCurrentUserMuted = moderation.isUserMuted(userAddress);
 
+    // Check if current user is a moderator (for rule validation)
+    const isModeratorForRules = isAdmin || moderation.permissions.isModerator;
+
     // Send message
     const handleSend = useCallback(async () => {
         if (!newMessage.trim() || isSending) return;
+
+        // Validate against chat rules before sending
+        const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isModeratorForRules);
+        if (ruleViolation) {
+            alert(ruleViolation);
+            return;
+        }
 
         // Mark that user just sent a message (for auto-scroll)
         justSentMessageRef.current = true;
@@ -868,6 +879,8 @@ export function AlphaChatModal({
         stopTyping,
         onMessageSent,
         clearDraft,
+        chatRules,
+        isModeratorForRules,
     ]);
 
     // Handle reaction
@@ -919,6 +932,13 @@ export function AlphaChatModal({
         async (gifUrl: string) => {
             if (!gifUrl || isSending) return;
 
+            // Validate GIF against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isModeratorForRules);
+            if (ruleViolation) {
+                alert(ruleViolation);
+                return;
+            }
+
             try {
                 // Send GIF as an image message
                 await sendMessage(`[GIF]${gifUrl}`, "text");
@@ -926,12 +946,19 @@ export function AlphaChatModal({
                 console.error("Failed to send GIF:", err);
             }
         },
-        [sendMessage, isSending],
+        [sendMessage, isSending, chatRules, isModeratorForRules],
     );
 
     // Handle pixel art send
     const handleSendPixelArt = useCallback(
         async (imageData: string) => {
+            // Validate pixel art against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isModeratorForRules);
+            if (ruleViolation) {
+                alert(ruleViolation);
+                return;
+            }
+
             setIsUploadingPixelArt(true);
 
             try {
@@ -958,7 +985,7 @@ export function AlphaChatModal({
                 setIsUploadingPixelArt(false);
             }
         },
-        [userAddress, sendMessage],
+        [userAddress, sendMessage, chatRules, isModeratorForRules],
     );
 
     // Handle image upload (admin only)
@@ -966,6 +993,13 @@ export function AlphaChatModal({
         async (e: React.ChangeEvent<HTMLInputElement>) => {
             const file = e.target.files?.[0];
             if (!file || !isAdmin) return;
+
+            // Validate image against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, "", "image", isModeratorForRules);
+            if (ruleViolation) {
+                alert(ruleViolation);
+                return;
+            }
 
             // Validate file type
             if (
@@ -1019,7 +1053,7 @@ export function AlphaChatModal({
                 }
             }
         },
-        [userAddress, isAdmin, sendMessage, onMessageSent],
+        [userAddress, isAdmin, sendMessage, onMessageSent, chatRules, isModeratorForRules],
     );
 
     // Handle leave
@@ -2550,6 +2584,11 @@ export function AlphaChatModal({
                                                 onLocation={async (
                                                     location: LocationData,
                                                 ) => {
+                                                    const ruleViolation = validateMessageClientSide(chatRules, "", "location", isModeratorForRules);
+                                                    if (ruleViolation) {
+                                                        alert(ruleViolation);
+                                                        return;
+                                                    }
                                                     const locationMsg =
                                                         formatLocationMessage(
                                                             location,

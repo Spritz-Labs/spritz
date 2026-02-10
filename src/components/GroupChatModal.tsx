@@ -25,6 +25,7 @@ import { LinkPreview, detectUrls } from "./LinkPreview";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { validateMessageClientSide } from "@/lib/clientChatRules";
 import {
     LocationMessage,
     isLocationMessage,
@@ -744,6 +745,13 @@ export function GroupChatModal({
     const handleSend = useCallback(async () => {
         if (!newMessage.trim() || isSending || !group) return;
 
+        // Validate against chat rules before sending
+        const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isAdmin);
+        if (ruleViolation) {
+            alert(ruleViolation);
+            return;
+        }
+
         setIsSending(true);
         setError(null);
         stopTyping(); // Stop typing indicator when message is sent
@@ -796,6 +804,8 @@ export function GroupChatModal({
         getUserInfo,
         onMessageSent,
         clearDraft,
+        chatRules,
+        isAdmin,
     ]);
 
     const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -809,6 +819,13 @@ export function GroupChatModal({
     const handleSendPixelArt = useCallback(
         async (imageData: string) => {
             if (!group) return;
+
+            // Validate pixel art against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isAdmin);
+            if (ruleViolation) {
+                alert(ruleViolation);
+                return;
+            }
 
             setIsUploadingPixelArt(true);
             setError(null);
@@ -851,13 +868,20 @@ export function GroupChatModal({
                 setIsUploadingPixelArt(false);
             }
         },
-        [group, userAddress, sendGroupMessage, onMessageSent],
+        [group, userAddress, sendGroupMessage, onMessageSent, chatRules, isAdmin],
     );
 
     // Handle GIF send
     const handleSendGif = useCallback(
         async (gifUrl: string) => {
             if (!gifUrl || isSending || !group) return;
+
+            // Validate GIF against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isAdmin);
+            if (ruleViolation) {
+                alert(ruleViolation);
+                return;
+            }
 
             setIsSending(true);
             try {
@@ -874,7 +898,7 @@ export function GroupChatModal({
                 setIsSending(false);
             }
         },
-        [group, isSending, sendGroupMessage, onMessageSent],
+        [group, isSending, sendGroupMessage, onMessageSent, chatRules, isAdmin],
     );
 
     // Check if message is a GIF
@@ -2246,6 +2270,11 @@ export function GroupChatModal({
                                         showPoll={canCreatePoll}
                                         onLocation={async (location) => {
                                             if (!group) return;
+                                            const ruleViolation = validateMessageClientSide(chatRules, "", "location", isAdmin);
+                                            if (ruleViolation) {
+                                                alert(ruleViolation);
+                                                return;
+                                            }
                                             const locationMsg =
                                                 formatLocationMessage(location);
                                             await sendGroupMessage(
