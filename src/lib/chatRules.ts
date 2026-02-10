@@ -241,7 +241,8 @@ export async function validateMessageAgainstRules(
 
     // Check links in text messages (role-based)
     if (messageType === "text" && rules.links_allowed !== "everyone") {
-        const urlRegex = /https?:\/\/[^\s]+/i;
+        // Comprehensive URL detection: http(s), www., bare domains with common TLDs, and shorteners
+        const urlRegex = /https?:\/\/[^\s]+|www\.[^\s]+|\b[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|xyz|co|me|info|app|dev|gg|cc|ly|to|link|click|fun|site|online|top|live|space|tech|pro|us|uk|eu|de|fr|ca|au|ru|cn|br|in)\b[^\s]*/i;
         if (urlRegex.test(content)) {
             if (rules.links_allowed === "disabled") {
                 const isPrivileged = await isAdminOrModerator(userAddress, chatType, chatId);
