@@ -963,22 +963,17 @@ Use markdown so replies are easy to read:
                         for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
                             const checkDate = new Date(now);
                             checkDate.setDate(checkDate.getDate() + dayOffset);
-                            checkDate.setUTCHours(12, 0, 0, 0); // Set to noon UTC to avoid date boundary issues
+                            checkDate.setUTCHours(12, 0, 0, 0); // Noon UTC to avoid date boundary issues
 
-                            // Get day of week in user's timezone (important for correct day matching)
-                            const dayOfWeek = getDayOfWeekInTimezone(
-                                checkDate,
-                                userTimezone,
-                            );
-
-                            const matchingWindows = (windows || []).filter(
-                                (w) => w.day_of_week === dayOfWeek,
-                            );
-
-                            for (const window of matchingWindows) {
-                                // Get the timezone for this window
+                            for (const window of windows || []) {
+                                // Use this window's timezone for day-of-week so "Monday" is correct per window
                                 const windowTimezone =
                                     window.timezone || userTimezone;
+                                const dayOfWeek = getDayOfWeekInTimezone(
+                                    checkDate,
+                                    windowTimezone,
+                                );
+                                if (window.day_of_week !== dayOfWeek) continue;
 
                                 // Convert local time in the window's timezone to UTC
                                 const slotStartUTC = localTimeToUTC(
@@ -992,7 +987,6 @@ Use markdown so replies are easy to read:
                                     windowTimezone,
                                 );
 
-                                // Generate slots within this window
                                 let currentSlot = new Date(slotStartUTC);
                                 while (
                                     currentSlot.getTime() +

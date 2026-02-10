@@ -210,8 +210,10 @@ export default function CalPage({
         hash: txHash,
     });
 
-    // Get user's timezone
-    const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // Visitor's timezone (for payment/display where relevant)
+    const visitorTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // Calendar owner's timezone - use for all calendar/day display so "Monday" matches the owner's availability
+    const ownerTimezone = profile?.availability?.timezone || "UTC";
 
     // Check USDC balance
     const targetNetwork = profile?.scheduling.network || undefined;
@@ -372,14 +374,14 @@ export default function CalPage({
 
         setSlotsLoading(true);
         try {
-            // Normalize dates to noon UTC to match backend behavior
+            // Normalize to noon UTC for the selected day; endDate = same day 23:59 UTC so API returns only that day (not next day's slots)
             const startDateNormalized = new Date(selectedDate);
             startDateNormalized.setUTCHours(12, 0, 0, 0);
-            const endDateNormalized = addDays(startDateNormalized, 1);
-            endDateNormalized.setUTCHours(12, 0, 0, 0);
+            const endDateSameDay = new Date(startDateNormalized);
+            endDateSameDay.setUTCHours(23, 59, 59, 999);
 
             const startDate = startDateNormalized.toISOString();
-            const endDate = endDateNormalized.toISOString();
+            const endDate = endDateSameDay.toISOString();
 
             const res = await fetch(
                 `/api/scheduling/availability?userAddress=${profile.profile.walletAddress}&startDate=${startDate}&endDate=${endDate}`
@@ -496,7 +498,7 @@ export default function CalPage({
                     recipientAddress: profile.profile.walletAddress,
                     schedulerAddress: address || null,
                     scheduledAt: selectedSlot.start,
-                    timezone: userTimezone,
+                    timezone: ownerTimezone,
                     durationMinutes: duration,
                     title: `Call with ${guestName || "Guest"}`,
                     guestEmail,
@@ -991,7 +993,26 @@ export default function CalPage({
                                     const isSelected =
                                         selectedDate &&
                                         isSameDay(date, selectedDate);
-                                    const isToday = isSameDay(date, new Date());
+                                    // "Today" in the calendar owner's timezone so it matches the day names
+                                    const isToday =
+                                        getDayOfWeekInTimezone(
+                                            date,
+                                            ownerTimezone
+                                        ) ===
+                                            getDayOfWeekInTimezone(
+                                                new Date(),
+                                                ownerTimezone
+                                            ) &&
+                                        formatInTimeZone(
+                                            date,
+                                            ownerTimezone,
+                                            "yyyy-MM-dd"
+                                        ) ===
+                                            formatInTimeZone(
+                                                new Date(),
+                                                ownerTimezone,
+                                                "yyyy-MM-dd"
+                                            );
 
                                     return (
                                         <button
@@ -1012,12 +1033,16 @@ export default function CalPage({
                                             <div className="text-xs uppercase tracking-wide mb-1 opacity-70">
                                                 {formatInTimeZone(
                                                     date,
-                                                    userTimezone,
+                                                    ownerTimezone,
                                                     "EEE"
                                                 )}
                                             </div>
                                             <div className="text-lg font-semibold">
-                                                {format(date, "d")}
+                                                {formatInTimeZone(
+                                                    date,
+                                                    ownerTimezone,
+                                                    "d"
+                                                )}
                                             </div>
                                             {isToday && (
                                                 <div className="w-1.5 h-1.5 bg-orange-400 rounded-full mx-auto mt-1" />
@@ -1034,7 +1059,7 @@ export default function CalPage({
                                         Available times on{" "}
                                         {formatInTimeZone(
                                             selectedDate,
-                                            userTimezone,
+                                            ownerTimezone,
                                             "EEEE, MMMM d"
                                         )}
                                     </h3>
@@ -1065,7 +1090,7 @@ export default function CalPage({
                                                     >
                                                         {formatInTimeZone(
                                                             slotTime,
-                                                            userTimezone,
+                                                            ownerTimezone,
                                                             "h:mm a"
                                                         )}
                                                     </button>
@@ -1075,7 +1100,7 @@ export default function CalPage({
                                     )}
 
                                     <p className="text-xs text-zinc-500 mt-4 text-center">
-                                        Times shown in {userTimezone}
+                                        Times shown in {ownerTimezone}
                                     </p>
                                 </div>
                             )}
@@ -1141,14 +1166,14 @@ export default function CalPage({
                                         <p className="text-white font-medium">
                                             {formatInTimeZone(
                                                 new Date(selectedSlot.start),
-                                                userTimezone,
+                                                ownerTimezone,
                                                 "EEEE, MMMM d"
                                             )}
                                         </p>
                                         <p className="text-zinc-400 text-sm">
                                             {formatInTimeZone(
                                                 new Date(selectedSlot.start),
-                                                userTimezone,
+                                                ownerTimezone,
                                                 "h:mm a"
                                             )}{" "}
                                             -{" "}
@@ -1307,7 +1332,7 @@ export default function CalPage({
                                     <span className="text-zinc-400">
                                         {formatInTimeZone(
                                             new Date(selectedSlot.start),
-                                            userTimezone,
+                                            ownerTimezone,
                                             "MMM d, h:mm a"
                                         )}
                                     </span>
@@ -1621,17 +1646,17 @@ export default function CalPage({
                                     <p className="text-white font-medium">
                                         {formatInTimeZone(
                                             new Date(selectedSlot.start),
-                                            userTimezone,
+                                            ownerTimezone,
                                             "EEEE, MMMM d, yyyy"
                                         )}
                                     </p>
                                     <p className="text-orange-400">
                                         {formatInTimeZone(
                                             new Date(selectedSlot.start),
-                                            userTimezone,
+                                            ownerTimezone,
                                             "h:mm a"
                                         )}{" "}
-                                        ({userTimezone})
+                                        ({ownerTimezone})
                                     </p>
                                 </div>
                             )}

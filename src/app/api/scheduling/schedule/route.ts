@@ -203,13 +203,12 @@ export async function POST(request: NextRequest) {
         const slotEndTime = slotEnd.getTime();
 
         // Check existing scheduled calls - need to check for ANY overlap
-        // Query calls that could potentially overlap with our slot
         // A call overlaps if: callStart < slotEnd AND callEnd > slotStart
-        // To catch all overlaps, query calls that start up to maxDuration before slotEnd
-        // and also check calls that start up to slotEnd
-        const maxDurationMinutes = 120; // Assume max call duration of 2 hours for query window
-        const queryStart = new Date(slotStart - maxDurationMinutes * 60 * 1000); // Query from before our slot
-        const queryEnd = new Date(slotEndTime + maxDurationMinutes * 60 * 1000); // Query to after our slot
+        // Fetch calls that could overlap: start time in [slotStart - lookback, slotEnd]
+        // Use 24h lookback so long events (e.g. 3hr meeting) that start before our slot are included
+        const lookbackMinutes = 24 * 60;
+        const queryStart = new Date(slotStart - lookbackMinutes * 60 * 1000);
+        const queryEnd = new Date(slotEndTime); // calls starting after slotEnd can't overlap
 
         const { data: existingCalls } = await supabase
             .from("shout_scheduled_calls")
@@ -342,9 +341,17 @@ export async function POST(request: NextRequest) {
                     );
                 }
 
-                if (busyPeriods.length > 0) {
-                    // Don't expose calendar event details for privacy
-                    // Just indicate there's a conflict
+                // Only treat as conflict if a busy period actually overlaps our slot
+                // (matches availability logic; avoids false positives from adjacent/boundary events)
+                const slotStartMs = scheduledTime.getTime();
+                const slotEndMs = slotEnd.getTime();
+                const hasCalendarConflict = busyPeriods.some((b) => {
+                    const busyStart = new Date(b.start!).getTime();
+                    const busyEnd = new Date(b.end!).getTime();
+                    return busyStart < slotEndMs && busyEnd > slotStartMs;
+                });
+
+                if (hasCalendarConflict) {
                     return NextResponse.json(
                         {
                             error: "This time slot is no longer available",

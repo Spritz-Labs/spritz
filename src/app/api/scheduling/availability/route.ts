@@ -161,11 +161,11 @@ export async function GET(request: NextRequest) {
         }
 
         // FIRST: Check for existing scheduled calls in database
-        // This is critical to prevent double-booking
-        // Query a wider range to catch calls that might overlap even if they start outside the date range
-        const maxDurationMinutes = 120; // Assume max call duration
-        const queryStart = new Date(start.getTime() - maxDurationMinutes * 60 * 1000);
-        const queryEnd = new Date(end.getTime() + maxDurationMinutes * 60 * 1000);
+        // Query range: calls that could overlap any slot in [start, end]
+        // Use 24h lookback so long events starting before the range are included
+        const lookbackMinutes = 24 * 60;
+        const queryStart = new Date(start.getTime() - lookbackMinutes * 60 * 1000);
+        const queryEnd = new Date(end.getTime()); // calls starting after end can't overlap
         
         const { data: existingCalls } = await supabase
             .from("shout_scheduled_calls")

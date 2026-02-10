@@ -261,6 +261,9 @@ export function AvailabilityWindowsModal({
                                                     </option>
                                                 ))}
                                             </select>
+                                            <p className="text-zinc-500 text-xs mt-1">
+                                                Start and end times above are in this timezone.
+                                            </p>
                                         </div>
                                         <div className="flex gap-2">
                                             <button
@@ -300,6 +303,11 @@ export function AvailabilityWindowsModal({
                                             </p>
                                             <p className="text-zinc-500 text-sm">
                                                 {DAYS_OF_WEEK[window.day_of_week]} • {window.start_time} - {window.end_time}
+                                                {window.timezone && (
+                                                    <span className="text-zinc-600 ml-1">
+                                                        ({COMMON_TIMEZONES.find((tz) => tz.value === window.timezone)?.label ?? window.timezone})
+                                                    </span>
+                                                )}
                                             </p>
                                         </div>
                                         <div className="flex gap-2">

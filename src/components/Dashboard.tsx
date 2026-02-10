@@ -610,6 +610,21 @@ function DashboardContent({
             // @ts-expect-error - iOS Safari specific
             window.navigator.standalone === true);
 
+    // On PWA or mobile, hide call/video in chat list to avoid accidental taps; keep calling in Profile/Friends
+    const [hideCallVideoInChatList, setHideCallVideoInChatList] = useState(false);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const mq = window.matchMedia("(max-width: 640px)");
+        const update = () =>
+            setHideCallVideoInChatList(
+                isPWA ||
+                    mq.matches
+            );
+        update();
+        mq.addEventListener("change", update);
+        return () => mq.removeEventListener("change", update);
+    }, [isPWA]);
+
     // Sync contacts function
     const handleSyncContacts = async () => {
         if (!isPWA) {
@@ -4995,8 +5010,16 @@ function DashboardContent({
                                                 prefetchMessages(addr);
                                             }
                                         }}
-                                        onCallClick={handleUnifiedCallClick}
-                                        onVideoClick={handleUnifiedVideoClick}
+                                        onCallClick={
+                                            hideCallVideoInChatList
+                                                ? undefined
+                                                : handleUnifiedCallClick
+                                        }
+                                        onVideoClick={
+                                            hideCallVideoInChatList
+                                                ? undefined
+                                                : handleUnifiedVideoClick
+                                        }
                                         showCreateFolderModal={
                                             isCreateFolderOpen
                                         }

@@ -207,22 +207,52 @@ export function getDayOfWeekInTimezone(date: Date, timezone: string): number {
 }
 
 /**
- * Get common timezones list
+ * Common timezones for availability windows (grouped by region).
+ * Uses IANA names; labels are for display. Covers major regions; add more as needed.
  */
 export const COMMON_TIMEZONES = [
+    // Americas
     { value: "America/New_York", label: "Eastern Time (ET)" },
     { value: "America/Chicago", label: "Central Time (CT)" },
     { value: "America/Denver", label: "Mountain Time (MT)" },
     { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
     { value: "America/Phoenix", label: "Arizona (MST)" },
     { value: "America/Anchorage", label: "Alaska Time (AKT)" },
-    { value: "Pacific/Honolulu", label: "Hawaii Time (HST)" },
+    { value: "America/Toronto", label: "Toronto (ET)" },
+    { value: "America/Vancouver", label: "Vancouver (PT)" },
+    { value: "America/Mexico_City", label: "Mexico City (CST)" },
+    { value: "America/Sao_Paulo", label: "São Paulo (BRT)" },
+    { value: "America/Buenos_Aires", label: "Buenos Aires (ART)" },
+    { value: "Pacific/Honolulu", label: "Hawaii (HST)" },
+    // Europe
     { value: "Europe/London", label: "London (GMT/BST)" },
     { value: "Europe/Paris", label: "Paris (CET/CEST)" },
     { value: "Europe/Berlin", label: "Berlin (CET/CEST)" },
-    { value: "Asia/Tokyo", label: "Tokyo (JST)" },
-    { value: "Asia/Shanghai", label: "Shanghai (CST)" },
+    { value: "Europe/Amsterdam", label: "Amsterdam (CET/CEST)" },
+    { value: "Europe/Madrid", label: "Madrid (CET/CEST)" },
+    { value: "Europe/Rome", label: "Rome (CET/CEST)" },
+    { value: "Europe/Athens", label: "Athens (EET/EEST)" },
+    { value: "Europe/Moscow", label: "Moscow (MSK)" },
+    // Asia / Pacific
     { value: "Asia/Dubai", label: "Dubai (GST)" },
+    { value: "Asia/Kolkata", label: "India (IST)" },
+    { value: "Asia/Bangkok", label: "Bangkok (ICT)" },
+    { value: "Asia/Singapore", label: "Singapore (SGT)" },
+    { value: "Asia/Hong_Kong", label: "Hong Kong (HKT)" },
+    { value: "Asia/Shanghai", label: "Shanghai (CST)" },
+    { value: "Asia/Tokyo", label: "Tokyo (JST)" },
+    { value: "Asia/Seoul", label: "Seoul (KST)" },
+    { value: "Asia/Jakarta", label: "Jakarta (WIB)" },
+    { value: "Asia/Jerusalem", label: "Jerusalem (IST)" },
+    // Australia / Pacific
+    { value: "Australia/Perth", label: "Perth (AWST)" },
     { value: "Australia/Sydney", label: "Sydney (AEST/AEDT)" },
+    { value: "Australia/Melbourne", label: "Melbourne (AEST/AEDT)" },
+    { value: "Pacific/Auckland", label: "Auckland (NZST/NZDT)" },
+    // Africa
+    { value: "Africa/Cairo", label: "Cairo (EET)" },
+    { value: "Africa/Johannesburg", label: "Johannesburg (SAST)" },
+    { value: "Africa/Lagos", label: "Lagos (WAT)" },
+    // UTC
     { value: "UTC", label: "UTC" },
 ];
