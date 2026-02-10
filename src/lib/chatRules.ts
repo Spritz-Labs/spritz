@@ -170,19 +170,45 @@ export async function isAdminOrModerator(userAddress: string, chatType: string, 
     }
 
     // Check moderator
-    const modQuery = supabase
-        .from("shout_moderators")
-        .select("id")
-        .eq("user_address", normalized);
-
     if (chatType === "channel" && chatId) {
-        modQuery.eq("channel_id", chatId);
-    } else {
-        modQuery.is("channel_id", null);
-    }
+        // For channels, check per-channel moderator first
+        const { data: channelMod } = await supabase
+            .from("shout_moderators")
+            .select("id")
+            .eq("user_address", normalized)
+            .eq("channel_id", chatId)
+            .single();
 
-    const { data: modData } = await modQuery.single();
-    if (modData) return true;
+        if (channelMod) return true;
+
+        // For official channels, also check global moderators (shared moderator system)
+        const { data: channelInfo } = await supabase
+            .from("shout_public_channels")
+            .select("is_official")
+            .eq("id", chatId)
+            .single();
+
+        if (channelInfo?.is_official) {
+            const { data: globalMod } = await supabase
+                .from("shout_moderators")
+                .select("id")
+                .eq("user_address", normalized)
+                .is("channel_id", null)
+                .single();
+
+            if (globalMod) return true;
+        }
+    } else {
+        // For alpha/global chat, check global moderator
+        const { data: modData } = await supabase
+            .from("shout_moderators")
+            .select("id")
+            .eq("user_address", normalized)
+            .is("channel_id", null)
+            .single();
+
+        if (modData) return true;
+    }
 
     return false;
 }

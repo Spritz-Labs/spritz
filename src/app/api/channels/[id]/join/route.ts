@@ -110,7 +110,7 @@ export async function POST(
         // Check if channel exists and if it's a POAP channel
         const { data: channel } = await supabase
             .from("shout_public_channels")
-            .select("id, name, poap_event_id, poap_collection_id")
+            .select("id, name, poap_event_id, poap_collection_id, access_level")
             .eq("id", id)
             .single();
 
@@ -119,6 +119,33 @@ export async function POST(
                 { error: "Channel not found" },
                 { status: 404 },
             );
+        }
+
+        // Staff-only channel access check
+        if (channel.access_level === "staff") {
+            // Check if user is admin
+            const { data: adminData } = await supabase
+                .from("shout_admins")
+                .select("id")
+                .eq("wallet_address", normalizedAddress)
+                .maybeSingle();
+
+            if (!adminData) {
+                // Check if user is a global moderator
+                const { data: modData } = await supabase
+                    .from("shout_moderators")
+                    .select("id")
+                    .eq("user_address", normalizedAddress)
+                    .is("channel_id", null)
+                    .maybeSingle();
+
+                if (!modData) {
+                    return NextResponse.json(
+                        { error: "This channel is for staff only" },
+                        { status: 403 },
+                    );
+                }
+            }
         }
 
         const poapEventId =

@@ -24,6 +24,7 @@ export type PublicChannel = {
     is_active: boolean;
     created_at: string;
     updated_at: string;
+    access_level?: "public" | "staff";
     is_member?: boolean;
     // Waku/Logos messaging support
     messaging_type: "standard" | "waku";
@@ -135,7 +136,12 @@ export async function GET(request: NextRequest) {
         });
     }
 
-    return NextResponse.json({ channels: channelsWithMembership });
+    // Hide staff-only channels from non-members in the browse list
+    const visibleChannels = channelsWithMembership.filter(
+        (c) => c.access_level !== "staff" || c.is_member
+    );
+
+    return NextResponse.json({ channels: visibleChannels });
 }
 
 // Helper to generate a random symmetric key for Waku encryption

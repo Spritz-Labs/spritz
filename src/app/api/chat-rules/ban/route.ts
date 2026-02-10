@@ -266,19 +266,44 @@ async function checkBanPermission(userAddress: string, chatType: string, chatId:
     }
 
     // Moderator with mute permission (reuse mute perm for bans)
-    const modQuery = supabase
-        .from("shout_moderators")
-        .select("can_mute")
-        .eq("user_address", userAddress);
-
     if (chatType === "channel" && chatId) {
-        modQuery.eq("channel_id", chatId);
-    } else {
-        modQuery.is("channel_id", null);
-    }
+        // Check per-channel moderator
+        const { data: channelMod } = await supabase
+            .from("shout_moderators")
+            .select("can_mute")
+            .eq("user_address", userAddress)
+            .eq("channel_id", chatId)
+            .single();
 
-    const { data: modData } = await modQuery.single();
-    if (modData?.can_mute) return true;
+        if (channelMod?.can_mute) return true;
+
+        // For official channels, also check global moderators (shared moderator system)
+        const { data: channelInfo } = await supabase
+            .from("shout_public_channels")
+            .select("is_official")
+            .eq("id", chatId)
+            .single();
+
+        if (channelInfo?.is_official) {
+            const { data: globalMod } = await supabase
+                .from("shout_moderators")
+                .select("can_mute")
+                .eq("user_address", userAddress)
+                .is("channel_id", null)
+                .single();
+
+            if (globalMod?.can_mute) return true;
+        }
+    } else {
+        const { data: modData } = await supabase
+            .from("shout_moderators")
+            .select("can_mute")
+            .eq("user_address", userAddress)
+            .is("channel_id", null)
+            .single();
+
+        if (modData?.can_mute) return true;
+    }
 
     return false;
 }

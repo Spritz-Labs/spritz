@@ -81,9 +81,34 @@ export async function GET(request: NextRequest) {
                 }
 
                 const { data: moderators, error } = await query.order("granted_at", { ascending: false });
-
                 if (error) throw error;
-                return NextResponse.json({ moderators: moderators || [] });
+
+                // For official channels, also include global moderators (shared moderator system)
+                let allModerators = moderators || [];
+                if (channelId) {
+                    const { data: channelInfo } = await supabase
+                        .from("shout_public_channels")
+                        .select("is_official")
+                        .eq("id", channelId)
+                        .single();
+
+                    if (channelInfo?.is_official) {
+                        const { data: globalMods } = await supabase
+                            .from("shout_moderators")
+                            .select("*")
+                            .is("channel_id", null)
+                            .order("granted_at", { ascending: false });
+
+                        if (globalMods?.length) {
+                            // Merge, avoiding duplicates by user_address
+                            const existingAddrs = new Set(allModerators.map(m => m.user_address));
+                            const newGlobalMods = globalMods.filter(m => !existingAddrs.has(m.user_address));
+                            allModerators = [...allModerators, ...newGlobalMods];
+                        }
+                    }
+                }
+
+                return NextResponse.json({ moderators: allModerators });
             }
 
             case "muted": {
@@ -202,6 +227,28 @@ export async function POST(request: NextRequest) {
                 // Log the action
                 await logModAction("promote_mod", moderatorAddress, targetAddress, null, channelId, notes);
 
+                // Auto-join global moderators to "The Bunker" staff channel
+                if (!channelId) {
+                    try {
+                        const { data: bunker } = await supabase
+                            .from("shout_public_channels")
+                            .select("id")
+                            .eq("slug", "the-bunker")
+                            .single();
+
+                        if (bunker) {
+                            await supabase
+                                .from("shout_channel_members")
+                                .upsert({
+                                    channel_id: bunker.id,
+                                    user_address: targetAddress.toLowerCase(),
+                                }, { onConflict: "channel_id,user_address" });
+                        }
+                    } catch {
+                        // Non-critical - don't fail the mod promotion
+                    }
+                }
+
                 return NextResponse.json({ success: true, moderator: data });
             }
 
@@ -232,6 +279,35 @@ export async function POST(request: NextRequest) {
 
                 // Log the action
                 await logModAction("demote_mod", moderatorAddress, targetAddress, null, channelId);
+
+                // Remove demoted global moderator from The Bunker (if not an admin)
+                if (!channelId) {
+                    try {
+                        const { data: isStillAdmin } = await supabase
+                            .from("shout_admins")
+                            .select("id")
+                            .eq("wallet_address", targetAddress.toLowerCase())
+                            .maybeSingle();
+
+                        if (!isStillAdmin) {
+                            const { data: bunker } = await supabase
+                                .from("shout_public_channels")
+                                .select("id")
+                                .eq("slug", "the-bunker")
+                                .single();
+
+                            if (bunker) {
+                                await supabase
+                                    .from("shout_channel_members")
+                                    .delete()
+                                    .eq("channel_id", bunker.id)
+                                    .eq("user_address", targetAddress.toLowerCase());
+                            }
+                        }
+                    } catch {
+                        // Non-critical
+                    }
+                }
 
                 return NextResponse.json({ success: true });
             }
@@ -474,29 +550,76 @@ async function getUserPermissions(userAddress: string, channelId: string | null)
     }
 
     // Check moderator status
-    const query = supabase
-        .from("shout_moderators")
-        .select("can_pin, can_delete, can_mute, can_manage_mods")
-        .eq("user_address", userAddress.toLowerCase());
+    const normalizedAddress = userAddress.toLowerCase();
 
     if (channelId) {
-        query.eq("channel_id", channelId);
+        // For a specific channel, check per-channel moderator first
+        const { data: channelMod } = await supabase
+            .from("shout_moderators")
+            .select("can_pin, can_delete, can_mute, can_manage_mods")
+            .eq("user_address", normalizedAddress)
+            .eq("channel_id", channelId)
+            .single();
+
+        if (channelMod) {
+            return {
+                isAdmin: false,
+                isSuperAdmin: false,
+                isModerator: true,
+                canPin: channelMod.can_pin,
+                canDelete: channelMod.can_delete,
+                canMute: channelMod.can_mute,
+                canManageMods: channelMod.can_manage_mods,
+            };
+        }
+
+        // For official channels, also check global moderators (shared moderator system)
+        const { data: channelInfo } = await supabase
+            .from("shout_public_channels")
+            .select("is_official")
+            .eq("id", channelId)
+            .single();
+
+        if (channelInfo?.is_official) {
+            const { data: globalMod } = await supabase
+                .from("shout_moderators")
+                .select("can_pin, can_delete, can_mute, can_manage_mods")
+                .eq("user_address", normalizedAddress)
+                .is("channel_id", null)
+                .single();
+
+            if (globalMod) {
+                return {
+                    isAdmin: false,
+                    isSuperAdmin: false,
+                    isModerator: true,
+                    canPin: globalMod.can_pin,
+                    canDelete: globalMod.can_delete,
+                    canMute: globalMod.can_mute,
+                    canManageMods: globalMod.can_manage_mods,
+                };
+            }
+        }
     } else {
-        query.is("channel_id", null);
-    }
+        // For global/alpha chat, check global moderator
+        const { data: modData } = await supabase
+            .from("shout_moderators")
+            .select("can_pin, can_delete, can_mute, can_manage_mods")
+            .eq("user_address", normalizedAddress)
+            .is("channel_id", null)
+            .single();
 
-    const { data: modData } = await query.single();
-
-    if (modData) {
-        return {
-            isAdmin: false,
-            isSuperAdmin: false,
-            isModerator: true,
-            canPin: modData.can_pin,
-            canDelete: modData.can_delete,
-            canMute: modData.can_mute,
-            canManageMods: modData.can_manage_mods,
-        };
+        if (modData) {
+            return {
+                isAdmin: false,
+                isSuperAdmin: false,
+                isModerator: true,
+                canPin: modData.can_pin,
+                canDelete: modData.can_delete,
+                canMute: modData.can_mute,
+                canManageMods: modData.can_manage_mods,
+            };
+        }
     }
 
     return {

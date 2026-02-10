@@ -1217,6 +1217,42 @@ function DashboardContent({
         handlePendingJoins();
     }, [userAddress, joinChannel, fetchJoinedChannels, joinedChannels, joinedLocationChats]);
 
+    // Auto-join staff (admins/mods) to "The Bunker" channel
+    const bunkerJoinAttempted = useRef(false);
+    useEffect(() => {
+        if (!userAddress || !isAdmin || bunkerJoinAttempted.current) return;
+        // Only attempt once per session
+        bunkerJoinAttempted.current = true;
+
+        const ensureBunkerMembership = async () => {
+            try {
+                // Find The Bunker channel
+                const res = await fetch(`/api/channels?userAddress=${encodeURIComponent(userAddress)}&joined=true`);
+                const data = await res.json();
+                const alreadyJoined = data.channels?.some((c: { name: string }) => c.name === "The Bunker");
+                if (alreadyJoined) return;
+
+                // Find the Bunker channel ID from all channels
+                const allRes = await fetch(`/api/channels?userAddress=${encodeURIComponent(userAddress)}`);
+                const allData = await allRes.json();
+                const bunker = allData.channels?.find((c: { name: string; access_level?: string }) => c.name === "The Bunker");
+                if (!bunker) return;
+
+                // Auto-join
+                await fetch(`/api/channels/${bunker.id}/join`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ userAddress }),
+                });
+                fetchJoinedChannels();
+            } catch {
+                // Silent fail - not critical
+            }
+        };
+
+        ensureBunkerMembership();
+    }, [userAddress, isAdmin, fetchJoinedChannels]);
+
     // Screen Wake Lock - prevents screen from dimming during calls and active chats
     // This helps maintain WebSocket connections and improves PWA experience
     const isInActiveCall =
