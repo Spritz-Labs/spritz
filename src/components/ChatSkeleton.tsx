@@ -100,30 +100,38 @@ export function ChatSkeleton({ messageCount = 8, className = "" }: ChatSkeletonP
     );
 }
 
-// Compact skeleton for chat list items
+// Compact skeleton for chat list items - matches actual ChatRow layout
 export function ChatListItemSkeleton({ count = 5 }: { count?: number }) {
+    // Varied widths for realistic shimmer
+    const nameWidths = [96, 120, 80, 140, 104, 88, 132, 72];
+    const msgWidths = [160, 120, 200, 100, 180, 140, 150, 110];
+
     return (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {Array.from({ length: count }).map((_, i) => (
                 <motion.div
                     key={i}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="flex items-center gap-3 p-3 rounded-xl"
+                    transition={{ delay: i * 0.04 }}
+                    className="flex items-center gap-2.5 sm:gap-3 px-3 py-2.5 sm:p-3 rounded-xl"
                 >
-                    {/* Avatar */}
-                    <div className="w-12 h-12 rounded-full bg-zinc-800 animate-pulse shrink-0" />
+                    {/* Avatar - matches w-11 h-11 sm:w-12 sm:h-12 */}
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-zinc-800/70 animate-pulse shrink-0" />
                     
                     {/* Content */}
-                    <div className="flex-1 space-y-2">
-                        <div className="h-4 w-24 rounded bg-zinc-800 animate-pulse" />
-                        <div className="h-3 w-40 rounded bg-zinc-800/60 animate-pulse" />
-                    </div>
-                    
-                    {/* Time & badge */}
-                    <div className="flex flex-col items-end gap-1">
-                        <div className="h-3 w-10 rounded bg-zinc-800/40 animate-pulse" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                            <div
+                                className="h-3.5 rounded-md bg-zinc-800/80 animate-pulse"
+                                style={{ width: `${nameWidths[i % nameWidths.length]}px` }}
+                            />
+                            <div className="h-2.5 w-8 rounded bg-zinc-800/40 animate-pulse shrink-0" />
+                        </div>
+                        <div
+                            className="h-3 rounded-md bg-zinc-800/50 animate-pulse"
+                            style={{ width: `${msgWidths[i % msgWidths.length]}px`, maxWidth: "80%" }}
+                        />
                     </div>
                 </motion.div>
             ))}

@@ -7,7 +7,7 @@ const POAP_API_BASE = "https://api.poap.tech";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 function parsePoapList(data: unknown): boolean {
@@ -26,10 +26,10 @@ function parsePoapList(data: unknown): boolean {
 async function addressHoldsPoap(
     address: string,
     eventId: number,
-    apiKey: string
+    apiKey: string,
 ): Promise<boolean> {
     const url = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
-        address
+        address,
     )}/${eventId}`;
     const res = await fetch(url, {
         headers: { "X-API-Key": apiKey },
@@ -45,7 +45,7 @@ async function addressHoldsPoap(
     if (parsePoapList(data)) return true;
     // Fallback: full scan - POAP API may return different shape for event-specific endpoint
     const fullUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
-        address
+        address,
     )}`;
     const fullRes = await fetch(fullUrl, {
         headers: { "X-API-Key": apiKey },
@@ -56,9 +56,9 @@ async function addressHoldsPoap(
         const fullData = (await fullRes.json()) as unknown;
         const list = Array.isArray(fullData)
             ? fullData
-            : (fullData as Record<string, unknown>)?.tokens ??
+            : ((fullData as Record<string, unknown>)?.tokens ??
               (fullData as Record<string, unknown>)?.poaps ??
-              [];
+              []);
         for (const item of Array.isArray(list) ? list : []) {
             const o = item as Record<string, unknown>;
             const ev = o?.event ?? o;
@@ -69,8 +69,8 @@ async function addressHoldsPoap(
                 typeof eid === "number"
                     ? eid
                     : typeof eid === "string"
-                    ? parseInt(eid, 10)
-                    : NaN;
+                      ? parseInt(eid, 10)
+                      : NaN;
             if (!Number.isNaN(id) && id === eventId) return true;
         }
     } catch {
@@ -82,7 +82,7 @@ async function addressHoldsPoap(
 // POST /api/channels/[id]/join - Join a channel (POAP channels require holding the POAP)
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: Promise<{ id: string }> },
 ) {
     const { id } = await params;
 
@@ -93,7 +93,7 @@ export async function POST(
         if (!userAddress || typeof userAddress !== "string") {
             return NextResponse.json(
                 { error: "User address is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -103,7 +103,7 @@ export async function POST(
                 {
                     error: "Invalid address or ENS name. Could not resolve to an Ethereum address.",
                 },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -117,7 +117,7 @@ export async function POST(
         if (!channel) {
             return NextResponse.json(
                 { error: "Channel not found" },
-                { status: 404 }
+                { status: 404 },
             );
         }
 
@@ -141,7 +141,7 @@ export async function POST(
                     {
                         error: "POAP verification is not configured. You need this POAP to join this channel.",
                     },
-                    { status: 403 }
+                    { status: 403 },
                 );
             }
 
@@ -193,7 +193,7 @@ export async function POST(
                         (await addressHoldsPoap(
                             getAddress(addr as `0x${string}`),
                             poapEventId,
-                            apiKey
+                            apiKey,
                         )));
                 if (holds) {
                     hasPoap = true;
@@ -206,7 +206,7 @@ export async function POST(
                     {
                         error: "You need this POAP to join this channel. Hold the POAP in your wallet to join.",
                     },
-                    { status: 403 }
+                    { status: 403 },
                 );
             }
         }
@@ -219,7 +219,7 @@ export async function POST(
                     {
                         error: "POAP verification is not configured. You need a POAP from this collection to join.",
                     },
-                    { status: 403 }
+                    { status: 403 },
                 );
             }
             const { PoapCompass } = await import("@poap-xyz/poap-sdk");
@@ -230,7 +230,7 @@ export async function POST(
             if (!collection) {
                 return NextResponse.json(
                     { error: "Collection not found" },
-                    { status: 500 }
+                    { status: 500 },
                 );
             }
             let dropIds: number[] = [];
@@ -270,7 +270,7 @@ export async function POST(
             const userEventIds = new Set<number>();
             for (const addr of addressesToCheckCol) {
                 const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
-                    addr
+                    addr,
                 )}`;
                 const scanRes = await fetch(scanUrl, {
                     headers: { "X-API-Key": apiKey },
@@ -280,15 +280,15 @@ export async function POST(
                 const rawList = await scanRes.json();
                 const list = Array.isArray(rawList)
                     ? rawList
-                    : rawList?.tokens ?? rawList?.poaps ?? [];
+                    : (rawList?.tokens ?? rawList?.poaps ?? []);
                 for (const item of list) {
                     const event = item?.event ?? item;
                     const eventId =
                         typeof event?.id === "number"
                             ? event.id
                             : typeof event?.id === "string"
-                            ? parseInt(event.id, 10)
-                            : null;
+                              ? parseInt(event.id, 10)
+                              : null;
                     if (eventId != null && !Number.isNaN(eventId)) {
                         userEventIds.add(eventId);
                     }
@@ -300,7 +300,7 @@ export async function POST(
                     {
                         error: "You need at least one POAP from this collection to join. Hold a POAP in the collection in your wallet to join.",
                     },
-                    { status: 403 }
+                    { status: 403 },
                 );
             }
         }
@@ -330,7 +330,7 @@ export async function POST(
         if (existing) {
             return NextResponse.json(
                 { error: "Already a member of this channel" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -346,7 +346,7 @@ export async function POST(
             console.error("[Channels API] Error joining channel:", joinError);
             return NextResponse.json(
                 { error: "Failed to join channel" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -358,7 +358,7 @@ export async function POST(
         console.error("[Channels API] Error:", e);
         return NextResponse.json(
             { error: "Failed to process request" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

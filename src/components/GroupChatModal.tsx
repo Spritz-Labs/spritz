@@ -26,6 +26,7 @@ import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { toast } from "sonner";
 import {
     LocationMessage,
     isLocationMessage,
@@ -748,7 +749,7 @@ export function GroupChatModal({
         // Validate against chat rules before sending
         const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isAdmin);
         if (ruleViolation) {
-            alert(ruleViolation);
+            toast.error(ruleViolation);
             return;
         }
 
@@ -823,7 +824,7 @@ export function GroupChatModal({
             // Validate pixel art against chat rules
             const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isAdmin);
             if (ruleViolation) {
-                alert(ruleViolation);
+                toast.error(ruleViolation);
                 return;
             }
 
@@ -879,7 +880,7 @@ export function GroupChatModal({
             // Validate GIF against chat rules
             const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isAdmin);
             if (ruleViolation) {
-                alert(ruleViolation);
+                toast.error(ruleViolation);
                 return;
             }
 
@@ -2272,7 +2273,7 @@ export function GroupChatModal({
                                             if (!group) return;
                                             const ruleViolation = validateMessageClientSide(chatRules, "", "location", isAdmin);
                                             if (ruleViolation) {
-                                                alert(ruleViolation);
+                                                toast.error(ruleViolation);
                                                 return;
                                             }
                                             const locationMsg =

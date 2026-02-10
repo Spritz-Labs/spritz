@@ -23,6 +23,8 @@ import {
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { toast } from "sonner";
 import { useModeration } from "@/hooks/useModeration";
 import { QuickMuteDialog } from "./ModerationPanel";
 import { PixelArtEditor } from "./PixelArtEditor";
@@ -389,8 +391,17 @@ export function LocationChatModal({
         }
     }, [isOpen]);
 
+    const isLocationModerator = moderation.permissions.isAdmin || moderation.permissions.isModerator;
+
     const handleSend = useCallback(async () => {
         if (!newMessage.trim() || isSending) return;
+
+        // Validate against chat rules before sending
+        const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isLocationModerator);
+        if (ruleViolation) {
+            toast.error(ruleViolation);
+            return;
+        }
 
         const content = newMessage.trim();
         const replyId = replyingTo?.id;
@@ -456,19 +467,31 @@ export function LocationChatModal({
         replyingTo,
         userAddress,
         locationChat.id,
+        chatRules,
+        isLocationModerator,
     ]);
 
     // Handle GIF sending
     const handleSendGif = useCallback(
         async (gifUrl: string) => {
+            const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isLocationModerator);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
             await sendMessage(gifUrl, "gif");
         },
-        [sendMessage],
+        [sendMessage, chatRules, isLocationModerator],
     );
 
     // Handle pixel art sending
     const handleSendPixelArt = useCallback(
         async (dataUrl: string) => {
+            const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isLocationModerator);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
             setIsUploading(true);
             try {
                 // Upload pixel art to storage
@@ -492,16 +515,21 @@ export function LocationChatModal({
                 setIsUploading(false);
             }
         },
-        [sendMessage],
+        [sendMessage, chatRules, isLocationModerator],
     );
 
     // Handle sharing location
     const handleShareLocation = useCallback(
         (location: LocationData) => {
+            const ruleViolation = validateMessageClientSide(chatRules, "", "location", isLocationModerator);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
             const content = formatLocationMessage(location);
             sendMessage(content, "location");
         },
-        [sendMessage],
+        [sendMessage, chatRules, isLocationModerator],
     );
 
     // Handle share invite link

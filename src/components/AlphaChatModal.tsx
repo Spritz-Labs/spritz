@@ -25,6 +25,7 @@ import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { toast } from "sonner";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import {
     AgentMarkdown,
@@ -851,7 +852,7 @@ export function AlphaChatModal({
         // Validate against chat rules before sending
         const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isModeratorForRules);
         if (ruleViolation) {
-            alert(ruleViolation);
+            toast.error(ruleViolation);
             return;
         }
 
@@ -935,7 +936,7 @@ export function AlphaChatModal({
             // Validate GIF against chat rules
             const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isModeratorForRules);
             if (ruleViolation) {
-                alert(ruleViolation);
+                toast.error(ruleViolation);
                 return;
             }
 
@@ -955,7 +956,7 @@ export function AlphaChatModal({
             // Validate pixel art against chat rules
             const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isModeratorForRules);
             if (ruleViolation) {
-                alert(ruleViolation);
+                toast.error(ruleViolation);
                 return;
             }
 
@@ -997,7 +998,7 @@ export function AlphaChatModal({
             // Validate image against chat rules
             const ruleViolation = validateMessageClientSide(chatRules, "", "image", isModeratorForRules);
             if (ruleViolation) {
-                alert(ruleViolation);
+                toast.error(ruleViolation);
                 return;
             }
 
@@ -2586,7 +2587,7 @@ export function AlphaChatModal({
                                                 ) => {
                                                     const ruleViolation = validateMessageClientSide(chatRules, "", "location", isModeratorForRules);
                                                     if (ruleViolation) {
-                                                        alert(ruleViolation);
+                                                        toast.error(ruleViolation);
                                                         return;
                                                     }
                                                     const locationMsg =

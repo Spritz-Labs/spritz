@@ -48,6 +48,12 @@ const NAV_ITEMS = [
         mobileLabel: "RAG",
     },
     {
+        href: "/admin/broadcast",
+        label: "Broadcast",
+        icon: "📢",
+        mobileLabel: "Blast",
+    },
+    {
         href: "/admin/bug-reports",
         label: "Bug Reports",
         icon: "🐛",

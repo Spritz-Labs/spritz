@@ -21,6 +21,8 @@ import { PixelArtImage } from "./PixelArtImage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { toast } from "sonner";
 import { useModeration } from "@/hooks/useModeration";
 import { QuickMuteDialog } from "./ModerationPanel";
 import { PollCreator } from "./PollCreator";
@@ -1032,8 +1034,17 @@ export function ChannelChatModal({
         }
     }, [replyingTo]);
 
+    const isModerator = moderation.permissions.isAdmin || moderation.permissions.isModerator;
+
     const handleSend = async () => {
         if (!inputValue.trim() || isSending) return;
+
+        // Validate against chat rules before sending
+        const ruleViolation = validateMessageClientSide(chatRules, inputValue.trim(), "text", isModerator);
+        if (ruleViolation) {
+            toast.error(ruleViolation);
+            return;
+        }
 
         setIsSending(true);
         stopTyping(); // Stop typing indicator when message is sent
@@ -1058,6 +1069,13 @@ export function ChannelChatModal({
     // Handle sending GIF
     const handleSendGif = async (gifUrl: string) => {
         if (!gifUrl || isSending) return;
+
+        const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isModerator);
+        if (ruleViolation) {
+            toast.error(ruleViolation);
+            return;
+        }
+
         setIsSending(true);
         try {
             await sendMessage(`[GIF]${gifUrl}`, "text");
@@ -1071,6 +1089,12 @@ export function ChannelChatModal({
 
     // Handle sending pixel art
     const handleSendPixelArt = async (imageData: string) => {
+        const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isModerator);
+        if (ruleViolation) {
+            toast.error(ruleViolation);
+            return;
+        }
+
         setIsUploadingPixelArt(true);
         try {
             // Upload to IPFS via pixel-art endpoint
@@ -1243,6 +1267,13 @@ export function ChannelChatModal({
     ) => {
         const file = e.target.files?.[0];
         if (!file) return;
+
+        // Validate image against chat rules
+        const ruleViolation = validateMessageClientSide(chatRules, "", "image", isModerator);
+        if (ruleViolation) {
+            toast.error(ruleViolation);
+            return;
+        }
 
         // Validate file type
         if (
