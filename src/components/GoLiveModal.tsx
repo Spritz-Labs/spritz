@@ -54,6 +54,13 @@ export function GoLiveModal({
     const [cameraReady, setCameraReady] = useState(false);
     const [copied, setCopied] = useState(false);
 
+    // Device selection state
+    const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+    const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+    const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState<string>("");
+    const [selectedAudioDeviceId, setSelectedAudioDeviceId] = useState<string>("");
+    const [showDeviceSettings, setShowDeviceSettings] = useState(false);
+
     // Generate shareable URL
     const shareUrl = currentStream?.id
         ? `https://app.spritz.chat/live/${currentStream.id}`
@@ -71,35 +78,128 @@ export function GoLiveModal({
         }
     };
 
-    // Start camera preview
-    const startCamera = useCallback(async () => {
+    // Enumerate available media devices
+    const enumerateDevices = useCallback(async () => {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cameras = devices.filter((d) => d.kind === "videoinput");
+            const mics = devices.filter((d) => d.kind === "audioinput");
+            setVideoDevices(cameras);
+            setAudioDevices(mics);
+            console.log(`[GoLive] Found ${cameras.length} cameras, ${mics.length} mics`);
+            return { cameras, mics };
+        } catch (e) {
+            console.error("[GoLive] Error enumerating devices:", e);
+            return { cameras: [], mics: [] };
+        }
+    }, []);
+
+    // Start camera preview with fallback logic
+    const startCamera = useCallback(async (videoDeviceId?: string, audioDeviceId?: string) => {
         try {
             setError(null);
 
-            // Use default camera resolution - let the device choose best quality
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    facingMode: "user",
-                },
-                audio: true,
-            });
+            // Build constraints based on selected devices
+            const videoConstraint: MediaTrackConstraints | boolean = videoDeviceId
+                ? { deviceId: { exact: videoDeviceId } }
+                : { facingMode: "user" };
+            const audioConstraint: MediaTrackConstraints | boolean = audioDeviceId
+                ? { deviceId: { exact: audioDeviceId } }
+                : true;
+
+            let stream: MediaStream | null = null;
+
+            // Attempt 1: Preferred constraints (selected device or facingMode: "user")
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: videoConstraint,
+                    audio: audioConstraint,
+                });
+            } catch (e1) {
+                console.warn("[GoLive] Preferred constraints failed, trying fallback:", e1);
+                // Attempt 2: Simple video + audio (no facingMode, no specific device)
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: true,
+                        audio: true,
+                    });
+                } catch (e2) {
+                    console.warn("[GoLive] Video+audio failed, trying video only:", e2);
+                    // Attempt 3: Video only (mic might be the issue)
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                            video: true,
+                            audio: false,
+                        });
+                    } catch (e3) {
+                        // All attempts failed
+                        throw e3;
+                    }
+                }
+            }
+
+            if (!stream) {
+                throw new Error("No media stream available");
+            }
+
+            // Log which tracks we got
+            const vTracks = stream.getVideoTracks();
+            const aTracks = stream.getAudioTracks();
+            console.log(
+                `[GoLive] Got stream: ${vTracks.length} video tracks, ${aTracks.length} audio tracks`,
+                vTracks.map((t) => `${t.label} (${t.id})`),
+                aTracks.map((t) => `${t.label} (${t.id})`),
+            );
+
+            if (vTracks.length === 0) {
+                console.warn("[GoLive] No video tracks in stream!");
+            }
 
             mediaStreamRef.current = stream;
 
-            if (videoPreviewRef.current) {
-                videoPreviewRef.current.srcObject = stream;
-                await videoPreviewRef.current.play();
+            // Attach to video element - retry a few times if ref not ready yet
+            let attached = false;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                if (videoPreviewRef.current) {
+                    videoPreviewRef.current.srcObject = stream;
+                    try {
+                        await videoPreviewRef.current.play();
+                    } catch (playErr) {
+                        // play() can fail due to autoplay policy - the video may still show
+                        console.warn("[GoLive] play() failed (may still display):", playErr);
+                    }
+                    attached = true;
+                    break;
+                }
+                // Wait for ref to become available
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
+
+            if (!attached) {
+                console.warn("[GoLive] Video ref not available after retries, stream still captured");
             }
 
             setCameraReady(true);
+
+            // Enumerate devices after getting permission (labels become available)
+            await enumerateDevices();
         } catch (e) {
             console.error("[GoLive] Camera error:", e);
-            setError(
-                "Failed to access camera. Please allow camera permissions."
-            );
+            const err = e as DOMException;
+            let message = "Failed to access camera. Please allow camera permissions.";
+            if (err.name === "NotAllowedError") {
+                message = "Camera access denied. Please enable camera permissions in your browser settings.";
+            } else if (err.name === "NotFoundError") {
+                message = "No camera found. Please connect a camera and try again.";
+            } else if (err.name === "NotReadableError" || err.name === "AbortError") {
+                message = "Camera is in use by another app. Please close other apps using your camera.";
+            } else if (err.name === "OverconstrainedError") {
+                message = "Camera doesn't support the requested settings. Try selecting a different camera.";
+            }
+            setError(message);
             setCameraReady(false);
         }
-    }, []);
+    }, [enumerateDevices]);
 
     // Stop camera
     const stopCamera = useCallback(() => {
@@ -355,7 +455,7 @@ export function GoLiveModal({
                 e instanceof Error ? e.message : "Failed to create stream"
             );
             // Restart preview camera on error
-            startCamera();
+            startCamera(selectedVideoDeviceId || undefined, selectedAudioDeviceId || undefined);
         } finally {
             setIsStarting(false);
         }
@@ -545,7 +645,7 @@ export function GoLiveModal({
             } else {
                 // Only start camera if not already ready (prevents interrupting play())
                 if (!cameraReady) {
-                    startCamera();
+                    startCamera(selectedVideoDeviceId || undefined, selectedAudioDeviceId || undefined);
                 }
             }
         } else if (!isOpen) {
@@ -587,6 +687,7 @@ export function GoLiveModal({
             setTitle("");
             setError(null);
             setDuration(0);
+            setShowDeviceSettings(false);
         }
     }, [
         isOpen,
@@ -595,6 +696,8 @@ export function GoLiveModal({
         ingestUrl,
         isStarting,
         cameraReady,
+        selectedVideoDeviceId,
+        selectedAudioDeviceId,
         startCamera,
         stopCamera,
     ]);
@@ -632,6 +735,48 @@ export function GoLiveModal({
             }, 1000);
         };
     }, [stopAllMediaTracks, stopCamera]);
+
+    // Listen for device changes (e.g. user plugs in/out a camera)
+    useEffect(() => {
+        if (!isOpen) return;
+        const handler = () => {
+            console.log("[GoLive] Device change detected");
+            enumerateDevices();
+        };
+        navigator.mediaDevices?.addEventListener("devicechange", handler);
+        return () => {
+            navigator.mediaDevices?.removeEventListener("devicechange", handler);
+        };
+    }, [isOpen, enumerateDevices]);
+
+    // Switch camera when user selects a different device
+    const handleSwitchCamera = useCallback(
+        (deviceId: string) => {
+            setSelectedVideoDeviceId(deviceId);
+            // Restart camera with new device
+            stopCamera();
+            startCamera(deviceId, selectedAudioDeviceId || undefined);
+        },
+        [stopCamera, startCamera, selectedAudioDeviceId],
+    );
+
+    // Switch mic when user selects a different device
+    const handleSwitchMic = useCallback(
+        (deviceId: string) => {
+            setSelectedAudioDeviceId(deviceId);
+            stopCamera();
+            startCamera(selectedVideoDeviceId || undefined, deviceId);
+        },
+        [stopCamera, startCamera, selectedVideoDeviceId],
+    );
+
+    // Flip between front/back camera (mobile)
+    const handleFlipCamera = useCallback(() => {
+        if (videoDevices.length < 2) return;
+        const currentIdx = videoDevices.findIndex((d) => d.deviceId === selectedVideoDeviceId);
+        const nextIdx = (currentIdx + 1) % videoDevices.length;
+        handleSwitchCamera(videoDevices[nextIdx].deviceId);
+    }, [videoDevices, selectedVideoDeviceId, handleSwitchCamera]);
 
     // Track duration while live
     useEffect(() => {
@@ -995,7 +1140,7 @@ export function GoLiveModal({
                                             {error}
                                         </p>
                                         <button
-                                            onClick={startCamera}
+                                            onClick={() => startCamera(selectedVideoDeviceId || undefined, selectedAudioDeviceId || undefined)}
                                             className="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-colors"
                                         >
                                             Try Again
@@ -1012,25 +1157,92 @@ export function GoLiveModal({
                                         <h2 className="text-white font-bold text-lg">
                                             Go Live
                                         </h2>
-                                        <button
-                                            onClick={handleClose}
-                                            className="p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
-                                        >
-                                            <svg
-                                                className="w-7 h-7 text-white"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
+                                        <div className="flex items-center gap-2">
+                                            {/* Camera flip button (mobile - only if >1 camera) */}
+                                            {videoDevices.length > 1 && (
+                                                <button
+                                                    onClick={handleFlipCamera}
+                                                    className="p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                                    title="Switch camera"
+                                                >
+                                                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            {/* Device settings button */}
+                                            {(videoDevices.length > 1 || audioDevices.length > 1) && (
+                                                <button
+                                                    onClick={() => setShowDeviceSettings(!showDeviceSettings)}
+                                                    className={`p-3 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center ${showDeviceSettings ? 'bg-white/20' : 'bg-black/60 hover:bg-black/80'}`}
+                                                    title="Device settings"
+                                                >
+                                                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={handleClose}
+                                                className="p-3 bg-black/60 hover:bg-black/80 rounded-full transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
                                             >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2.5}
-                                                    d="M6 18L18 6M6 6l12 12"
-                                                />
-                                            </svg>
-                                        </button>
+                                                <svg
+                                                    className="w-7 h-7 text-white"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2.5}
+                                                        d="M6 18L18 6M6 6l12 12"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {/* Device settings panel */}
+                                    {showDeviceSettings && (
+                                        <div className="mt-3 p-3 bg-black/80 rounded-xl backdrop-blur-sm space-y-3">
+                                            {/* Camera selector */}
+                                            {videoDevices.length > 0 && (
+                                                <div>
+                                                    <label className="text-white/60 text-xs font-medium mb-1 block">Camera</label>
+                                                    <select
+                                                        value={selectedVideoDeviceId}
+                                                        onChange={(e) => handleSwitchCamera(e.target.value)}
+                                                        className="w-full px-3 py-2 bg-zinc-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-500 appearance-none"
+                                                    >
+                                                        {videoDevices.map((device, idx) => (
+                                                            <option key={device.deviceId} value={device.deviceId}>
+                                                                {device.label || `Camera ${idx + 1}`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            {/* Mic selector */}
+                                            {audioDevices.length > 0 && (
+                                                <div>
+                                                    <label className="text-white/60 text-xs font-medium mb-1 block">Microphone</label>
+                                                    <select
+                                                        value={selectedAudioDeviceId}
+                                                        onChange={(e) => handleSwitchMic(e.target.value)}
+                                                        className="w-full px-3 py-2 bg-zinc-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-red-500 appearance-none"
+                                                    >
+                                                        {audioDevices.map((device, idx) => (
+                                                            <option key={device.deviceId} value={device.deviceId}>
+                                                                {device.label || `Microphone ${idx + 1}`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Bottom controls */}
