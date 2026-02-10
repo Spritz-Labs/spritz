@@ -158,8 +158,8 @@ const nextConfig = {
                             "connect-src 'self' https: wss: ws: blob: https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com",
                             // Media: self + blob for video/audio
                             "media-src 'self' blob: https:",
-                            // Frame: self + WalletConnect + Cloudflare + Alien SSO + World ID + Huddle01 + Google OAuth
-                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com https://id.worldcoin.org https://*.worldcoin.org https://app.huddle01.com https://*.huddle01.com https://accounts.google.com",
+                            // Frame: self + WalletConnect + Cloudflare + Alien SSO + World ID + Huddle01 + Google OAuth + media embeds (Spotify, YouTube, Vimeo, Loom)
+                            "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com https://id.worldcoin.org https://*.worldcoin.org https://app.huddle01.com https://*.huddle01.com https://accounts.google.com https://open.spotify.com https://www.youtube.com https://www.youtube-nocookie.com https://youtube-nocookie.com https://player.vimeo.com https://www.loom.com",
                             // Object: none (no plugins)
                             "object-src 'none'",
                             // Base URI: self only

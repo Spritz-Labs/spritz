@@ -901,6 +901,98 @@ function WidgetConfigModal({
     );
 }
 
+// ─── Spotify config with search + oEmbed preview ───
+import { SpotifySearchFields } from "./SpotifySearch";
+
+function SpotifyConfigFields({ config, updateField }: { config: Record<string, unknown>; updateField: (field: string, value: unknown) => void }) {
+    return (
+        <SpotifySearchFields
+            spotifyUri={(config.spotifyUri as string) || ''}
+            onSelect={(url) => updateField('spotifyUri', url)}
+            onManualInput={(val) => updateField('spotifyUri', val)}
+        />
+    );
+}
+
+// ─── Video config that accepts full YouTube/Vimeo URLs ───
+function extractYouTubeId(input: string): string | null {
+    // Already a bare ID (11 chars, alphanumeric + _ -)
+    if (/^[a-zA-Z0-9_-]{11}$/.test(input.trim())) return input.trim();
+    try {
+        const url = new URL(input.trim());
+        const host = url.hostname.replace('www.', '');
+        if (host === 'youtube.com' || host === 'youtube-nocookie.com' || host === 'm.youtube.com') {
+            // /watch?v=ID or /embed/ID or /v/ID or /shorts/ID
+            if (url.searchParams.has('v')) return url.searchParams.get('v');
+            const pathMatch = url.pathname.match(/^\/(embed|v|shorts)\/([a-zA-Z0-9_-]{11})/);
+            if (pathMatch) return pathMatch[2];
+        }
+        if (host === 'youtu.be') {
+            const id = url.pathname.slice(1).split('/')[0];
+            if (/^[a-zA-Z0-9_-]{11}$/.test(id)) return id;
+        }
+    } catch { /* not a URL */ }
+    return null;
+}
+
+function VideoConfigFields({ config, updateField }: { config: Record<string, unknown>; updateField: (field: string, value: unknown) => void }) {
+    const [rawInput, setRawInput] = useState((config.videoId as string) || '');
+    const platform = (config.platform as string) || 'youtube';
+
+    const handleVideoInput = (value: string) => {
+        setRawInput(value);
+        if (platform === 'youtube') {
+            const id = extractYouTubeId(value);
+            if (id) {
+                updateField('videoId', id);
+            } else {
+                updateField('videoId', value);
+            }
+        } else {
+            updateField('videoId', value);
+        }
+    };
+
+    return (
+        <>
+            <div>
+                <label className="text-sm text-zinc-400 mb-2 block">Platform</label>
+                <select
+                    value={platform}
+                    onChange={(e) => updateField('platform', e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                >
+                    <option value="youtube">YouTube</option>
+                    <option value="vimeo">Vimeo</option>
+                    <option value="loom">Loom</option>
+                </select>
+            </div>
+            <div>
+                <label className="text-sm text-zinc-400 mb-2 block">
+                    {platform === 'youtube' ? 'YouTube URL or Video ID' : 'Video ID'}
+                </label>
+                <input
+                    type="text"
+                    value={rawInput}
+                    onChange={(e) => handleVideoInput(e.target.value)}
+                    placeholder={platform === 'youtube' ? 'https://youtube.com/watch?v=... or dQw4w9WgXcQ' : 'Video ID'}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
+                />
+                {platform === 'youtube' && (
+                    <p className="text-zinc-500 text-xs mt-1">
+                        Paste a full YouTube URL or just the video ID
+                    </p>
+                )}
+                {platform === 'youtube' && rawInput && extractYouTubeId(rawInput) && rawInput !== extractYouTubeId(rawInput) && (
+                    <p className="text-xs text-green-400 mt-1">
+                        Extracted ID: {extractYouTubeId(rawInput)}
+                    </p>
+                )}
+            </div>
+        </>
+    );
+}
+
 // Simplified widget config fields (importing full version would create circular dependency)
 function WidgetConfigFields({
     type,
@@ -1055,44 +1147,12 @@ function WidgetConfigFields({
 
         case 'spotify':
             return (
-                <div>
-                    <label className="text-sm text-zinc-400 mb-2 block">Spotify Link or URI</label>
-                    <input
-                        type="text"
-                        value={(config.spotifyUri as string) || ''}
-                        onChange={(e) => updateField('spotifyUri', e.target.value)}
-                        placeholder="https://open.spotify.com/track/..."
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                    />
-                </div>
+                <SpotifyConfigFields config={config} updateField={updateField} />
             );
 
         case 'video':
             return (
-                <>
-                    <div>
-                        <label className="text-sm text-zinc-400 mb-2 block">Platform</label>
-                        <select
-                            value={(config.platform as string) || 'youtube'}
-                            onChange={(e) => updateField('platform', e.target.value)}
-                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                        >
-                            <option value="youtube">YouTube</option>
-                            <option value="vimeo">Vimeo</option>
-                            <option value="loom">Loom</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-sm text-zinc-400 mb-2 block">Video ID</label>
-                        <input
-                            type="text"
-                            value={(config.videoId as string) || ''}
-                            onChange={(e) => updateField('videoId', e.target.value)}
-                            placeholder="dQw4w9WgXcQ"
-                            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white"
-                        />
-                    </div>
-                </>
+                <VideoConfigFields config={config} updateField={updateField} />
             );
 
         case 'github':
