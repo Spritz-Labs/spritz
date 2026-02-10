@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
             query.is("chat_id", null);
         }
 
-        const { data, error } = await query.maybeSingle();
+        const { data, error } = await query.limit(1).maybeSingle();
 
         if (error) {
             console.error("[ChatRules] Fetch error:", error);
@@ -194,13 +194,44 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Upsert rules
-        console.log("[ChatRules] Upserting:", JSON.stringify(updateData));
-        const { data, error } = await supabase
+        // Find existing row first, then update or insert
+        // (upsert doesn't work reliably with NULL chat_id in PostgreSQL)
+        console.log("[ChatRules] Saving:", JSON.stringify(updateData));
+
+        const existingQuery = supabase
             .from("shout_chat_rules")
-            .upsert(updateData, { onConflict: "chat_type,chat_id" })
-            .select()
-            .single();
+            .select("id")
+            .eq("chat_type", chatType);
+
+        if (chatId) {
+            existingQuery.eq("chat_id", chatId);
+        } else {
+            existingQuery.is("chat_id", null);
+        }
+
+        const { data: existing } = await existingQuery.limit(1).maybeSingle();
+
+        let data, error;
+        if (existing?.id) {
+            // Update existing row by id
+            const result = await supabase
+                .from("shout_chat_rules")
+                .update(updateData)
+                .eq("id", existing.id)
+                .select()
+                .single();
+            data = result.data;
+            error = result.error;
+        } else {
+            // Insert new row
+            const result = await supabase
+                .from("shout_chat_rules")
+                .insert(updateData)
+                .select()
+                .single();
+            data = result.data;
+            error = result.error;
+        }
 
         if (error) {
             console.error("[ChatRules] Update error:", error.message, error.details, error.hint);

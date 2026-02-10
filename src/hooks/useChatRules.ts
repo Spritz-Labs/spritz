@@ -84,7 +84,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                     ...prev,
                     rules: prev.rules
                         ? { ...prev.rules, [field]: value }
-                        : prev.rules,
+                        : { ...DEFAULT_RULES, chat_type: chatType, chat_id: chatId || null, [field]: value } as unknown as ChatRules,
                 }));
 
                 const res = await fetch("/api/chat-rules", {
