@@ -183,8 +183,30 @@ export async function POST(request: NextRequest) {
                 );
             }
             console.error("[BlockedWords] Insert error:", error);
+            console.error("[BlockedWords] Insert error details:", JSON.stringify({
+                code: error.code,
+                message: error.message,
+                details: error.details,
+                hint: error.hint,
+                insertPayload: {
+                    word: word.trim().toLowerCase(),
+                    scope: scope || "global",
+                    chat_type: scope === "room" ? chatType : null,
+                    chat_id: scope === "room" ? chatId || null : null,
+                    action: action || "block",
+                    is_regex: isRegex || false,
+                    added_by: userAddress,
+                },
+            }));
             return NextResponse.json(
-                { error: "Failed to add blocked word" },
+                { 
+                    error: "Failed to add blocked word",
+                    debug: {
+                        code: error.code,
+                        message: error.message,
+                        hint: error.hint,
+                    }
+                },
                 { status: 500 },
             );
         }

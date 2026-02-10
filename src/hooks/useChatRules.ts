@@ -483,7 +483,9 @@ export function useBlockedWords(
 
                 if (!res.ok) {
                     const data = await res.json();
-                    alert(data.error || "Failed to add blocked word");
+                    const debugInfo = data.debug ? `\n\nDebug: ${data.debug.code} - ${data.debug.message}${data.debug.hint ? ` (${data.debug.hint})` : ''}` : '';
+                    console.error("[useBlockedWords] API error:", data);
+                    alert((data.error || "Failed to add blocked word") + debugInfo);
                     return false;
                 }
 
