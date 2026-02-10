@@ -5595,6 +5595,7 @@ function DashboardContent({
                             );
                         }
                     }}
+                    onOpenUserCard={(address) => setUserCardAddress(address)}
                 />
             )}
 

@@ -93,6 +93,7 @@ type ChatModalProps = {
     peerName?: string | null;
     peerAvatar?: string | null;
     onMessageSent?: (messagePreview?: string) => void; // Callback when a message is sent
+    onOpenUserCard?: (address: string) => void; // Callback to open a user's profile card
 };
 
 type Message = {
@@ -240,6 +241,7 @@ export function ChatModal({
     peerName,
     peerAvatar,
     onMessageSent,
+    onOpenUserCard,
 }: ChatModalProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [newMessage, setNewMessage] = useState("");
@@ -1585,30 +1587,30 @@ export function ChatModal({
                         >
                             {/* Header - unified mobile-first design */}
                             <div className="flex items-center gap-2 px-2 sm:px-3 py-2.5 border-b border-zinc-800">
-                                {/* Avatar with online status - click to view full size */}
+                                {/* Avatar with online status - click to open profile */}
                                 <div className="shrink-0 ml-1 relative">
-                                    {peerAvatar ? (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setViewerImage(peerAvatar)
-                                            }
-                                            className="w-9 h-9 rounded-full overflow-hidden focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:outline-none"
-                                            aria-label="View avatar full size"
-                                        >
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            onOpenUserCard?.(peerAddress)
+                                        }
+                                        className="w-9 h-9 rounded-full overflow-hidden focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:outline-none"
+                                        aria-label="View profile"
+                                    >
+                                        {peerAvatar ? (
                                             <img
                                                 src={peerAvatar}
                                                 alt={displayName}
                                                 className="w-full h-full object-cover"
                                             />
-                                        </button>
-                                    ) : (
-                                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
-                                            <span className="text-white font-bold text-sm">
-                                                {displayName[0].toUpperCase()}
-                                            </span>
-                                        </div>
-                                    )}
+                                        ) : (
+                                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
+                                                <span className="text-white font-bold text-sm">
+                                                    {displayName[0].toUpperCase()}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </button>
                                     {/* Online status dot */}
                                     {peerOnline && (
                                         <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-zinc-900 rounded-full" />
@@ -1953,19 +1955,26 @@ export function ChatModal({
                                                                     : "justify-start"
                                                             }`}
                                                         >
-                                                            {/* Peer avatar for incoming messages */}
+                                                            {/* Peer avatar for incoming messages - click to open profile */}
                                                             {!isOwn && (
-                                                                <div className="flex-shrink-0 mb-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        onOpenUserCard?.(peerAddress);
+                                                                    }}
+                                                                    className="flex-shrink-0 mb-1"
+                                                                >
                                                                     {peerAvatar ? (
                                                                         <img
                                                                             src={
                                                                                 peerAvatar
                                                                             }
                                                                             alt=""
-                                                                            className="w-7 h-7 rounded-full object-cover"
+                                                                            className="w-7 h-7 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
                                                                         />
                                                                     ) : (
-                                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-bold">
+                                                                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:opacity-80 transition-opacity">
                                                                             {peerName?.[0]?.toUpperCase() ||
                                                                                 peerAddress
                                                                                     .slice(
@@ -1975,7 +1984,7 @@ export function ChatModal({
                                                                                     .toUpperCase()}
                                                                         </div>
                                                                     )}
-                                                                </div>
+                                                                </button>
                                                             )}
                                                             <div
                                                                 className={`${

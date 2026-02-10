@@ -53,6 +53,7 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { ImageViewerModal } from "./ImageViewerModal";
 import { ChatMembersList } from "./ChatMembersList";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay, type DisplayPoll } from "./PollDisplay";
@@ -282,6 +283,7 @@ export function AlphaChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
         useState<MessageActionConfig | null>(null);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [onlineStatuses, setOnlineStatuses] = useState<
         Record<string, boolean>
@@ -2291,22 +2293,14 @@ export function AlphaChatModal({
                                                                                       msg.content,
                                                                                   ) ? (
                                                                                     <div className="relative max-w-[320px] rounded-xl overflow-hidden">
-                                                                                        <a
-                                                                                            href={getImageUrl(
+                                                                                        <img
+                                                                                            src={getImageUrl(
                                                                                                 msg.content,
                                                                                             )}
-                                                                                            target="_blank"
-                                                                                            rel="noopener noreferrer"
-                                                                                        >
-                                                                                            <img
-                                                                                                src={getImageUrl(
-                                                                                                    msg.content,
-                                                                                                )}
-                                                                                                alt="Shared image"
-                                                                                                className="w-full h-auto rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
-                                                                                                loading="lazy"
-                                                                                            />
-                                                                                        </a>
+                                                                                            alt="Shared image"
+                                                                                            className="w-full h-auto rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
+                                                                                            loading="lazy"
+                                                                                        />
                                                                                     </div>
                                                                                 ) : isLocationMessage(
                                                                                       msg.content,
@@ -3155,8 +3149,25 @@ export function AlphaChatModal({
                                                   "",
                                           )
                                     : undefined,
+                            onView:
+                                selectedMessageConfig?.hasMedia &&
+                                selectedMessageConfig?.mediaUrl
+                                    ? () => {
+                                          setPreviewImage(
+                                              selectedMessageConfig.mediaUrl || "",
+                                          );
+                                      }
+                                    : undefined,
                         }}
                         reactions={ALPHA_REACTION_EMOJIS}
+                    />
+
+                    {/* Image Preview Modal */}
+                    <ImageViewerModal
+                        isOpen={!!previewImage}
+                        onClose={() => setPreviewImage(null)}
+                        imageUrl={previewImage ?? ""}
+                        alt="Shared image"
                     />
 
                     {/* Members List Panel */}

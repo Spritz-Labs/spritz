@@ -35,6 +35,7 @@ export type MessageActionCallbacks = {
     onReport?: () => void;
     onDownload?: () => void;
     onShare?: () => void;
+    onView?: () => void;
 };
 
 type MessageActionBarProps = {
@@ -274,6 +275,10 @@ export function MessageActionBar({
                 callbacks.onReport?.();
                 onClose();
                 break;
+            case "view":
+                callbacks.onView?.();
+                onClose();
+                break;
         }
     }, [callbacks, onClose, handleCopy, handleShare, handleDownload, handleDownloadHD]);
 
@@ -305,6 +310,12 @@ export function MessageActionBar({
             icon: isSharing ? <Spinner /> : <ShareIcon />, 
             label: "Share",
             show: true 
+        },
+        { 
+            id: "view", 
+            icon: <ViewIcon />, 
+            label: "View",
+            show: !!config.hasMedia && !!callbacks.onView
         },
         { 
             id: "download", 
@@ -539,6 +550,14 @@ function ReportIcon() {
     return (
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="w-full h-full">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+    );
+}
+
+function ViewIcon() {
+    return (
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} className="w-full h-full">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
         </svg>
     );
 }

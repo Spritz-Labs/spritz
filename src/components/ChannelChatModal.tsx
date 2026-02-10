@@ -2539,13 +2539,7 @@ export function ChannelChatModal({
                                                                         : ""
                                                                 }`}
                                                             >
-                                                                <div
-                                                                    onClick={() => {
-                                                                        setPreviewImage(
-                                                                            msg.content,
-                                                                        );
-                                                                    }}
-                                                                >
+                                                                <div>
                                                                     <PixelArtImage
                                                                         src={
                                                                             msg.content
@@ -2609,11 +2603,6 @@ export function ChannelChatModal({
                                                                     alt="Shared image"
                                                                     loading="lazy"
                                                                     className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                                                    onClick={() => {
-                                                                        setPreviewImage(
-                                                                            msg.content,
-                                                                        );
-                                                                    }}
                                                                     onError={(
                                                                         e,
                                                                     ) => {
@@ -3899,6 +3888,15 @@ export function ChannelChatModal({
                                               "Report functionality coming soon",
                                           );
                                       }
+                                  }
+                                : undefined,
+                        onView:
+                            selectedMessageConfig?.hasMedia &&
+                            selectedMessageConfig?.mediaUrl
+                                ? () => {
+                                      setPreviewImage(
+                                          selectedMessageConfig.mediaUrl || "",
+                                      );
                                   }
                                 : undefined,
                     }}

@@ -36,6 +36,7 @@ import {
     type MessageActionConfig,
     type MessageActionCallbacks,
 } from "./MessageActionBar";
+import { ImageViewerModal } from "./ImageViewerModal";
 import {
     useMessageReactions,
     MESSAGE_REACTION_EMOJIS,
@@ -155,6 +156,7 @@ export function LocationChatModal({
     const [selectedMessage, setSelectedMessage] =
         useState<MessageActionConfig | null>(null);
     const [showMessageActions, setShowMessageActions] = useState(false);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -612,6 +614,12 @@ export function LocationChatModal({
                   }
               }
             : undefined,
+        onView:
+            selectedMessage?.hasMedia && selectedMessage?.mediaUrl
+                ? () => {
+                      setPreviewImage(selectedMessage.mediaUrl || "");
+                  }
+                : undefined,
     };
 
     // Cancel reply
@@ -1725,6 +1733,14 @@ export function LocationChatModal({
                 config={selectedMessage}
                 callbacks={messageActionCallbacks}
                 reactions={MESSAGE_REACTION_EMOJIS}
+            />
+
+            {/* Image Preview Modal */}
+            <ImageViewerModal
+                isOpen={!!previewImage}
+                onClose={() => setPreviewImage(null)}
+                imageUrl={previewImage ?? ""}
+                alt="Shared image"
             />
 
             {/* Members List Panel - same as global/channel chat */}

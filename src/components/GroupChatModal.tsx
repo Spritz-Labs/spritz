@@ -46,6 +46,7 @@ import { ChatEmptyState } from "./ChatEmptyState";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
+import { ImageViewerModal } from "./ImageViewerModal";
 import { MessageSearch } from "./MessageSearch";
 import { PollCreator } from "./PollCreator";
 import { PollDisplay, type DisplayPoll } from "./PollDisplay";
@@ -181,6 +182,7 @@ export function GroupChatModal({
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
         useState<MessageActionConfig | null>(null);
+    const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [showSearch, setShowSearch] = useState(false);
     const [showPollCreator, setShowPollCreator] = useState(false);
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
@@ -2736,8 +2738,25 @@ export function GroupChatModal({
                                           );
                                       }
                                     : undefined,
+                            onView:
+                                selectedMessageConfig?.hasMedia &&
+                                selectedMessageConfig?.mediaUrl
+                                    ? () => {
+                                          setPreviewImage(
+                                              selectedMessageConfig.mediaUrl || "",
+                                          );
+                                      }
+                                    : undefined,
                         }}
                         reactions={MESSAGE_REACTION_EMOJIS}
+                    />
+
+                    {/* Image Preview Modal */}
+                    <ImageViewerModal
+                        isOpen={!!previewImage}
+                        onClose={() => setPreviewImage(null)}
+                        imageUrl={previewImage ?? ""}
+                        alt="Shared image"
                     />
                 </>
             )}
