@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 
 // Regex to match mentions in the format @[name](address) - needs to be defined early
@@ -230,16 +230,22 @@ export function MentionInput({
     // Display value shows @Name instead of @[Name](address)
     const displayValue = useMemo(() => toDisplayValue(value), [value]);
     
-    // Auto-resize textarea based on content
-    useEffect(() => {
+    // Track IME / mobile-keyboard composition to avoid fighting the browser
+    const isComposingRef = useRef(false);
+
+    // Auto-resize textarea based on content.
+    // useLayoutEffect runs synchronously *before* the browser paints, so the
+    // height never visually collapses to "auto" (which was causing layout
+    // thrashing, keyboard flicker, and lost keystrokes on mobile).
+    useLayoutEffect(() => {
         const textarea = inputRef.current;
         if (textarea && multiline) {
-            // Reset height to get accurate scrollHeight
-            textarea.style.height = 'auto';
-            // Calculate line height (roughly 24px per line)
+            // Temporarily force a single-row height so scrollHeight recalculates
+            // to the *content* height instead of the previously-set explicit height.
+            textarea.style.height = '0px';
             const lineHeight = 24;
             const maxHeight = lineHeight * maxRows;
-            const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+            const newHeight = Math.max(lineHeight, Math.min(textarea.scrollHeight, maxHeight));
             textarea.style.height = `${newHeight}px`;
         }
     }, [displayValue, multiline, maxRows, inputRef]);
@@ -313,6 +319,16 @@ export function MentionInput({
 
     // Handle input change
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        // While the mobile keyboard is composing (swipe, autocorrect,
+        // predictive text), let the browser own the textarea value.
+        // We'll sync once compositionEnd fires.
+        // Belt-and-suspenders: also check the native event's isComposing flag
+        // (covers Chrome Android where input fires before compositionEnd).
+        if (
+            isComposingRef.current ||
+            (e.nativeEvent && (e.nativeEvent as InputEvent).isComposing)
+        ) return;
+
         const newDisplayValue = e.target.value;
         const displayCursorPos = e.target.selectionStart || 0;
         
@@ -566,6 +582,15 @@ export function MentionInput({
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
+                onCompositionStart={() => {
+                    isComposingRef.current = true;
+                }}
+                onCompositionEnd={(e) => {
+                    isComposingRef.current = false;
+                    // Composition finished (autocorrect, swipe, etc.) – sync the
+                    // final value to parent by re-running handleChange.
+                    handleChange(e as unknown as React.ChangeEvent<HTMLTextAreaElement>);
+                }}
                 placeholder={placeholder}
                 disabled={disabled}
                 rows={1}
