@@ -2698,7 +2698,15 @@ export function GroupChatModal({
                                       if (msg) setReplyingTo(msg);
                                   }
                                 : undefined,
-                            onCopy: () => {},
+                            onCopy: selectedMessageConfig
+                                ? () => {
+                                      if (selectedMessageConfig.messageContent) {
+                                          navigator.clipboard.writeText(
+                                              selectedMessageConfig.messageContent,
+                                          );
+                                      }
+                                  }
+                                : undefined,
                             onPin:
                                 selectedMessageConfig &&
                                 !selectedMessageConfig.isPinned

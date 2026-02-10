@@ -2540,10 +2540,7 @@ export function ChannelChatModal({
                                                                 }`}
                                                             >
                                                                 <div
-                                                                    onClick={(
-                                                                        e,
-                                                                    ) => {
-                                                                        e.stopPropagation();
+                                                                    onClick={() => {
                                                                         setPreviewImage(
                                                                             msg.content,
                                                                         );
@@ -2612,10 +2609,7 @@ export function ChannelChatModal({
                                                                     alt="Shared image"
                                                                     loading="lazy"
                                                                     className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                                                    onClick={(
-                                                                        e,
-                                                                    ) => {
-                                                                        e.stopPropagation();
+                                                                    onClick={() => {
                                                                         setPreviewImage(
                                                                             msg.content,
                                                                         );

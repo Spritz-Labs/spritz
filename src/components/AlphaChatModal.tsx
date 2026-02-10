@@ -2091,14 +2091,20 @@ export function AlphaChatModal({
                                                                                                   isPinned:
                                                                                                       msg.is_pinned,
                                                                                                   hasMedia:
-                                                                                                      isPixelArt,
+                                                                                                      isPixelArt ||
+                                                                                                      isGifMessage(msg.content) ||
+                                                                                                      isImageMessage(msg.content),
                                                                                                   isPixelArt,
                                                                                                   mediaUrl:
                                                                                                       isPixelArt
                                                                                                           ? getPixelArtUrl(
                                                                                                                 msg.content,
                                                                                                             )
-                                                                                                          : undefined,
+                                                                                                          : isGifMessage(msg.content)
+                                                                                                            ? getGifUrl(msg.content)
+                                                                                                            : isImageMessage(msg.content)
+                                                                                                              ? getImageUrl(msg.content)
+                                                                                                              : undefined,
                                                                                               },
                                                                                     );
                                                                                 }}
@@ -2291,11 +2297,6 @@ export function AlphaChatModal({
                                                                                             )}
                                                                                             target="_blank"
                                                                                             rel="noopener noreferrer"
-                                                                                            onClick={(
-                                                                                                e,
-                                                                                            ) =>
-                                                                                                e.stopPropagation()
-                                                                                            }
                                                                                         >
                                                                                             <img
                                                                                                 src={getImageUrl(
@@ -3119,7 +3120,15 @@ export function AlphaChatModal({
                                       if (msg) alphaChat.setReplyingTo(msg);
                                   }
                                 : undefined,
-                            onCopy: () => {},
+                            onCopy: selectedMessageConfig
+                                ? () => {
+                                      if (selectedMessageConfig.messageContent) {
+                                          navigator.clipboard.writeText(
+                                              selectedMessageConfig.messageContent,
+                                          );
+                                      }
+                                  }
+                                : undefined,
                             onPin:
                                 selectedMessageConfig?.isPinned === false
                                     ? () =>
