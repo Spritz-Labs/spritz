@@ -27,10 +27,12 @@ type ProfileAvatarModalProps = {
     currentStream: Stream | null;
     onCreateStream: (
         title?: string,
-        description?: string
+        description?: string,
+        record?: boolean,
     ) => Promise<Stream | null>;
     onGoLive: (streamId: string) => Promise<boolean>;
     onEndStream: (streamId: string) => Promise<boolean>;
+    hasBetaAccess?: boolean;
 };
 
 export function ProfileAvatarModal({
@@ -51,6 +53,7 @@ export function ProfileAvatarModal({
     onCreateStream,
     onGoLive,
     onEndStream,
+    hasBetaAccess = false,
 }: ProfileAvatarModalProps) {
     const [activeTab, setActiveTab] = useState<"profile" | "goLive">(
         initialTab
@@ -558,6 +561,7 @@ export function ProfileAvatarModal({
                                         onCreateStream={onCreateStream}
                                         onGoLive={onGoLive}
                                         onEndStream={onEndStream}
+                                        hasBetaAccess={hasBetaAccess}
                                     />
                                 </motion.div>
                             )}

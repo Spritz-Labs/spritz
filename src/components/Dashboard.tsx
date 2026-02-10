@@ -6684,6 +6684,7 @@ function DashboardContent({
                 onCreateStream={createStream}
                 onGoLive={goLive}
                 onEndStream={endStream}
+                hasBetaAccess={hasBetaAccess}
             />
 
             {/* Bug Report Modal */}

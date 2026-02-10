@@ -102,21 +102,29 @@ export async function PATCH(
             updates.status = "ended";
             updates.ended_at = new Date().toISOString();
 
-            // Get recordings from Livepeer and save as assets
+            // Only fetch/save recordings if recording was enabled for this stream
+            // Check Livepeer to see if recording was enabled
             if (stream.stream_id) {
-                const assets = await getLivepeerStreamAssets(stream.stream_id);
-                for (const asset of assets) {
-                    await supabase.from("shout_stream_assets").upsert({
-                        stream_id: id,
-                        user_address: normalizedAddress,
-                        asset_id: asset.id,
-                        playback_id: asset.playbackId,
-                        playback_url: asset.playbackUrl,
-                        download_url: asset.downloadUrl,
-                        duration_seconds: asset.videoSpec?.duration,
-                        size_bytes: asset.size,
-                        status: asset.status.phase === "ready" ? "ready" : "processing",
-                    }, { onConflict: "asset_id" });
+                try {
+                    const livepeerStream = await getLivepeerStream(stream.stream_id);
+                    if (livepeerStream?.record) {
+                        const assets = await getLivepeerStreamAssets(stream.stream_id);
+                        for (const asset of assets) {
+                            await supabase.from("shout_stream_assets").upsert({
+                                stream_id: id,
+                                user_address: normalizedAddress,
+                                asset_id: asset.id,
+                                playback_id: asset.playbackId,
+                                playback_url: asset.playbackUrl,
+                                download_url: asset.downloadUrl,
+                                duration_seconds: asset.videoSpec?.duration,
+                                size_bytes: asset.size,
+                                status: asset.status.phase === "ready" ? "ready" : "processing",
+                            }, { onConflict: "asset_id" });
+                        }
+                    }
+                } catch (e) {
+                    console.warn("[Streams API] Error checking/saving recordings:", e);
                 }
             }
         }

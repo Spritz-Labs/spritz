@@ -34,8 +34,10 @@ export type LivepeerAsset = {
 
 /**
  * Create a new stream on Livepeer
+ * @param name - Stream name
+ * @param record - Whether to record the stream for VOD playback (default: false)
  */
-export async function createLivepeerStream(name: string): Promise<LivepeerStream | null> {
+export async function createLivepeerStream(name: string, record = false): Promise<LivepeerStream | null> {
     if (!LIVEPEER_API_KEY) {
         console.error("[Livepeer] API key not configured");
         return null;
@@ -50,9 +52,9 @@ export async function createLivepeerStream(name: string): Promise<LivepeerStream
             },
             body: JSON.stringify({
                 name,
-                record: true, // Enable recording for VOD playback
+                record, // Only enable recording when explicitly requested (beta feature)
                 profiles: [
-                    // Transcoding profiles
+                    // Transcoding profiles for adaptive bitrate streaming
                     { name: "720p", bitrate: 2000000, fps: 30, width: 1280, height: 720 },
                     { name: "480p", bitrate: 1000000, fps: 30, width: 854, height: 480 },
                     { name: "360p", bitrate: 500000, fps: 30, width: 640, height: 360 },

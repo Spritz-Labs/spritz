@@ -57,7 +57,7 @@ export function useStreams(userAddress: string | null) {
 
     // Create a new stream
     const createStream = useCallback(
-        async (title?: string, description?: string): Promise<Stream | null> => {
+        async (title?: string, description?: string, record?: boolean): Promise<Stream | null> => {
             if (!userAddress) return null;
 
             setIsLoading(true);
@@ -72,6 +72,7 @@ export function useStreams(userAddress: string | null) {
                         userAddress,
                         title,
                         description,
+                        record,
                     }),
                 });
 

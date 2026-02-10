@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-        const { userAddress: bodyUserAddress, title, description } = body;
+        const { userAddress: bodyUserAddress, title, description, record } = body;
         
         // Use session address, fall back to body for backward compatibility
         const userAddress = session?.userAddress || bodyUserAddress;
@@ -222,9 +222,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Create stream on Livepeer
+        // Create stream on Livepeer (recording disabled by default, beta feature)
         const streamName = `${normalizedAddress}-${Date.now()}`;
-        const livepeerStream = await createLivepeerStream(streamName);
+        const livepeerStream = await createLivepeerStream(streamName, record === true);
 
         if (!livepeerStream) {
             return NextResponse.json(
