@@ -125,8 +125,9 @@ export async function POST(request: NextRequest) {
     try {
         const session = await getAuthenticatedUser(request);
         if (!session?.userAddress) {
+            console.error("[ChatRules] POST: No session found - authentication required");
             return NextResponse.json(
-                { error: "Authentication required" },
+                { error: "Authentication required - please sign in again" },
                 { status: 401 },
             );
         }
@@ -141,7 +142,15 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        if (!rules || typeof rules !== "object") {
+            return NextResponse.json(
+                { error: "rules object required" },
+                { status: 400 },
+            );
+        }
+
         const userAddress = session.userAddress.toLowerCase();
+        console.log("[ChatRules] POST: User", userAddress, "updating", chatType, chatId, "rules:", JSON.stringify(rules));
 
         // Check if user is admin or has moderator permissions
         const isAuthorized = await checkRulesPermission(
@@ -150,6 +159,7 @@ export async function POST(request: NextRequest) {
             chatId,
         );
         if (!isAuthorized) {
+            console.error("[ChatRules] POST: User", userAddress, "not authorized for", chatType, chatId);
             return NextResponse.json(
                 { error: "Not authorized to manage room rules" },
                 { status: 403 },
@@ -185,6 +195,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Upsert rules
+        console.log("[ChatRules] Upserting:", JSON.stringify(updateData));
         const { data, error } = await supabase
             .from("shout_chat_rules")
             .upsert(updateData, { onConflict: "chat_type,chat_id" })
@@ -192,13 +203,14 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (error) {
-            console.error("[ChatRules] Update error:", error);
+            console.error("[ChatRules] Update error:", error.message, error.details, error.hint);
             return NextResponse.json(
-                { error: "Failed to update rules" },
+                { error: `Failed to update rules: ${error.message}` },
                 { status: 500 },
             );
         }
 
+        console.log("[ChatRules] Updated successfully:", data?.id);
         return NextResponse.json({ success: true, rules: data });
     } catch (error) {
         console.error("[ChatRules] POST error:", error);

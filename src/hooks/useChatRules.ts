@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import type { ChatRules } from "@/app/api/chat-rules/route";
 
 export type ChatRulesState = {
@@ -63,6 +64,9 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
         fetchRules();
     }, [fetchRules]);
 
+    // Track in-flight updates to prevent race conditions
+    const pendingUpdatesRef = useRef<Set<string>>(new Set());
+
     // Update a single rule
     const updateRule = useCallback(
         async (
@@ -70,6 +74,9 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
             value: boolean | number | string,
         ): Promise<boolean> => {
             if (!chatType) return false;
+
+            // Track this field as being updated
+            pendingUpdatesRef.current.add(field);
 
             try {
                 // Optimistic update: immediately reflect the change in the UI
@@ -91,28 +98,57 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                     }),
                 });
 
+                // Remove from pending before processing response
+                pendingUpdatesRef.current.delete(field);
+
                 if (!res.ok) {
                     const data = await res.json();
                     console.error("[useChatRules] Update error:", data.error);
-                    // Revert optimistic update on failure
-                    await fetchRules();
+                    toast.error(data.error || "Failed to update rule");
+                    // Revert only this field by fetching fresh state if no other updates pending
+                    if (pendingUpdatesRef.current.size === 0) {
+                        await fetchRules();
+                    } else {
+                        // Other updates in flight - just revert this field
+                        setState((prev) => ({
+                            ...prev,
+                            rules: prev.rules
+                                ? { ...prev.rules, [field]: prev.rules[field as keyof ChatRules] }
+                                : prev.rules,
+                        }));
+                    }
                     return false;
                 }
 
                 const data = await res.json();
+                // Only update the specific field we changed + metadata from server
+                // This prevents overwriting other optimistic updates that are still in-flight
                 setState((prev) => ({
                     ...prev,
-                    rules: data.rules || prev.rules,
+                    rules: prev.rules
+                        ? {
+                            ...prev.rules,
+                            [field]: data.rules?.[field as keyof ChatRules] ?? value,
+                            updated_at: data.rules?.updated_at || prev.rules.updated_at,
+                            updated_by: data.rules?.updated_by || prev.rules.updated_by,
+                            // If this is a new row, also grab the id
+                            id: data.rules?.id || prev.rules.id,
+                        }
+                        : (data.rules || prev.rules),
                 }));
                 return true;
             } catch (err) {
+                pendingUpdatesRef.current.delete(field);
                 console.error("[useChatRules] Update error:", err);
+                toast.error("Network error - failed to update rule");
                 // Revert optimistic update on failure
-                await fetchRules();
+                if (pendingUpdatesRef.current.size === 0) {
+                    await fetchRules();
+                }
                 return false;
             }
         },
-        [chatType, chatId],
+        [chatType, chatId, fetchRules],
     );
 
     // Update multiple rules at once
@@ -124,6 +160,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 const res = await fetch("/api/chat-rules", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({
                         chatType,
                         chatId: chatId || null,
@@ -134,6 +171,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 if (!res.ok) {
                     const data = await res.json();
                     console.error("[useChatRules] Update error:", data.error);
+                    toast.error(data.error || "Failed to update rules");
                     return false;
                 }
 
@@ -145,6 +183,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 return true;
             } catch (err) {
                 console.error("[useChatRules] Update error:", err);
+                toast.error("Network error - failed to update rules");
                 return false;
             }
         },
@@ -190,6 +229,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 const res = await fetch("/api/chat-rules", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
+                    credentials: "include",
                     body: JSON.stringify({
                         chatType,
                         chatId: chatId || null,
@@ -203,6 +243,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                         "[useChatRules] Update rules text error:",
                         data.error,
                     );
+                    toast.error(data.error || "Failed to save rules text");
                     return false;
                 }
 
@@ -214,6 +255,7 @@ export function useChatRules(chatType: string | null, chatId?: string | null) {
                 return true;
             } catch (err) {
                 console.error("[useChatRules] Update rules text error:", err);
+                toast.error("Network error - failed to save rules text");
                 return false;
             }
         },

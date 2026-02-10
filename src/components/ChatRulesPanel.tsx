@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "sonner";
 import { useChatRules, useRoomBans, useBlockedWords } from "@/hooks/useChatRules";
 import { MUTE_DURATION_OPTIONS } from "@/hooks/useModeration";
 import { createPortal } from "react-dom";
@@ -257,6 +258,11 @@ export function ChatRulesPanel({
         const success = await updateRule(field as "links_allowed", value);
         if (!success) {
             console.error("[ChatRulesPanel] Failed to update", field, "to", value);
+            // Toast is already shown by updateRule, but log for debugging
+        } else {
+            const label = RULE_TOGGLES.find(t => t.key === field)?.label || field;
+            const valueLabel = value === "everyone" ? "All" : value === "mods_only" ? "Mods Only" : "Off";
+            toast.success(`${label} set to ${valueLabel}`);
         }
         setUpdatingField(null);
     };
