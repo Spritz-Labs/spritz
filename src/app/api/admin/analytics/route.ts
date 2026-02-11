@@ -50,11 +50,12 @@ async function fetchAllRows<T = Record<string, unknown>>(
         if (error) {
             // Gracefully handle missing tables/columns/relationships:
             // 42P01 = undefined table, 42703 = undefined column,
+            // PGRST106 = relation not found in schema cache (PostgREST),
             // PGRST116 = no rows (single), PGRST204 = column not found (PostgREST),
             // PGRST200 = relationship not found
-            const gracefulCodes = ["42P01", "42703", "PGRST116", "PGRST200", "PGRST204"];
-            if (gracefulCodes.includes(error.code) || error.message?.includes("does not exist") || error.message?.includes("not found")) {
-                console.warn(`[Analytics] Table or column issue for "${table}": ${error.message}`);
+            const gracefulCodes = ["42P01", "42703", "PGRST106", "PGRST116", "PGRST200", "PGRST204"];
+            if (gracefulCodes.includes(error.code) || error.message?.includes("does not exist") || error.message?.includes("not found") || error.message?.includes("no matches")) {
+                console.warn(`[Analytics] Table or column issue for "${table}": ${error.message} (code: ${error.code})`);
                 return [];
             }
             throw error;
@@ -91,9 +92,9 @@ async function fetchCount(
     }
     const { count, error } = await query;
     if (error) {
-        const gracefulCodes = ["42P01", "42703", "PGRST116", "PGRST200", "PGRST204"];
-        if (gracefulCodes.includes(error.code) || error.message?.includes("does not exist") || error.message?.includes("not found")) {
-            console.warn(`[Analytics] Table or column issue for count query: ${error.message}`);
+        const gracefulCodes = ["42P01", "42703", "PGRST106", "PGRST116", "PGRST200", "PGRST204"];
+        if (gracefulCodes.includes(error.code) || error.message?.includes("does not exist") || error.message?.includes("not found") || error.message?.includes("no matches")) {
+            console.warn(`[Analytics] Table or column issue for count query: ${error.message} (code: ${error.code})`);
             return 0;
         }
         throw error;
@@ -556,14 +557,19 @@ export async function GET(request: NextRequest) {
             betaApplicants.filter((u) => u.beta_access).length;
         const betaPendingCount = betaApplicantsCount - betaApprovedCount;
 
-        // Fetch ALL wallet transaction stats (paginated)
-        const walletTransactions = await fetchAllRows<{ id: string; chain_id: number; chain_name: string; amount_usd: string | number; tx_type: string; status: string; created_at: string; user_address: string }>(
-            "shout_wallet_transactions",
-            "id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address",
-            {
-                order: { column: "created_at", ascending: false },
-            },
-        );
+        // Fetch ALL wallet transaction stats (paginated) — table may not exist yet
+        let walletTransactions: { id: string; chain_id: number; chain_name: string; amount_usd: string | number; tx_type: string; status: string; created_at: string; user_address: string }[] = [];
+        try {
+            walletTransactions = await fetchAllRows<{ id: string; chain_id: number; chain_name: string; amount_usd: string | number; tx_type: string; status: string; created_at: string; user_address: string }>(
+                "shout_wallet_transactions",
+                "id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address",
+                {
+                    order: { column: "created_at", ascending: false },
+                },
+            );
+        } catch (e) {
+            console.warn("[Analytics] shout_wallet_transactions query failed:", e);
+        }
 
         const totalWalletTransactions = walletTransactions.length;
         const walletTxInPeriod =
@@ -610,17 +616,20 @@ export async function GET(request: NextRequest) {
             networkTxCounts[key].volume += Number(tx.amount_usd) || 0;
         }
 
-        // Fetch network stats table (for historical data) -- small table, but paginate to be safe
-        const networkStats = await fetchAllRows(
-            "shout_wallet_network_stats",
-            "*",
-            {
-                order: { column: "total_transactions", ascending: false },
-            },
-        );
-        void networkStats; // Available for future use; currently using networkTxCounts from transaction data
+        // Fetch network stats table (for historical data) — table may not exist yet
+        try {
+            await fetchAllRows(
+                "shout_wallet_network_stats",
+                "*",
+                {
+                    order: { column: "total_transactions", ascending: false },
+                },
+            );
+        } catch (e) {
+            console.warn("[Analytics] shout_wallet_network_stats query failed:", e);
+        }
 
-        // Calculate user wallet stats from shout_users
+        // Calculate user wallet stats from shout_users (columns may not exist)
         const usersWithTxHistory =
             allUsers.filter((u: Record<string, unknown>) => (Number(u.wallet_tx_count) || 0) > 0).length;
         const totalUserVolumeUsd =
