@@ -47,7 +47,14 @@ async function fetchAllRows<T = Record<string, unknown>>(
         query = query.range(offset, offset + PAGE_SIZE - 1);
 
         const { data, error } = await query;
-        if (error) throw error;
+        if (error) {
+            // If table doesn't exist (code 42P01) or column missing, return empty gracefully
+            if (error.code === "42P01" || error.code === "PGRST116" || error.message?.includes("does not exist")) {
+                console.warn(`[Analytics] Table or column issue for "${table}": ${error.message}`);
+                return [];
+            }
+            throw error;
+        }
         if (!data || data.length === 0) {
             hasMore = false;
         } else {
@@ -79,7 +86,13 @@ async function fetchCount(
         query = filters(query);
     }
     const { count, error } = await query;
-    if (error) throw error;
+    if (error) {
+        if (error.code === "42P01" || error.code === "PGRST116" || error.message?.includes("does not exist")) {
+            console.warn(`[Analytics] Table or column issue for count query: ${error.message}`);
+            return 0;
+        }
+        throw error;
+    }
     return count ?? 0;
 }
 
@@ -525,9 +538,9 @@ export async function GET(request: NextRequest) {
                 .length;
 
         // Beta access stats for wallet (paginated)
-        const betaApplicants = await fetchAllRows<{ beta_access_applied: string; has_beta_access: boolean }>(
+        const betaApplicants = await fetchAllRows<{ beta_access_applied: string; beta_access: boolean }>(
             "shout_users",
-            "beta_access_applied, has_beta_access",
+            "beta_access_applied, beta_access",
             {
                 filters: (q) => q.not("beta_access_applied", "is", null),
             },
@@ -535,7 +548,7 @@ export async function GET(request: NextRequest) {
 
         const betaApplicantsCount = betaApplicants.length;
         const betaApprovedCount =
-            betaApplicants.filter((u) => u.has_beta_access).length;
+            betaApplicants.filter((u) => u.beta_access).length;
         const betaPendingCount = betaApplicantsCount - betaApprovedCount;
 
         // Fetch ALL wallet transaction stats (paginated)

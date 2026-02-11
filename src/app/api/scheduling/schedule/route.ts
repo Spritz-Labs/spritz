@@ -405,8 +405,20 @@ export async function POST(request: NextRequest) {
 
         if (createError) {
             console.error("[Scheduling] Create error:", createError);
+            console.error("[Scheduling] Insert details:", {
+                recipientAddress: recipientAddress.toLowerCase(),
+                schedulerAddress: schedulerAddress?.toLowerCase() || null,
+                scheduledAt: scheduledTime.toISOString(),
+                duration,
+                isPaid,
+                guestEmail: guestEmail || null,
+                guestName: guestName || null,
+                errorCode: createError.code,
+                errorMessage: createError.message,
+                errorDetails: createError.details,
+            });
             return NextResponse.json(
-                { error: "Failed to create scheduled call" },
+                { error: "Failed to create scheduled call", details: createError.message },
                 { status: 500 }
             );
         }
