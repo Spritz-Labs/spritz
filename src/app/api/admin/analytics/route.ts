@@ -10,6 +10,79 @@ const supabaseKey =
 const supabase =
     supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
+const PAGE_SIZE = 1000;
+
+/**
+ * Fetch ALL rows from a Supabase query, paginating in batches of PAGE_SIZE.
+ * Supabase/PostgREST silently caps results at 1000 rows by default.
+ * This helper pages through until all rows are retrieved.
+ */
+async function fetchAllRows<T = Record<string, unknown>>(
+    table: string,
+    selectColumns: string,
+    options?: {
+        filters?: (
+            query: ReturnType<
+                ReturnType<typeof createClient>["from"]
+            >,
+        ) => ReturnType<ReturnType<typeof createClient>["from"]>;
+        order?: { column: string; ascending?: boolean };
+    },
+): Promise<T[]> {
+    if (!supabase) return [];
+    const allRows: T[] = [];
+    let offset = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+        let query = supabase.from(table).select(selectColumns);
+        if (options?.filters) {
+            query = options.filters(query);
+        }
+        if (options?.order) {
+            query = query.order(options.order.column, {
+                ascending: options.order.ascending ?? true,
+            });
+        }
+        query = query.range(offset, offset + PAGE_SIZE - 1);
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) {
+            hasMore = false;
+        } else {
+            allRows.push(...(data as T[]));
+            if (data.length < PAGE_SIZE) {
+                hasMore = false;
+            } else {
+                offset += PAGE_SIZE;
+            }
+        }
+    }
+    return allRows;
+}
+
+/**
+ * Fetch only the count of rows matching a query (no row data transferred).
+ */
+async function fetchCount(
+    table: string,
+    filters?: (
+        query: ReturnType<ReturnType<typeof createClient>["from"]>,
+    ) => ReturnType<ReturnType<typeof createClient>["from"]>,
+): Promise<number> {
+    if (!supabase) return 0;
+    let query = supabase
+        .from(table)
+        .select("*", { count: "exact", head: true });
+    if (filters) {
+        query = filters(query);
+    }
+    const { count, error } = await query;
+    if (error) throw error;
+    return count ?? 0;
+}
+
 // Verify admin signature from headers
 async function verifyAdmin(
     request: NextRequest,
@@ -96,224 +169,249 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        // Fetch all users data
-        const { data: allUsers, error: usersError } = await supabase
-            .from("shout_users")
-            .select("*");
+        const startIso = startDate.toISOString();
 
-        if (usersError) throw usersError;
+        // Fetch ALL users data (paginated to avoid Supabase 1000-row default cap)
+        const allUsers = await fetchAllRows(
+            "shout_users",
+            "*",
+        );
 
         // Fetch users in period (for new signups)
-        const { data: newUsers, error: newUsersError } = await supabase
-            .from("shout_users")
-            .select("created_at, wallet_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
-
-        if (newUsersError) throw newUsersError;
+        const newUsers = await fetchAllRows<{ created_at: string; wallet_address: string }>(
+            "shout_users",
+            "created_at, wallet_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch logins in period
-        const { data: loginData } = await supabase
-            .from("shout_users")
-            .select("last_login, login_count, wallet_address")
-            .gte("last_login", startDate.toISOString())
-            .order("last_login", { ascending: true });
+        const loginData = await fetchAllRows<{ last_login: string; login_count: number; wallet_address: string }>(
+            "shout_users",
+            "last_login, login_count, wallet_address",
+            {
+                filters: (q) => q.gte("last_login", startIso),
+                order: { column: "last_login", ascending: true },
+            },
+        );
 
         // Fetch messages from alpha channel in period
-        const { data: alphaMessages } = await supabase
-            .from("shout_alpha_messages")
-            .select("created_at, sender_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const alphaMessages = await fetchAllRows<{ created_at: string; sender_address: string }>(
+            "shout_alpha_messages",
+            "created_at, sender_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch points history in period
-        const { data: pointsHistory } = await supabase
-            .from("shout_points_history")
-            .select("created_at, points, reason, wallet_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const pointsHistory = await fetchAllRows<{ created_at: string; points: number; reason: string; wallet_address: string }>(
+            "shout_points_history",
+            "created_at, points, reason, wallet_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch friendships created in period (shout_friends stores accepted friendships only)
-        const { data: friendships } = await supabase
-            .from("shout_friends")
-            .select("created_at")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const friendships = await fetchAllRows<{ created_at: string }>(
+            "shout_friends",
+            "created_at",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
-        // Fetch all friendships for total count
-        const { data: allFriendships } = await supabase
-            .from("shout_friends")
-            .select("id");
+        // Fetch all friendships total count (count-only, no row data)
+        const allFriendshipsCount = await fetchCount("shout_friends");
 
         // Fetch friend requests in period (includes pending, accepted, rejected)
-        const { data: friendRequests } = await supabase
-            .from("shout_friend_requests")
-            .select("created_at, status")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const friendRequests = await fetchAllRows<{ created_at: string; status: string }>(
+            "shout_friend_requests",
+            "created_at, status",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch groups created in period
-        const { data: groups } = await supabase
-            .from("shout_groups")
-            .select("created_at")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const groups = await fetchAllRows<{ created_at: string }>(
+            "shout_groups",
+            "created_at",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch invite codes used in period
-        const { data: usedInvites } = await supabase
-            .from("shout_user_invites")
-            .select("used_at")
-            .gte("used_at", startDate.toISOString())
-            .not("used_at", "is", null)
-            .order("used_at", { ascending: true });
+        const usedInvites = await fetchAllRows<{ used_at: string }>(
+            "shout_user_invites",
+            "used_at",
+            {
+                filters: (q) =>
+                    q.gte("used_at", startIso).not("used_at", "is", null),
+                order: { column: "used_at", ascending: true },
+            },
+        );
 
-        // Fetch all agents data
-        const { data: allAgents } = await supabase
-            .from("shout_agents")
-            .select("*");
+        // Fetch ALL agents data (paginated)
+        const allAgents = await fetchAllRows(
+            "shout_agents",
+            "*",
+        );
 
         // Fetch agents created in period
-        const { data: newAgents } = await supabase
-            .from("shout_agents")
-            .select(
-                "created_at, owner_address, visibility, message_count, name",
-            )
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const newAgents = await fetchAllRows<{ created_at: string; owner_address: string; visibility: string; message_count: number; name: string }>(
+            "shout_agents",
+            "created_at, owner_address, visibility, message_count, name",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch agent chats in period (include source, content, channel for usage analytics)
-        const { data: agentChats } = await supabase
-            .from("shout_agent_chats")
-            .select(
-                "created_at, agent_id, user_address, role, source, content, channel_id, channel_type",
-            )
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const agentChats = await fetchAllRows<{ created_at: string; agent_id: string; user_address: string; role: string; source: string | null; content: string | null; channel_id: string | null; channel_type: string | null }>(
+            "shout_agent_chats",
+            "created_at, agent_id, user_address, role, source, content, channel_id, channel_type",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch knowledge items
-        const { data: knowledgeItems } = await supabase
-            .from("shout_agent_knowledge")
-            .select("created_at, status, agent_id")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const knowledgeItems = await fetchAllRows<{ created_at: string; status: string; agent_id: string }>(
+            "shout_agent_knowledge",
+            "created_at, status, agent_id",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch streams in period
-        const { data: streams } = await supabase
-            .from("shout_streams")
-            .select("created_at, started_at, ended_at, status, user_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const streams = await fetchAllRows<{ created_at: string; started_at: string | null; ended_at: string | null; status: string; user_address: string }>(
+            "shout_streams",
+            "created_at, started_at, ended_at, status, user_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch rooms in period
-        const { data: rooms } = await supabase
-            .from("shout_instant_rooms")
-            .select("created_at, host_wallet_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const rooms = await fetchAllRows<{ created_at: string; host_wallet_address: string }>(
+            "shout_instant_rooms",
+            "created_at, host_wallet_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch scheduled calls in period
-        const { data: scheduledCalls } = await supabase
-            .from("shout_scheduled_calls")
-            .select(
-                "created_at, recipient_wallet_address, scheduler_wallet_address, status",
-            )
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const scheduledCalls = await fetchAllRows<{ created_at: string; recipient_wallet_address: string; scheduler_wallet_address: string; status: string }>(
+            "shout_scheduled_calls",
+            "created_at, recipient_wallet_address, scheduler_wallet_address, status",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch DM messages in period
-        const { data: dmMessages } = await supabase
-            .from("shout_messages")
-            .select("created_at, sender_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const dmMessages = await fetchAllRows<{ created_at: string; sender_address: string }>(
+            "shout_messages",
+            "created_at, sender_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
         // Fetch channel messages in period
-        const { data: channelMessages } = await supabase
-            .from("shout_channel_messages")
-            .select("created_at, sender_address")
-            .gte("created_at", startDate.toISOString())
-            .order("created_at", { ascending: true });
+        const channelMessages = await fetchAllRows<{ created_at: string; sender_address: string }>(
+            "shout_channel_messages",
+            "created_at, sender_address",
+            {
+                filters: (q) => q.gte("created_at", startIso),
+                order: { column: "created_at", ascending: true },
+            },
+        );
 
-        // Fetch total message counts
-        const { count: totalDmMessages } = await supabase
-            .from("shout_messages")
-            .select("*", { count: "exact", head: true });
+        // Fetch total message counts (count-only, efficient)
+        const totalDmMessages = await fetchCount("shout_messages");
+        const totalChannelMessages = await fetchCount("shout_channel_messages");
+        const totalAlphaMessages = await fetchCount("shout_alpha_messages");
 
-        const { count: totalChannelMessages } = await supabase
-            .from("shout_channel_messages")
-            .select("*", { count: "exact", head: true });
-
-        const { count: totalAlphaMessages } = await supabase
-            .from("shout_alpha_messages")
-            .select("*", { count: "exact", head: true });
-
-        // Fetch public profile stats
-        const { data: publicProfiles } = await supabase
-            .from("shout_user_settings")
-            .select("wallet_address, public_landing_enabled")
-            .eq("public_landing_enabled", true);
+        // Fetch public profile stats (count-only)
+        const publicProfilesCount = await fetchCount(
+            "shout_user_settings",
+            (q) => q.eq("public_landing_enabled", true),
+        );
 
         // Calculate summary stats
-        const totalUsers = allUsers?.length || 0;
-        const newUsersCount = newUsers?.length || 0;
-        const activeUsers = loginData?.length || 0;
+        const totalUsers = allUsers.length;
+        const newUsersCount = newUsers.length;
+        const activeUsers = loginData.length;
         const totalMessages =
-            (totalDmMessages || 0) +
-            (totalChannelMessages || 0) +
-            (totalAlphaMessages || 0);
+            totalDmMessages + totalChannelMessages + totalAlphaMessages;
         const messagesInPeriod =
-            (alphaMessages?.length || 0) +
-            (dmMessages?.length || 0) +
-            (channelMessages?.length || 0);
+            alphaMessages.length + dmMessages.length + channelMessages.length;
         const totalCalls =
-            allUsers?.reduce((sum, u) => sum + (u.total_calls || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.total_calls) || 0), 0);
         const totalVoiceMinutes =
-            allUsers?.reduce((sum, u) => sum + (u.voice_minutes || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.voice_minutes) || 0), 0);
         const totalVideoMinutes =
-            allUsers?.reduce((sum, u) => sum + (u.video_minutes || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.video_minutes) || 0), 0);
         const totalPoints =
-            allUsers?.reduce((sum, u) => sum + (u.points || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.points) || 0), 0);
         const pointsInPeriod =
-            pointsHistory?.reduce((sum, p) => sum + (p.points || 0), 0) || 0;
-        const friendRequestsCount = friendRequests?.length || 0;
-        const acceptedFriendships = (allFriendships?.length || 0) / 2; // Divided by 2 since friendships are stored bidirectionally
-        const newFriendshipsInPeriod = (friendships?.length || 0) / 2;
-        const groupsCreated = groups?.length || 0;
-        const invitesUsed = usedInvites?.length || 0;
-
-        // Public profile stats
-        const publicProfilesCount = publicProfiles?.length || 0;
+            pointsHistory.reduce((sum, p) => sum + (p.points || 0), 0);
+        const friendRequestsCount = friendRequests.length;
+        const acceptedFriendships = allFriendshipsCount / 2; // Divided by 2 since friendships are stored bidirectionally
+        const newFriendshipsInPeriod = friendships.length / 2;
+        const groupsCreated = groups.length;
+        const invitesUsed = usedInvites.length;
 
         // Message breakdown for display
-        const dmMessagesInPeriod = dmMessages?.length || 0;
-        const channelMessagesInPeriod = channelMessages?.length || 0;
-        const alphaMessagesInPeriod = alphaMessages?.length || 0;
+        const dmMessagesInPeriod = dmMessages.length;
+        const channelMessagesInPeriod = channelMessages.length;
+        const alphaMessagesInPeriod = alphaMessages.length;
 
         // Agent stats
-        const totalAgents = allAgents?.length || 0;
-        const newAgentsCount = newAgents?.length || 0;
+        const totalAgents = allAgents.length;
+        const newAgentsCount = newAgents.length;
         const publicAgents =
-            allAgents?.filter((a) => a.visibility === "public").length || 0;
+            allAgents.filter((a: Record<string, unknown>) => a.visibility === "public").length;
         const friendsAgents =
-            allAgents?.filter((a) => a.visibility === "friends").length || 0;
+            allAgents.filter((a: Record<string, unknown>) => a.visibility === "friends").length;
         const privateAgents =
-            allAgents?.filter((a) => a.visibility === "private").length || 0;
+            allAgents.filter((a: Record<string, unknown>) => a.visibility === "private").length;
         const officialAgents =
-            allAgents?.filter((a) => a.visibility === "official").length || 0;
+            allAgents.filter((a: Record<string, unknown>) => a.visibility === "official").length;
         const totalAgentMessages =
-            allAgents?.reduce((sum, a) => sum + (a.message_count || 0), 0) || 0;
+            allAgents.reduce((sum, a: Record<string, unknown>) => sum + (Number(a.message_count) || 0), 0);
         const agentMessagesInPeriod =
-            agentChats?.filter((c) => c.role === "user").length || 0;
+            agentChats.filter((c) => c.role === "user").length;
         const uniqueAgentUsers = new Set(
-            agentChats?.map((c) => c.user_address) || [],
+            agentChats.map((c) => c.user_address),
         ).size;
-        const knowledgeItemsCount = knowledgeItems?.length || 0;
+        const knowledgeItemsCount = knowledgeItems.length;
         const indexedKnowledgeItems =
-            knowledgeItems?.filter((k) => k.status === "indexed").length || 0;
+            knowledgeItems.filter((k) => k.status === "indexed").length;
 
         // Agent usage by source (direct 1:1, public page, channel @mentions)
         const userChatsInPeriod =
-            agentChats?.filter((c) => c.role === "user") || [];
+            agentChats.filter((c) => c.role === "user");
         const agentMessagesBySource = {
             direct: userChatsInPeriod.filter((c) => c.source === "direct")
                 .length,
@@ -324,21 +422,21 @@ export async function GET(request: NextRequest) {
         };
         // Failed agent responses (assistant rows we log on stream/error)
         const agentFailedInPeriod =
-            agentChats?.filter(
+            agentChats.filter(
                 (c) =>
                     c.role === "assistant" && c.content?.startsWith("[Error:"),
-            ).length || 0;
+            ).length;
 
         // Streaming stats
-        const streamsCreated = streams?.length || 0;
+        const streamsCreated = streams.length;
         const streamsStarted =
-            streams?.filter((s) => s.status === "live" || s.status === "ended")
-                .length || 0;
+            streams.filter((s) => s.status === "live" || s.status === "ended")
+                .length;
         const streamsEnded =
-            streams?.filter((s) => s.status === "ended").length || 0;
+            streams.filter((s) => s.status === "ended").length;
         // Calculate total streaming minutes from ended streams
-        const totalStreamingMinutes =
-            streams?.reduce((sum, s) => {
+        const _totalStreamingMinutes =
+            streams.reduce((sum, s) => {
                 if (s.started_at && s.ended_at) {
                     const durationMs =
                         new Date(s.ended_at).getTime() -
@@ -346,129 +444,128 @@ export async function GET(request: NextRequest) {
                     return sum + Math.round(durationMs / (1000 * 60));
                 }
                 return sum;
-            }, 0) || 0;
+            }, 0);
+        void _totalStreamingMinutes; // used for period stats
         // Get streaming stats from user analytics columns
         const totalStreamsCreated =
-            allUsers?.reduce((sum, u) => sum + (u.streams_created || 0), 0) ||
-            0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.streams_created) || 0), 0);
         const totalStreamsStarted =
-            allUsers?.reduce((sum, u) => sum + (u.streams_started || 0), 0) ||
-            0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.streams_started) || 0), 0);
         const totalStreamsEnded =
-            allUsers?.reduce((sum, u) => sum + (u.streams_ended || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.streams_ended) || 0), 0);
         const totalStreamingMinutesAll =
-            allUsers?.reduce((sum, u) => sum + (u.streaming_minutes || 0), 0) ||
-            0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.streaming_minutes) || 0), 0);
         const totalStreamsViewed =
-            allUsers?.reduce((sum, u) => sum + (u.streams_viewed || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.streams_viewed) || 0), 0);
 
         // Room stats
-        const roomsCreated = rooms?.length || 0;
+        const roomsCreated = rooms.length;
         const totalRoomsCreated =
-            allUsers?.reduce((sum, u) => sum + (u.rooms_created || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.rooms_created) || 0), 0);
         const totalRoomsJoined =
-            allUsers?.reduce((sum, u) => sum + (u.rooms_joined || 0), 0) || 0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.rooms_joined) || 0), 0);
 
         // Scheduling stats
-        const schedulesCreated = scheduledCalls?.length || 0;
+        const schedulesCreated = scheduledCalls.length;
         const schedulesJoined =
-            scheduledCalls?.filter((s) => s.status === "completed").length || 0;
+            scheduledCalls.filter((s) => s.status === "completed").length;
         const totalSchedulesCreated =
-            allUsers?.reduce((sum, u) => sum + (u.schedules_created || 0), 0) ||
-            0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.schedules_created) || 0), 0);
         const totalSchedulesJoined =
-            allUsers?.reduce((sum, u) => sum + (u.schedules_joined || 0), 0) ||
-            0;
+            allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.schedules_joined) || 0), 0);
 
         // Wallet stats
         const usersWithSmartWallet =
-            allUsers?.filter((u) => u.smart_wallet_address).length || 0;
+            allUsers.filter((u: Record<string, unknown>) => u.smart_wallet_address).length;
         const walletTypeBreakdown = {
             wallet:
-                allUsers?.filter(
-                    (u) => u.wallet_type === "wallet" || !u.wallet_type,
-                ).length || 0,
+                allUsers.filter(
+                    (u: Record<string, unknown>) => u.wallet_type === "wallet" || !u.wallet_type,
+                ).length,
             passkey:
-                allUsers?.filter((u) => u.wallet_type === "passkey").length ||
-                0,
+                allUsers.filter((u: Record<string, unknown>) => u.wallet_type === "passkey").length,
             email:
-                allUsers?.filter((u) => u.wallet_type === "email").length || 0,
+                allUsers.filter((u: Record<string, unknown>) => u.wallet_type === "email").length,
             worldId:
-                allUsers?.filter(
-                    (u) =>
-                        u.wallet_type?.includes("world") ||
-                        u.wallet_type?.includes("alien"),
-                ).length || 0,
+                allUsers.filter(
+                    (u: Record<string, unknown>) =>
+                        typeof u.wallet_type === "string" &&
+                        (u.wallet_type.includes("world") ||
+                        u.wallet_type.includes("alien")),
+                ).length,
             solana:
-                allUsers?.filter((u) => u.wallet_type === "solana").length || 0,
+                allUsers.filter((u: Record<string, unknown>) => u.wallet_type === "solana").length,
         };
 
-        // Fetch passkey credentials stats
-        const { data: allPasskeys } = await supabase
-            .from("passkey_credentials")
-            .select("id, user_address, created_at, safe_signer_address");
+        // Fetch ALL passkey credentials stats (paginated)
+        const allPasskeys = await fetchAllRows<{ id: string; user_address: string; created_at: string; safe_signer_address: string | null }>(
+            "passkey_credentials",
+            "id, user_address, created_at, safe_signer_address",
+        );
 
-        const totalPasskeys = allPasskeys?.length || 0;
+        const totalPasskeys = allPasskeys.length;
         const passkeysWithSafeSigners =
-            allPasskeys?.filter((p) => p.safe_signer_address).length || 0;
+            allPasskeys.filter((p) => p.safe_signer_address).length;
         const passkeysInPeriod =
-            allPasskeys?.filter((p) => new Date(p.created_at) >= startDate)
-                .length || 0;
+            allPasskeys.filter((p) => new Date(p.created_at) >= startDate)
+                .length;
 
-        // Fetch shout_wallets table for embedded wallet stats
-        const { data: allWallets } = await supabase
-            .from("shout_wallets")
-            .select(
-                "id, wallet_type, is_smart_wallet, smart_wallet_deployed, created_at",
-            );
+        // Fetch ALL shout_wallets table for embedded wallet stats (paginated)
+        const allWallets = await fetchAllRows<{ id: string; wallet_type: string; is_smart_wallet: boolean; smart_wallet_deployed: boolean; created_at: string }>(
+            "shout_wallets",
+            "id, wallet_type, is_smart_wallet, smart_wallet_deployed, created_at",
+        );
 
         const embeddedWallets =
-            allWallets?.filter((w) => w.wallet_type === "embedded").length || 0;
+            allWallets.filter((w) => w.wallet_type === "embedded").length;
         const deployedSmartWallets =
-            allWallets?.filter((w) => w.smart_wallet_deployed).length || 0;
+            allWallets.filter((w) => w.smart_wallet_deployed).length;
         const walletsCreatedInPeriod =
-            allWallets?.filter((w) => new Date(w.created_at) >= startDate)
-                .length || 0;
+            allWallets.filter((w) => new Date(w.created_at) >= startDate)
+                .length;
 
-        // Beta access stats for wallet
-        const { data: betaApplicants } = await supabase
-            .from("shout_users")
-            .select("beta_access_applied, has_beta_access")
-            .not("beta_access_applied", "is", null);
+        // Beta access stats for wallet (paginated)
+        const betaApplicants = await fetchAllRows<{ beta_access_applied: string; has_beta_access: boolean }>(
+            "shout_users",
+            "beta_access_applied, has_beta_access",
+            {
+                filters: (q) => q.not("beta_access_applied", "is", null),
+            },
+        );
 
-        const betaApplicantsCount = betaApplicants?.length || 0;
+        const betaApplicantsCount = betaApplicants.length;
         const betaApprovedCount =
-            betaApplicants?.filter((u) => u.has_beta_access).length || 0;
+            betaApplicants.filter((u) => u.has_beta_access).length;
         const betaPendingCount = betaApplicantsCount - betaApprovedCount;
 
-        // Wallet transaction stats
-        const { data: walletTransactions } = await supabase
-            .from("shout_wallet_transactions")
-            .select(
-                "id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address",
-            )
-            .order("created_at", { ascending: false });
+        // Fetch ALL wallet transaction stats (paginated)
+        const walletTransactions = await fetchAllRows<{ id: string; chain_id: number; chain_name: string; amount_usd: string | number; tx_type: string; status: string; created_at: string; user_address: string }>(
+            "shout_wallet_transactions",
+            "id, chain_id, chain_name, amount_usd, tx_type, status, created_at, user_address",
+            {
+                order: { column: "created_at", ascending: false },
+            },
+        );
 
-        const totalWalletTransactions = walletTransactions?.length || 0;
+        const totalWalletTransactions = walletTransactions.length;
         const walletTxInPeriod =
-            walletTransactions?.filter(
+            walletTransactions.filter(
                 (tx) => new Date(tx.created_at) >= startDate,
-            ).length || 0;
+            ).length;
         const confirmedTransactions =
-            walletTransactions?.filter((tx) => tx.status === "confirmed")
-                .length || 0;
+            walletTransactions.filter((tx) => tx.status === "confirmed")
+                .length;
         const totalVolumeUsd =
-            walletTransactions?.reduce(
+            walletTransactions.reduce(
                 (sum, tx) => sum + (Number(tx.amount_usd) || 0),
                 0,
-            ) || 0;
+            );
         const volumeInPeriod =
             walletTransactions
-                ?.filter((tx) => new Date(tx.created_at) >= startDate)
-                .reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0) ||
-            0;
+                .filter((tx) => new Date(tx.created_at) >= startDate)
+                .reduce((sum, tx) => sum + (Number(tx.amount_usd) || 0), 0);
         const uniqueTxUsers = new Set(
-            walletTransactions?.map((tx) => tx.user_address) || [],
+            walletTransactions.map((tx) => tx.user_address),
         ).size;
 
         // Network stats from transactions
@@ -481,7 +578,7 @@ export async function GET(request: NextRequest) {
                 volume: number;
             }
         > = {};
-        for (const tx of walletTransactions || []) {
+        for (const tx of walletTransactions) {
             const key = String(tx.chain_id);
             if (!networkTxCounts[key]) {
                 networkTxCounts[key] = {
@@ -495,20 +592,24 @@ export async function GET(request: NextRequest) {
             networkTxCounts[key].volume += Number(tx.amount_usd) || 0;
         }
 
-        // Fetch network stats table (for historical data)
-        const { data: networkStats } = await supabase
-            .from("shout_wallet_network_stats")
-            .select("*")
-            .order("total_transactions", { ascending: false });
+        // Fetch network stats table (for historical data) -- small table, but paginate to be safe
+        const networkStats = await fetchAllRows(
+            "shout_wallet_network_stats",
+            "*",
+            {
+                order: { column: "total_transactions", ascending: false },
+            },
+        );
+        void networkStats; // Available for future use; currently using networkTxCounts from transaction data
 
         // Calculate user wallet stats from shout_users
         const usersWithTxHistory =
-            allUsers?.filter((u) => (u.wallet_tx_count || 0) > 0).length || 0;
+            allUsers.filter((u: Record<string, unknown>) => (Number(u.wallet_tx_count) || 0) > 0).length;
         const totalUserVolumeUsd =
-            allUsers?.reduce(
-                (sum, u) => sum + (Number(u.wallet_volume_usd) || 0),
+            allUsers.reduce(
+                (sum, u: Record<string, unknown>) => sum + (Number(u.wallet_volume_usd) || 0),
                 0,
-            ) || 0;
+            );
 
         // Top channels by agent usage (source=channel, count user messages per channel)
         const channelAgentCounts: Record<
@@ -565,71 +666,71 @@ export async function GET(request: NextRequest) {
 
         // Generate time series data
         const timeSeriesData = generateTimeSeries(startDate, now, groupBy, {
-            newUsers: newUsers || [],
-            logins: loginData || [],
-            messages: alphaMessages || [],
-            points: pointsHistory || [],
-            friendRequests: friendRequests || [],
-            groups: groups || [],
-            invites: usedInvites || [],
-            agents: newAgents || [],
-            agentChats: agentChats || [],
+            newUsers,
+            logins: loginData,
+            messages: alphaMessages,
+            points: pointsHistory,
+            friendRequests,
+            groups,
+            invites: usedInvites,
+            agents: newAgents,
+            agentChats,
         });
 
         // Top users by various metrics
-        const topUsersByPoints = [...(allUsers || [])]
-            .sort((a, b) => (b.points || 0) - (a.points || 0))
+        const topUsersByPoints = [...allUsers]
+            .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (Number(b.points) || 0) - (Number(a.points) || 0))
             .slice(0, 10)
-            .map((u) => ({
+            .map((u: Record<string, unknown>) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
-                value: u.points || 0,
+                value: Number(u.points) || 0,
             }));
 
-        const topUsersByMessages = [...(allUsers || [])]
-            .sort((a, b) => (b.messages_sent || 0) - (a.messages_sent || 0))
+        const topUsersByMessages = [...allUsers]
+            .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (Number(b.messages_sent) || 0) - (Number(a.messages_sent) || 0))
             .slice(0, 10)
-            .map((u) => ({
+            .map((u: Record<string, unknown>) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
-                value: u.messages_sent || 0,
+                value: Number(u.messages_sent) || 0,
             }));
 
-        const topUsersByFriends = [...(allUsers || [])]
-            .sort((a, b) => (b.friends_count || 0) - (a.friends_count || 0))
+        const topUsersByFriends = [...allUsers]
+            .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (Number(b.friends_count) || 0) - (Number(a.friends_count) || 0))
             .slice(0, 10)
-            .map((u) => ({
+            .map((u: Record<string, unknown>) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
-                value: u.friends_count || 0,
+                value: Number(u.friends_count) || 0,
             }));
 
         // Top agents by messages
-        const topAgentsByMessages = [...(allAgents || [])]
-            .sort((a, b) => (b.message_count || 0) - (a.message_count || 0))
+        const topAgentsByMessages = [...allAgents]
+            .sort((a: Record<string, unknown>, b: Record<string, unknown>) => (Number(b.message_count) || 0) - (Number(a.message_count) || 0))
             .slice(0, 10)
-            .map((a) => ({
+            .map((a: Record<string, unknown>) => ({
                 id: a.id,
                 name: a.name,
                 emoji: a.avatar_emoji,
                 ownerAddress: a.owner_address,
                 visibility: a.visibility,
-                value: a.message_count || 0,
+                value: Number(a.message_count) || 0,
             }));
 
         // Recent smart wallet users
-        const recentSmartWalletUsers = [...(allUsers || [])]
-            .filter((u) => u.smart_wallet_address)
+        const recentSmartWalletUsers = [...allUsers]
+            .filter((u: Record<string, unknown>) => u.smart_wallet_address)
             .sort(
-                (a, b) =>
-                    new Date(b.created_at || 0).getTime() -
-                    new Date(a.created_at || 0).getTime(),
+                (a: Record<string, unknown>, b: Record<string, unknown>) =>
+                    new Date(String(b.created_at) || 0).getTime() -
+                    new Date(String(a.created_at) || 0).getTime(),
             )
             .slice(0, 10)
-            .map((u) => ({
+            .map((u: Record<string, unknown>) => ({
                 address: u.wallet_address,
                 username: u.username,
                 ensName: u.ens_name,
@@ -648,7 +749,7 @@ export async function GET(request: NextRequest) {
 
         // Points breakdown
         const pointsBreakdown: Record<string, number> = {};
-        for (const p of pointsHistory || []) {
+        for (const p of pointsHistory) {
             const reason = p.reason || "Other";
             pointsBreakdown[reason] =
                 (pointsBreakdown[reason] || 0) + (p.points || 0);
@@ -665,9 +766,9 @@ export async function GET(request: NextRequest) {
                 dmMessagesInPeriod,
                 channelMessagesInPeriod,
                 alphaMessagesInPeriod,
-                totalDmMessages: totalDmMessages || 0,
-                totalChannelMessages: totalChannelMessages || 0,
-                totalAlphaMessages: totalAlphaMessages || 0,
+                totalDmMessages,
+                totalChannelMessages,
+                totalAlphaMessages,
                 totalCalls,
                 totalVoiceMinutes,
                 totalVideoMinutes,
@@ -750,8 +851,8 @@ export async function GET(request: NextRequest) {
             // Official agents list for admin integration management
             officialAgentsList:
                 allAgents
-                    ?.filter((a) => a.visibility === "official")
-                    .map((a) => ({
+                    .filter((a: Record<string, unknown>) => a.visibility === "official")
+                    .map((a: Record<string, unknown>) => ({
                         id: a.id,
                         name: a.name,
                         avatar_emoji: a.avatar_emoji || "🤖",
@@ -759,9 +860,9 @@ export async function GET(request: NextRequest) {
                         personality: a.personality,
                         x402_enabled: a.x402_enabled,
                         x402_price_cents: a.x402_price_cents,
-                        message_count: a.message_count || 0,
+                        message_count: Number(a.message_count) || 0,
                         created_at: a.created_at,
-                    })) || [],
+                    })),
             pointsBreakdown: Object.entries(pointsBreakdown).map(
                 ([reason, points]) => ({
                     reason,
