@@ -17,11 +17,14 @@ export type FriendRequest = {
     to_address: string;
     status: "pending" | "accepted" | "rejected";
     created_at: string;
+    memo?: string | null;
     // Resolved data
     fromEnsName?: string | null;
     fromAvatar?: string | null;
+    fromUsername?: string | null;
     toEnsName?: string | null;
     toAvatar?: string | null;
+    toUsername?: string | null;
 };
 
 export type Friend = {
@@ -135,15 +138,35 @@ export function useFriendRequests(userAddress: string | null) {
                 };
             });
 
+            // Batch-fetch usernames for incoming/outgoing request addresses
+            const requestAddresses = [
+                ...(incoming || []).map(r => r.from_address.toLowerCase()),
+                ...(outgoing || []).map(r => r.to_address.toLowerCase()),
+            ].filter((v, i, a) => a.indexOf(v) === i); // unique
+
+            let requestUsernameMap: Record<string, string> = {};
+            if (requestAddresses.length > 0) {
+                const { data: reqUsernameData } = await client
+                    .from("shout_usernames")
+                    .select("wallet_address, username")
+                    .in("wallet_address", requestAddresses);
+                requestUsernameMap = (reqUsernameData || []).reduce((acc, row) => {
+                    acc[row.wallet_address.toLowerCase()] = row.username;
+                    return acc;
+                }, {} as Record<string, string>);
+            }
+
             // Quick ENS lookup for incoming requests (usually just 0-3 items)
             const resolvedIncoming = await Promise.all(
                 (incoming || []).map(async (req) => {
-                    const cached = ensCache.get(req.from_address.toLowerCase());
+                    const addr = req.from_address.toLowerCase();
+                    const cached = ensCache.get(addr);
                     if (cached) {
                         return {
                             ...req,
                             fromEnsName: cached.ensName,
                             fromAvatar: cached.avatar,
+                            fromUsername: requestUsernameMap[addr] || null,
                         };
                     }
                     const resolved = await getCachedENS(req.from_address);
@@ -151,12 +174,36 @@ export function useFriendRequests(userAddress: string | null) {
                         ...req,
                         fromEnsName: resolved?.ensName,
                         fromAvatar: resolved?.avatar,
+                        fromUsername: requestUsernameMap[addr] || null,
+                    };
+                })
+            );
+
+            // Resolve outgoing requests with usernames + ENS
+            const resolvedOutgoing = await Promise.all(
+                (outgoing || []).map(async (req) => {
+                    const addr = req.to_address.toLowerCase();
+                    const cached = ensCache.get(addr);
+                    if (cached) {
+                        return {
+                            ...req,
+                            toEnsName: cached.ensName,
+                            toAvatar: cached.avatar,
+                            toUsername: requestUsernameMap[addr] || null,
+                        };
+                    }
+                    const resolved = await getCachedENS(req.to_address);
+                    return {
+                        ...req,
+                        toEnsName: resolved?.ensName,
+                        toAvatar: resolved?.avatar,
+                        toUsername: requestUsernameMap[addr] || null,
                     };
                 })
             );
 
             setIncomingRequests(resolvedIncoming);
-            setOutgoingRequests(outgoing || []);
+            setOutgoingRequests(resolvedOutgoing);
             setFriends(resolvedFriends);
 
             // M-5 FIX: Resolve ENS for friends in background with proper cleanup
@@ -271,7 +318,7 @@ export function useFriendRequests(userAddress: string | null) {
 
     // Send friend request
     const sendFriendRequest = useCallback(
-        async (toAddress: string): Promise<boolean> => {
+        async (toAddress: string, memo?: string): Promise<boolean> => {
             console.log("[sendFriendRequest] Starting with:", {
                 toAddress,
                 userAddress,
@@ -408,6 +455,7 @@ export function useFriendRequests(userAddress: string | null) {
                         from_address: normalizedFrom,
                         to_address: normalizedTo,
                         status: "pending",
+                        ...(memo ? { memo: memo.slice(0, 100) } : {}),
                     })
                     .select();
 

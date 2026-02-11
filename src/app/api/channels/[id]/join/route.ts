@@ -108,11 +108,28 @@ export async function POST(
         }
 
         // Check if channel exists and if it's a POAP channel
-        const { data: channel } = await supabase
-            .from("shout_public_channels")
-            .select("id, name, poap_event_id, poap_collection_id, access_level")
-            .eq("id", id)
-            .single();
+        // Support both UUID and slug lookups
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        let channel = null;
+
+        if (isUuid) {
+            const { data } = await supabase
+                .from("shout_public_channels")
+                .select("id, name, poap_event_id, poap_collection_id, access_level")
+                .eq("id", id)
+                .eq("is_active", true)
+                .single();
+            channel = data;
+        } else {
+            // Slug lookup
+            const { data } = await supabase
+                .from("shout_public_channels")
+                .select("id, name, poap_event_id, poap_collection_id, access_level")
+                .eq("slug", id.toLowerCase())
+                .eq("is_active", true)
+                .single();
+            channel = data;
+        }
 
         if (!channel) {
             return NextResponse.json(

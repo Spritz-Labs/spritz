@@ -200,6 +200,7 @@ function DashboardContent({
         | "calls"
         | "leaderboard";
     const [activeNavTab, setActiveNavTab] = useState<NavTab>("chats");
+    const [chatListResetKey, setChatListResetKey] = useState(0);
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
     const [showWalletBetaPrompt, setShowWalletBetaPrompt] = useState(false);
     const [isApplyingWalletBeta, setIsApplyingWalletBeta] = useState(false);
@@ -882,6 +883,8 @@ function DashboardContent({
             setAvatarRefreshTrigger((k) => k + 1);
             setUserInfoCache(new Map());
             setChatsUserInfoRefreshKey((k) => k + 1);
+            // Also reset chat list folder/scroll when switching from another tab
+            setChatListResetKey((k) => k + 1);
         }
         prevNavTabRef.current = activeNavTab;
     }, [activeNavTab, refetchUserSettings]);
@@ -2482,9 +2485,10 @@ function DashboardContent({
     ]);
 
     const handleSendFriendRequest = async (
-        addressOrENS: string
+        addressOrENS: string,
+        memo?: string
     ): Promise<boolean> => {
-        return await sendFriendRequest(addressOrENS);
+        return await sendFriendRequest(addressOrENS, memo);
     };
 
     const handleCall = async (
@@ -5068,6 +5072,7 @@ function DashboardContent({
                                         onPinChat={(chat, pinned) =>
                                             setChatPinned(chat.id, pinned)
                                         }
+                                        resetKey={chatListResetKey}
                                     />
                                 </div>
                             </div>
@@ -5443,7 +5448,13 @@ function DashboardContent({
 
                             {/* Chats Tab */}
                             <button
-                                onClick={() => setActiveNavTab("chats")}
+                                onClick={() => {
+                                    if (activeNavTab === "chats") {
+                                        // Already on chats - reset folder and scroll to top
+                                        setChatListResetKey((k) => k + 1);
+                                    }
+                                    setActiveNavTab("chats");
+                                }}
                                 className={`flex flex-col items-center justify-center min-w-[48px] py-1 px-1.5 rounded-lg transition-all relative ${
                                     activeNavTab === "chats"
                                         ? "text-blue-400 bg-blue-500/20"
@@ -5644,8 +5655,10 @@ function DashboardContent({
                     onClose={() => setChatFriend(null)}
                     userAddress={userAddress}
                     peerAddress={chatFriend?.address || ""}
-                    peerName={chatFriend?.ensName || chatFriend?.nickname}
+                    peerName={chatFriend?.reachUsername ? `@${chatFriend.reachUsername}` : chatFriend?.ensName || chatFriend?.nickname}
                     peerAvatar={chatFriend?.avatar}
+                    peerEnsName={chatFriend?.ensName}
+                    peerUsername={chatFriend?.reachUsername}
                     onMessageSent={(preview) => {
                         if (chatFriend) {
                             updateLastMessageTime(

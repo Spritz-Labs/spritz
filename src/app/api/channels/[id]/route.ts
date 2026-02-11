@@ -15,13 +15,32 @@ export async function GET(
     const { id } = await params;
     const userAddress = request.nextUrl.searchParams.get("userAddress");
 
-    const { data: channel, error } = await supabase
-        .from("shout_public_channels")
-        .select("*")
-        .eq("id", id)
-        .single();
+    // Support both UUID and slug lookups
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let channel = null;
+    let fetchError = null;
 
-    if (error || !channel) {
+    if (isUuid) {
+        const { data, error: err } = await supabase
+            .from("shout_public_channels")
+            .select("*")
+            .eq("id", id)
+            .eq("is_active", true)
+            .single();
+        channel = data;
+        fetchError = err;
+    } else {
+        const { data, error: err } = await supabase
+            .from("shout_public_channels")
+            .select("*")
+            .eq("slug", id.toLowerCase())
+            .eq("is_active", true)
+            .single();
+        channel = data;
+        fetchError = err;
+    }
+
+    if (fetchError || !channel) {
         return NextResponse.json(
             { error: "Channel not found" },
             { status: 404 }
@@ -36,7 +55,7 @@ export async function GET(
             const { data: membership } = await supabase
                 .from("shout_channel_members")
                 .select("id")
-                .eq("channel_id", id)
+                .eq("channel_id", channel.id)
                 .in("user_address", lookupAddrs)
                 .maybeSingle();
             is_member = !!membership;

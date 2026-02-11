@@ -95,12 +95,25 @@ export function FriendRequests({
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-white font-medium truncate">
-                                            {request.fromEnsName ||
-                                                formatAddress(
-                                                    request.from_address
-                                                )}
+                                            {request.fromUsername
+                                                ? `@${request.fromUsername}`
+                                                : request.fromEnsName ||
+                                                  formatAddress(
+                                                      request.from_address
+                                                  )}
                                         </p>
-                                        <p className="text-zinc-500 text-sm">
+                                        {/* Show ENS/address below username if both exist */}
+                                        {request.fromUsername && (request.fromEnsName || request.from_address) && (
+                                            <p className="text-zinc-500 text-xs truncate">
+                                                {request.fromEnsName || formatAddress(request.from_address)}
+                                            </p>
+                                        )}
+                                        {request.memo && (
+                                            <p className="text-zinc-400 text-xs mt-0.5 italic truncate">
+                                                &ldquo;{request.memo}&rdquo;
+                                            </p>
+                                        )}
+                                        <p className="text-zinc-500 text-xs mt-0.5">
                                             {formatTime(request.created_at)}
                                         </p>
                                     </div>
@@ -168,9 +181,21 @@ export function FriendRequests({
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-white font-medium truncate">
-                                            {request.toEnsName || formatAddress(request.to_address)}
+                                            {request.toUsername
+                                                ? `@${request.toUsername}`
+                                                : request.toEnsName || formatAddress(request.to_address)}
                                         </p>
-                                        <p className="text-[#FF5500]/70 text-sm flex items-center gap-1.5">
+                                        {request.toUsername && (request.toEnsName || request.to_address) && (
+                                            <p className="text-zinc-500 text-xs truncate">
+                                                {request.toEnsName || formatAddress(request.to_address)}
+                                            </p>
+                                        )}
+                                        {request.memo && (
+                                            <p className="text-zinc-400 text-xs mt-0.5 italic truncate">
+                                                &ldquo;{request.memo}&rdquo;
+                                            </p>
+                                        )}
+                                        <p className="text-[#FF5500]/70 text-xs flex items-center gap-1.5 mt-0.5">
                                             <span className="relative flex h-2 w-2">
                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF5500] opacity-75" />
                                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FF5500]" />

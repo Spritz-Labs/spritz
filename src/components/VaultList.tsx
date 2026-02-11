@@ -4235,11 +4235,11 @@ export function VaultList({
                     <button
                         type="button"
                         onClick={(e) => unhideVault(vault.id, e)}
-                        className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 transition-colors"
-                        title="Show vault"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 transition-colors text-xs font-medium"
+                        title="Unhide vault permanently"
                     >
                         <svg
-                            className="w-5 h-5"
+                            className="w-4 h-4"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -4257,6 +4257,7 @@ export function VaultList({
                                 d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                             />
                         </svg>
+                        Unhide
                     </button>
                 ) : (
                     <>
@@ -4358,9 +4359,14 @@ export function VaultList({
             )}
             {showHiddenVaults && hiddenVaultsList.length > 0 && (
                 <div className="pt-2 border-t border-zinc-800">
-                    <p className="text-xs font-medium text-zinc-500 mb-2">
-                        Hidden vaults
-                    </p>
+                    <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-zinc-500">
+                            Hidden vaults
+                        </p>
+                        <p className="text-[10px] text-zinc-600">
+                            Tap Unhide to restore permanently
+                        </p>
+                    </div>
                     <div className="space-y-2">
                         {hiddenVaultsList.map((vault) =>
                             renderVaultRow(vault, { isHidden: true })

@@ -259,6 +259,8 @@ type UnifiedChatListProps = {
     onRetry?: () => void;
     /** Callback to refresh chat list (for pull-to-refresh) */
     onRefresh?: () => Promise<void>;
+    /** Increment to reset the chat list (scroll to top, select All folder) */
+    resetKey?: number;
 };
 
 const formatTime = (date: Date | null, timezone: string) => {
@@ -863,6 +865,7 @@ function UnifiedChatListInner({
     chatsError = null,
     onRetry,
     onRefresh,
+    resetKey,
 }: UnifiedChatListProps & {
     showSearch?: boolean;
     onSearchToggle?: () => void;
@@ -887,6 +890,22 @@ function UnifiedChatListInner({
         "all" | "dms" | "groups" | "channels"
     >("all");
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const virtualScrollRef = useRef<HTMLDivElement>(null);
+
+    // Reset folder to "All" and scroll to top when resetKey changes (e.g. tapping Chats tab)
+    const prevResetKeyRef = useRef(resetKey);
+    useEffect(() => {
+        if (resetKey !== undefined && resetKey !== prevResetKeyRef.current) {
+            setActiveFolder(null);
+            setSearchQuery("");
+            setTypeFilter("all");
+            // Scroll the virtual list to top
+            if (virtualScrollRef.current) {
+                virtualScrollRef.current.scrollTop = 0;
+            }
+        }
+        prevResetKeyRef.current = resetKey;
+    }, [resetKey]);
 
     useEffect(() => {
         const t = setTimeout(
@@ -1153,7 +1172,7 @@ function UnifiedChatListInner({
     );
 
     // Virtual scrolling for large lists (100+ chats) to prevent DOM bloat
-    const virtualScrollRef = useRef<HTMLDivElement>(null);
+    // (virtualScrollRef declared above with other refs)
     const useVirtual = filteredChats.length > 100;
     const virtualizer = useVirtualizer({
         count: filteredChats.length,

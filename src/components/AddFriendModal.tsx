@@ -10,7 +10,7 @@ import { QRCodeScanner } from "./QRCodeScanner";
 type AddFriendModalProps = {
     isOpen: boolean;
     onClose: () => void;
-    onAdd: (addressOrENS: string, nickname?: string) => Promise<boolean>;
+    onAdd: (addressOrENS: string, memo?: string) => Promise<boolean>;
     isLoading: boolean;
     error: string | null;
     initialValue?: string;
@@ -31,7 +31,7 @@ export function AddFriendModal({
     initialValue,
 }: AddFriendModalProps) {
     const [input, setInput] = useState("");
-    const [nickname, setNickname] = useState("");
+    const [memo, setMemo] = useState("");
     const [resolved, setResolved] = useState<ENSResolution | null>(null);
     const [resolvedFromUsername, setResolvedFromUsername] = useState(false);
     const [resolvedFromPhone, setResolvedFromPhone] = useState(false);
@@ -156,7 +156,7 @@ export function AddFriendModal({
     useEffect(() => {
         if (!isOpen) {
             setInput("");
-            setNickname("");
+            setMemo("");
             setResolved(null);
             setResolvedFromUsername(false);
             setResolvedFromPhone(false);
@@ -170,11 +170,11 @@ export function AddFriendModal({
         // Use the resolved address for the request
         const success = await onAdd(
             resolved.address,
-            nickname.trim() || undefined
+            memo.trim() || undefined
         );
         if (success) {
             setInput("");
-            setNickname("");
+            setMemo("");
             setResolved(null);
             onClose();
         }
@@ -403,17 +403,30 @@ export function AddFriendModal({
 
                                 <div>
                                     <label className="block text-sm font-medium text-zinc-400 mb-2">
-                                        Nickname (optional)
+                                        Memo (optional)
                                     </label>
-                                    <input
-                                        type="text"
-                                        value={nickname}
-                                        onChange={(e) =>
-                                            setNickname(e.target.value)
-                                        }
-                                        placeholder="e.g. Kevin from ETH Denver"
-                                        className="w-full py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all"
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={memo}
+                                            onChange={(e) => {
+                                                if (e.target.value.length <= 100) {
+                                                    setMemo(e.target.value);
+                                                }
+                                            }}
+                                            maxLength={100}
+                                            placeholder="e.g. Kevin from ETH Denver"
+                                            className="w-full py-3 px-4 pr-12 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FB8D22]/50 focus:ring-2 focus:ring-[#FB8D22]/20 transition-all text-sm"
+                                        />
+                                        {memo.length > 0 && (
+                                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
+                                                {memo.length}/100
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-zinc-600 text-xs mt-1">
+                                        Help them know who you are
+                                    </p>
                                 </div>
 
                                 <AnimatePresence>

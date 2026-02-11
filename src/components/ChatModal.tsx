@@ -92,6 +92,10 @@ type ChatModalProps = {
     peerAddress: string; // Can be EVM or Solana address
     peerName?: string | null;
     peerAvatar?: string | null;
+    /** Peer's ENS name (shown as secondary info when username is the primary name) */
+    peerEnsName?: string | null;
+    /** Peer's Spritz @username (shown as secondary info when ENS is the primary name) */
+    peerUsername?: string | null;
     onMessageSent?: (messagePreview?: string) => void; // Callback when a message is sent
     onOpenUserCard?: (address: string) => void; // Callback to open a user's profile card
 };
@@ -240,6 +244,8 @@ export function ChatModal({
     peerAddress,
     peerName,
     peerAvatar,
+    peerEnsName,
+    peerUsername,
     onMessageSent,
     onOpenUserCard,
 }: ChatModalProps) {
@@ -1628,16 +1634,28 @@ export function ChatModal({
                                         <h2 className="text-white font-semibold text-[15px] truncate leading-tight">
                                             {displayName}
                                         </h2>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowDMMembers(true)}
-                                        className="text-zinc-500 text-xs font-mono truncate hover:text-zinc-300 transition-colors flex items-center gap-1"
-                                    >
-                                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                        </svg>
-                                        2 members
+                                        {/* Secondary identity info: show ENS and/or address below the display name */}
+                                        {(() => {
+                                            const secondary: string[] = [];
+                                            // If display name is username, show ENS below
+                                            if (peerUsername && peerName?.startsWith("@") && peerEnsName) {
+                                                secondary.push(peerEnsName);
+                                            }
+                                            // If display name is ENS, show username below
+                                            if (peerEnsName && peerName === peerEnsName && peerUsername) {
+                                                secondary.push(`@${peerUsername}`);
+                                            }
+                                            // Always show truncated address if name isn't already the address
+                                            if (peerName && peerAddress) {
+                                                secondary.push(formatAddress(peerAddress));
+                                            }
+                                            if (secondary.length === 0) return null;
+                                            return (
+                                                <p className="text-zinc-500 text-[11px] truncate leading-tight mt-0.5">
+                                                    {secondary.join(" · ")}
+                                                </p>
+                                            );
+                                        })()}
                                     </button>
                                 </div>
 
