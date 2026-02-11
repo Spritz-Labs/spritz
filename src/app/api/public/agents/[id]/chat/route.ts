@@ -8,6 +8,8 @@ import {
     sanitizeErrorMessage,
     inferErrorCode,
 } from "@/lib/agent-cost";
+import { localTimeToUTC, getDayOfWeekInTimezone } from "@/lib/timezone";
+import { toZonedTime, format } from "date-fns-tz";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -829,8 +831,202 @@ export async function POST(
                 "\n\nWhen users ask about events (e.g. 'what events are happening today'), answer from the event data above. Do NOT write code – use the listed events directly.";
         }
 
+        // Handle scheduling capability (if enabled)
+        let schedulingContext = "";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let schedulingResponseData: any = null;
+        const schedulingEnabled = agent.scheduling_enabled === true;
+
+        if (schedulingEnabled) {
+            const messageLower = message.toLowerCase();
+            const schedulingKeywords = [
+                "schedule", "book a", "book time", "booking",
+                "meeting", "appointment", "availability", "available",
+                "time slot", "when can", "set up a", "calendar",
+                "free time", "slot", "set up time", "find time",
+            ];
+            const currentMsgIsScheduling = schedulingKeywords.some((kw) =>
+                messageLower.includes(kw),
+            );
+
+            // Check conversation history for ongoing scheduling conversation
+            const recentChatTexts = history.map((h) =>
+                h.parts[0]?.text?.toLowerCase() || "",
+            );
+            const recentConversationIsScheduling = recentChatTexts.some(
+                (text) =>
+                    schedulingKeywords.some((kw) => text.includes(kw)) ||
+                    text.includes("booking card") ||
+                    text.includes("available times") ||
+                    text.includes("scheduling information"),
+            );
+
+            const isSchedulingFollowUp =
+                recentConversationIsScheduling &&
+                (messageLower.includes("min") ||
+                    messageLower.includes("hour") ||
+                    messageLower.includes("today") ||
+                    messageLower.includes("tomorrow") ||
+                    messageLower.includes("morning") ||
+                    messageLower.includes("afternoon") ||
+                    messageLower.includes("evening") ||
+                    messageLower.includes("yes") ||
+                    messageLower.includes("sure") ||
+                    messageLower.includes("sounds good") ||
+                    messageLower.includes("that works") ||
+                    messageLower.includes("perfect") ||
+                    messageLower.includes("ok") ||
+                    messageLower.includes("project") ||
+                    messageLower.includes("working together") ||
+                    /^\d+$/.test(messageLower.trim()));
+
+            const isSchedulingQuery =
+                currentMsgIsScheduling || isSchedulingFollowUp;
+
+            if (isSchedulingQuery) {
+                console.log(
+                    `[Public Chat] Scheduling query detected (direct=${currentMsgIsScheduling}, followUp=${isSchedulingFollowUp})`,
+                );
+                try {
+                    const { data: ownerSettings } = await supabase
+                        .from("shout_user_settings")
+                        .select(
+                            "scheduling_enabled, scheduling_slug, scheduling_free_enabled, scheduling_paid_enabled, scheduling_free_duration_minutes, scheduling_paid_duration_minutes, scheduling_price_cents",
+                        )
+                        .eq("wallet_address", agent.owner_address)
+                        .single();
+
+                    if (ownerSettings?.scheduling_enabled) {
+                        const { data: windows } = await supabase
+                            .from("shout_availability_windows")
+                            .select("day_of_week, start_time, end_time, timezone")
+                            .eq("wallet_address", agent.owner_address)
+                            .eq("is_active", true);
+
+                        const userTimezone = windows?.[0]?.timezone || "UTC";
+                        const now = new Date();
+                        const duration =
+                            ownerSettings.scheduling_free_duration_minutes || 30;
+                        const advanceNoticeHours = 24;
+                        const bufferMinutes = 15;
+                        const minStartTime = new Date(
+                            now.getTime() + advanceNoticeHours * 60 * 60 * 1000,
+                        );
+
+                        const potentialSlots: { start: Date; end: Date }[] = [];
+                        for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+                            const checkDate = new Date(now);
+                            checkDate.setDate(checkDate.getDate() + dayOffset);
+                            checkDate.setUTCHours(12, 0, 0, 0);
+
+                            for (const window of windows || []) {
+                                const windowTimezone = window.timezone || userTimezone;
+                                const dayOfWeek = getDayOfWeekInTimezone(checkDate, windowTimezone);
+                                if (window.day_of_week !== dayOfWeek) continue;
+
+                                const slotStartUTC = localTimeToUTC(checkDate, window.start_time, windowTimezone);
+                                const slotEndUTC = localTimeToUTC(checkDate, window.end_time, windowTimezone);
+
+                                let currentSlot = new Date(slotStartUTC);
+                                while (
+                                    currentSlot.getTime() + duration * 60 * 1000 <=
+                                    slotEndUTC.getTime()
+                                ) {
+                                    if (currentSlot >= minStartTime) {
+                                        potentialSlots.push({
+                                            start: new Date(currentSlot),
+                                            end: new Date(
+                                                currentSlot.getTime() + duration * 60 * 1000,
+                                            ),
+                                        });
+                                    }
+                                    currentSlot = new Date(
+                                        currentSlot.getTime() + (duration + bufferMinutes) * 60 * 1000,
+                                    );
+                                }
+                            }
+                        }
+
+                        // Group slots for AI context
+                        const slotsByDate: Record<string, string[]> = {};
+                        for (const slot of potentialSlots.slice(0, 30)) {
+                            const zonedDate = toZonedTime(slot.start, userTimezone);
+                            const dateKey = format(zonedDate, "EEEE, MMMM d", { timeZone: userTimezone });
+                            const timeStr = format(zonedDate, "h:mm a", { timeZone: userTimezone });
+                            if (!slotsByDate[dateKey]) slotsByDate[dateKey] = [];
+                            slotsByDate[dateKey].push(timeStr);
+                        }
+
+                        const hasSlots = Object.keys(slotsByDate).length > 0;
+
+                        schedulingResponseData = {
+                            ownerAddress: agent.owner_address,
+                            slots: potentialSlots.slice(0, 50).map((s) => ({
+                                start: s.start.toISOString(),
+                                end: s.end.toISOString(),
+                            })),
+                            slotsByDate,
+                            freeEnabled: ownerSettings.scheduling_free_enabled ?? true,
+                            paidEnabled: ownerSettings.scheduling_paid_enabled ?? false,
+                            freeDuration: ownerSettings.scheduling_free_duration_minutes || 15,
+                            paidDuration: ownerSettings.scheduling_paid_duration_minutes || 30,
+                            priceCents: ownerSettings.scheduling_price_cents || 0,
+                            timezone: userTimezone,
+                        };
+
+                        schedulingContext = `
+## SCHEDULING INFORMATION
+
+You can help users schedule meetings with your creator.${
+                            hasSlots
+                                ? ` Here are the available times (${userTimezone}):
+
+${Object.entries(slotsByDate)
+    .map(([date, times]) => `**${date}:** ${times.join(", ")}`)
+    .join("\n")}
+
+A booking card will appear below your message for the user to select a time.`
+                                : ` (No availability windows configured for the next 7 days)`
+                        }
+
+${ownerSettings.scheduling_free_enabled ? `- **Free calls** available (${ownerSettings.scheduling_free_duration_minutes || 15} minutes)` : ""}
+${ownerSettings.scheduling_paid_enabled ? `- **Paid sessions** available (${ownerSettings.scheduling_paid_duration_minutes || 30} minutes) - $${((ownerSettings.scheduling_price_cents || 0) / 100).toFixed(2)} USD` : ""}
+
+IMPORTANT: The user can book DIRECTLY in this chat. A booking card will appear below your message.
+When helping users schedule:
+1. Present the available times above clearly
+2. Tell them to select a time from the booking card
+3. DO NOT direct users to external URLs - booking happens here
+`;
+                        console.log(
+                            "[Public Chat] Added scheduling context with",
+                            Object.keys(slotsByDate).length,
+                            "days",
+                        );
+                    } else {
+                        schedulingContext = `
+## SCHEDULING NOTE
+
+My creator hasn't enabled their public scheduling page yet. Please ask them directly about their availability.
+`;
+                    }
+                } catch (err) {
+                    console.error("[Public Chat] Error fetching scheduling info:", err);
+                }
+            }
+
+            // Always add base scheduling capability when enabled
+            schedulingContext = `\n\n## Scheduling Capability
+You can help users schedule meetings with your creator. When users ask about scheduling:
+- Be helpful and present available times when you have them
+- Tell users they can select a time from the booking card that appears below your message
+- Ask clarifying questions if needed (preferred time, meeting type)
+- DO NOT direct users to external URLs - booking happens in this chat
+` + schedulingContext;
+        }
+
         // Build the full message with context
-        const fullMessage = message + ragContext + eventContext;
+        const fullMessage = message + ragContext + eventContext + schedulingContext;
 
         // Build config for generate content
         const generateConfig: {
@@ -963,6 +1159,7 @@ export async function POST(
                                     type: "done",
                                     sessionId: finalSessionId,
                                     message: assistantMessage,
+                                    scheduling: schedulingResponseData,
                                 }) + "\n",
                             ),
                         );
@@ -1082,6 +1279,7 @@ export async function POST(
             success: true,
             sessionId: finalSessionId,
             message: assistantMessage,
+            scheduling: schedulingResponseData,
             agent: {
                 id: agent.id,
                 name: agent.name,

@@ -887,21 +887,57 @@ Use markdown so replies are easy to read:
 
         if (schedulingEnabled) {
             const messageLower = message.toLowerCase();
+
+            // Check current message for scheduling keywords
+            const schedulingKeywords = [
+                "schedule", "book a", "book time", "booking",
+                "meeting", "appointment", "availability", "available",
+                "time slot", "when can", "set up a", "calendar",
+                "free time", "slot", "set up time", "find time",
+            ];
+            const currentMsgIsScheduling = schedulingKeywords.some((kw) =>
+                messageLower.includes(kw),
+            );
+
+            // Also check if the recent conversation is already about scheduling
+            // (so follow-up messages like "30 mins", "tomorrow", "yes" stay in scheduling mode)
+            const recentChatTexts = (recentChats || []).map((c) =>
+                c.content?.toLowerCase() || "",
+            );
+            const recentConversationIsScheduling = recentChatTexts.some(
+                (text) =>
+                    schedulingKeywords.some((kw) => text.includes(kw)) ||
+                    text.includes("booking card") ||
+                    text.includes("available times") ||
+                    text.includes("scheduling information"),
+            );
+
+            // Common follow-up patterns in scheduling conversations
+            const isSchedulingFollowUp =
+                recentConversationIsScheduling &&
+                (messageLower.includes("min") ||
+                    messageLower.includes("hour") ||
+                    messageLower.includes("today") ||
+                    messageLower.includes("tomorrow") ||
+                    messageLower.includes("morning") ||
+                    messageLower.includes("afternoon") ||
+                    messageLower.includes("evening") ||
+                    messageLower.includes("yes") ||
+                    messageLower.includes("sure") ||
+                    messageLower.includes("sounds good") ||
+                    messageLower.includes("that works") ||
+                    messageLower.includes("perfect") ||
+                    messageLower.includes("ok") ||
+                    messageLower.includes("project") ||
+                    messageLower.includes("working together") ||
+                    /^\d+$/.test(messageLower.trim())); // Just a number like "30"
+
             const isSchedulingQuery =
-                messageLower.includes("schedule") ||
-                messageLower.includes("book") ||
-                messageLower.includes("meeting") ||
-                messageLower.includes("call") ||
-                messageLower.includes("appointment") ||
-                messageLower.includes("availability") ||
-                messageLower.includes("available") ||
-                messageLower.includes("time slot") ||
-                messageLower.includes("when can") ||
-                messageLower.includes("set up a");
+                currentMsgIsScheduling || isSchedulingFollowUp;
 
             if (isSchedulingQuery) {
                 console.log(
-                    "[Chat] Scheduling query detected, fetching availability",
+                    `[Chat] Scheduling query detected (direct=${currentMsgIsScheduling}, followUp=${isSchedulingFollowUp}), fetching availability`,
                 );
 
                 try {
