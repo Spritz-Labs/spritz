@@ -3265,11 +3265,14 @@ export function ChatModal({
                         config={selectedMessageConfig}
                         callbacks={{
                             onReaction: selectedMessageConfig
-                                ? (emoji) =>
-                                      toggleMsgReaction(
-                                          selectedMessageConfig.messageId,
-                                          emoji
-                                      )
+                                ? (emoji) => {
+                                      // Pixel art uses IPFS-URL based reactions; regular messages use message-ID based
+                                      if (selectedMessageConfig.isPixelArt && selectedMessageConfig.mediaUrl) {
+                                          handleReaction(selectedMessageConfig.mediaUrl, emoji);
+                                      } else {
+                                          toggleMsgReaction(selectedMessageConfig.messageId, emoji);
+                                      }
+                                  }
                                 : undefined,
                             onReply: selectedMessageConfig
                                 ? () => {

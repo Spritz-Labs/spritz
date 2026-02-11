@@ -115,7 +115,7 @@ export async function POST(
         if (isUuid) {
             const { data } = await supabase
                 .from("shout_public_channels")
-                .select("id, name, poap_event_id, poap_collection_id, access_level")
+                .select("id, name, poap_event_id, poap_collection_id")
                 .eq("id", id)
                 .eq("is_active", true)
                 .single();
@@ -124,7 +124,7 @@ export async function POST(
             // Slug lookup
             const { data } = await supabase
                 .from("shout_public_channels")
-                .select("id, name, poap_event_id, poap_collection_id, access_level")
+                .select("id, name, poap_event_id, poap_collection_id")
                 .eq("slug", id.toLowerCase())
                 .eq("is_active", true)
                 .single();
@@ -136,33 +136,6 @@ export async function POST(
                 { error: "Channel not found" },
                 { status: 404 },
             );
-        }
-
-        // Staff-only channel access check
-        if (channel.access_level === "staff") {
-            // Check if user is admin
-            const { data: adminData } = await supabase
-                .from("shout_admins")
-                .select("id")
-                .eq("wallet_address", normalizedAddress)
-                .maybeSingle();
-
-            if (!adminData) {
-                // Check if user is a global moderator
-                const { data: modData } = await supabase
-                    .from("shout_moderators")
-                    .select("id")
-                    .eq("user_address", normalizedAddress)
-                    .is("channel_id", null)
-                    .maybeSingle();
-
-                if (!modData) {
-                    return NextResponse.json(
-                        { error: "This channel is for staff only" },
-                        { status: 403 },
-                    );
-                }
-            }
         }
 
         const poapEventId =
@@ -357,12 +330,15 @@ export async function POST(
         ) {
             memberKeys.push(userAddress.trim().toLowerCase());
         }
+        // Use the resolved channel UUID (not the URL param which may be a slug)
+        const channelUuid = channel.id;
+
         let existing: { id: string } | null = null;
         for (const key of memberKeys) {
             const { data } = await supabase
                 .from("shout_channel_members")
                 .select("id")
-                .eq("channel_id", id)
+                .eq("channel_id", channelUuid)
                 .eq("user_address", key)
                 .maybeSingle();
             if (data) {
@@ -382,7 +358,7 @@ export async function POST(
         const { error: joinError } = await supabase
             .from("shout_channel_members")
             .insert({
-                channel_id: id,
+                channel_id: channelUuid,
                 user_address: normalizedAddress,
             });
 
@@ -395,7 +371,7 @@ export async function POST(
         }
 
         // Increment member count
-        await supabase.rpc("increment_channel_members", { channel_uuid: id });
+        await supabase.rpc("increment_channel_members", { channel_uuid: channelUuid });
 
         return NextResponse.json({ success: true, channelName: channel.name });
     } catch (e) {

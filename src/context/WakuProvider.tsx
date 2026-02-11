@@ -712,8 +712,8 @@ async function fetchMessagesFromSupabase(
                 let content: string;
                 let usedLegacyKey = false;
 
-                // Welcome/system messages are stored as plain text (not encrypted)
-                if (msg.message_type === 'welcome' || msg.message_type === 'system') {
+                // Welcome/system/broadcast messages are stored as plain text (not encrypted)
+                if (msg.message_type === 'welcome' || msg.message_type === 'system' || msg.message_type === 'broadcast') {
                     content = msg.encrypted_content; // It's actually plain text for these types
                 } else if (isDualKey(keys)) {
                     // Use dual-key decryption with fallback

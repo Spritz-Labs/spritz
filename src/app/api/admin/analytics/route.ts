@@ -48,8 +48,12 @@ async function fetchAllRows<T = Record<string, unknown>>(
 
         const { data, error } = await query;
         if (error) {
-            // If table doesn't exist (code 42P01) or column missing, return empty gracefully
-            if (error.code === "42P01" || error.code === "PGRST116" || error.message?.includes("does not exist")) {
+            // Gracefully handle missing tables/columns/relationships:
+            // 42P01 = undefined table, 42703 = undefined column,
+            // PGRST116 = no rows (single), PGRST204 = column not found (PostgREST),
+            // PGRST200 = relationship not found
+            const gracefulCodes = ["42P01", "42703", "PGRST116", "PGRST200", "PGRST204"];
+            if (gracefulCodes.includes(error.code) || error.message?.includes("does not exist") || error.message?.includes("not found")) {
                 console.warn(`[Analytics] Table or column issue for "${table}": ${error.message}`);
                 return [];
             }
@@ -87,7 +91,8 @@ async function fetchCount(
     }
     const { count, error } = await query;
     if (error) {
-        if (error.code === "42P01" || error.code === "PGRST116" || error.message?.includes("does not exist")) {
+        const gracefulCodes = ["42P01", "42703", "PGRST116", "PGRST200", "PGRST204"];
+        if (gracefulCodes.includes(error.code) || error.message?.includes("does not exist") || error.message?.includes("not found")) {
             console.warn(`[Analytics] Table or column issue for count query: ${error.message}`);
             return 0;
         }
@@ -649,15 +654,20 @@ export async function GET(request: NextRequest) {
                     .filter(Boolean),
             ),
         ] as string[];
-        const { data: channelRows } =
-            channelIds.length > 0
-                ? await supabase
-                      .from("shout_public_channels")
-                      .select("id, name, emoji")
-                      .in("id", channelIds)
-                : { data: [] };
+        let channelRows: { id: string; name: string; emoji: string }[] = [];
+        try {
+            if (channelIds.length > 0) {
+                const { data, error } = await supabase
+                    .from("shout_public_channels")
+                    .select("id, name, emoji")
+                    .in("id", channelIds);
+                if (!error && data) channelRows = data;
+            }
+        } catch (e) {
+            console.warn("[Analytics] Channel names query failed:", e);
+        }
         const channelNameById = new Map(
-            (channelRows || []).map((c) => [
+            channelRows.map((c: { id: string; name: string; emoji: string }) => [
                 c.id,
                 `${c.emoji || ""} ${c.name}`.trim(),
             ]),
@@ -903,9 +913,9 @@ export async function GET(request: NextRequest) {
             endDate: now.toISOString(),
         });
     } catch (error) {
-        console.error("[Analytics] Error:", error);
+        console.error("[Analytics] Error:", error instanceof Error ? { message: error.message, stack: error.stack } : error);
         return NextResponse.json(
-            { error: "Failed to fetch analytics" },
+            { error: "Failed to fetch analytics", details: error instanceof Error ? error.message : String(error) },
             { status: 500 },
         );
     }
