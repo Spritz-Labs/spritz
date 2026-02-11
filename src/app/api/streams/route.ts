@@ -91,26 +91,24 @@ export async function GET(request: NextRequest) {
     }
 
     // For live streams, verify with Livepeer that they're actually broadcasting
-    // But give a grace period for newly-started streams (WebRTC takes time to connect)
+    // Auto-end stale streams that Livepeer confirms are no longer active
     let filteredStreams = streams || [];
     
     if (liveOnly && filteredStreams.length > 0) {
         const GRACE_PERIOD_MS = 60000; // 60 seconds grace period for new streams
         const now = Date.now();
         
-        // Add timeout to Livepeer verification to prevent hanging
         const verifiedStreams = await Promise.allSettled(
             filteredStreams.map(async (stream) => {
                 // Check if stream started recently (within grace period)
                 const startedAt = stream.started_at ? new Date(stream.started_at).getTime() : 0;
                 const isNewStream = (now - startedAt) < GRACE_PERIOD_MS;
                 
-                // For new streams, show them even if not yet active (broadcaster is connecting)
                 if (isNewStream) {
                     return stream;
                 }
                 
-                // For older streams, verify they're actually active (with timeout)
+                // For older streams, verify they're actually active
                 if (stream.stream_id) {
                     try {
                         const livepeerStream = await Promise.race([
@@ -122,9 +120,15 @@ export async function GET(request: NextRequest) {
                         if (livepeerStream?.isActive) {
                             return stream;
                         }
+                        // Stream is NOT active on Livepeer -- auto-end it in the database
+                        console.log(`[Streams API] Auto-ending stale stream ${stream.id} (Livepeer inactive)`);
+                        await supabase
+                            .from("shout_streams")
+                            .update({ status: "ended", ended_at: new Date().toISOString() })
+                            .eq("id", stream.id);
+                        return null;
                     } catch (livepeerError) {
-                        // If Livepeer check fails/times out, include the stream anyway
-                        // Better to show potentially inactive streams than fail completely
+                        // If Livepeer check times out, keep the stream (don't auto-end on uncertainty)
                         console.warn(`[Streams API] Livepeer check failed for stream ${stream.id}:`, livepeerError);
                         return stream;
                     }
@@ -133,7 +137,6 @@ export async function GET(request: NextRequest) {
             })
         );
         
-        // Filter out failed promises and null values
         filteredStreams = verifiedStreams
             .filter((result) => result.status === "fulfilled" && result.value !== null)
             .map((result) => (result as PromiseFulfilledResult<NonNullable<typeof streams>[number]>).value);
@@ -197,19 +200,43 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (existingStream) {
-            // Check if the stream is stale (created more than 1 hour ago and still "idle")
             const createdAt = new Date(existingStream.created_at).getTime();
             const oneHourAgo = Date.now() - 60 * 60 * 1000;
-            
+            let shouldEndExisting = false;
+
             if (existingStream.status === "idle" && createdAt < oneHourAgo) {
-                // Auto-end stale idle streams
+                // Stale idle stream (created >1 hour ago, never went live)
+                shouldEndExisting = true;
+            } else if (existingStream.status === "live" && existingStream.stream_id) {
+                // "Live" stream -- verify with Livepeer it's actually active
+                try {
+                    const livepeerStream = await Promise.race([
+                        getLivepeerStream(existingStream.stream_id),
+                        new Promise<null>((_, reject) =>
+                            setTimeout(() => reject(new Error("Livepeer timeout")), 5000)
+                        ),
+                    ]);
+                    if (!livepeerStream?.isActive) {
+                        // Livepeer confirms stream is NOT active -- it's stale
+                        console.log(`[Streams API] Auto-ending stale live stream ${existingStream.id} (Livepeer inactive)`);
+                        shouldEndExisting = true;
+                    }
+                } catch {
+                    // Livepeer check timed out -- play it safe, end it anyway
+                    // User is trying to create a new stream so the old one is likely dead
+                    console.warn(`[Streams API] Livepeer check timeout for stream ${existingStream.id}, auto-ending`);
+                    shouldEndExisting = true;
+                }
+            }
+
+            if (shouldEndExisting) {
                 await supabase
                     .from("shout_streams")
                     .update({ status: "ended", ended_at: new Date().toISOString() })
                     .eq("id", existingStream.id);
                 // Continue to create a new stream
             } else {
-                // Return the existing stream so user can continue
+                // Stream is genuinely active, return it
                 return NextResponse.json({
                     stream: {
                         ...existingStream,
@@ -217,7 +244,7 @@ export async function POST(request: NextRequest) {
                             ? getPlaybackUrl(existingStream.playback_id) 
                             : null,
                     },
-                    existing: true, // Flag to indicate this is an existing stream
+                    existing: true,
                 });
             }
         }

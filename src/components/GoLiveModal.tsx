@@ -561,17 +561,12 @@ export function GoLiveModal({
     // Start camera when modal opens
     useEffect(() => {
         if (isOpen && !ingestUrl && !isStarting) {
-            // Check if we're reconnecting to an existing live stream
-            if (currentStream?.status === "live" && currentStream?.stream_id) {
-                setIngestUrl(
-                    `https://livepeer.studio/webrtc/${currentStream.stream_key}`
-                );
-                setStatus("live");
-            } else {
-                // Only start camera if not already ready (prevents interrupting play())
-                if (!cameraReady) {
-                    startCamera(selectedVideoDeviceId || undefined, selectedAudioDeviceId || undefined);
-                }
+            // Don't auto-reconnect to existing "live" streams.
+            // The stream may be stale (user closed app without ending).
+            // Instead, always show the preview. If user wants to go live again,
+            // they click Go Live which will create a new stream (the API auto-ends stale ones).
+            if (!cameraReady) {
+                startCamera(selectedVideoDeviceId || undefined, selectedAudioDeviceId || undefined);
             }
         } else if (!isOpen) {
             // Modal is closing - cleanup
@@ -593,8 +588,6 @@ export function GoLiveModal({
         }
     }, [
         isOpen,
-        currentStream?.status,
-        currentStream?.stream_id,
         ingestUrl,
         isStarting,
         cameraReady,

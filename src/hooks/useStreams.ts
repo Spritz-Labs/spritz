@@ -206,6 +206,70 @@ export function useStreams(userAddress: string | null) {
         return () => clearInterval(interval);
     }, [fetchLiveStreams]);
 
+    // Auto-end stream when user closes the tab/app or navigates away
+    // Uses sendBeacon/fetch+keepalive for reliability on close
+    useEffect(() => {
+        if (!userAddress) return;
+
+        const endCurrentStreamOnClose = () => {
+            // Get the current stream from the ref-like closure
+            // We need to check the actual state at the time of the event
+            const streamToEnd = currentStream;
+            if (!streamToEnd || streamToEnd.status !== "live") return;
+
+            const payload = JSON.stringify({ userAddress });
+            const url = `/api/streams/${streamToEnd.id}/end`;
+
+            // Try sendBeacon first (most reliable for page unload)
+            if (navigator.sendBeacon) {
+                const blob = new Blob([payload], { type: "application/json" });
+                const sent = navigator.sendBeacon(url, blob);
+                console.log("[useStreams] sendBeacon end stream:", sent);
+            }
+
+            // Also try fetch with keepalive as backup
+            try {
+                fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: payload,
+                    keepalive: true,
+                }).catch(() => {
+                    // Ignore - best effort
+                });
+            } catch {
+                // Ignore - best effort
+            }
+        };
+
+        // beforeunload fires when tab/window is closing
+        const handleBeforeUnload = () => {
+            endCurrentStreamOnClose();
+        };
+
+        // visibilitychange is more reliable on mobile (PWA swipe-away)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "hidden") {
+                endCurrentStreamOnClose();
+            }
+        };
+
+        // pagehide is the most reliable event for mobile browsers
+        const handlePageHide = () => {
+            endCurrentStreamOnClose();
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        window.addEventListener("pagehide", handlePageHide);
+
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+            window.removeEventListener("pagehide", handlePageHide);
+        };
+    }, [userAddress, currentStream]);
+
     return {
         streams,
         liveStreams,
