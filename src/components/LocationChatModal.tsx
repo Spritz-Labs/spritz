@@ -44,6 +44,7 @@ import {
 import { ReactionDisplay } from "./EmojiPicker";
 import { ChatMembersList } from "./ChatMembersList";
 import { MentionInput, type MentionUser } from "./MentionInput";
+import { usePoaps } from "@/hooks/usePoaps";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import {
@@ -238,6 +239,9 @@ export function LocationChatModal({
             fetchAgents();
         }
     }, [isOpen, locationChat.id]);
+
+    // Fetch user's POAPs for /poap command
+    const { poaps: userPoaps } = usePoaps(userAddress);
 
     // Build list of mentionable users from message senders + location agents
     const mentionableUsers: MentionUser[] = useMemo(() => {
@@ -1661,6 +1665,7 @@ export function LocationChatModal({
                                                     : `Message ${displayChat.name}...`
                                             }
                                             users={mentionableUsers}
+                                            poaps={userPoaps}
                                             className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
                                         />
                                         <button

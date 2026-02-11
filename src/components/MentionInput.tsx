@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { EMOJI_SHORTCODES } from "@/lib/emojiShortcodes";
 
 // Regex to match mentions in the format @[name](address) - needs to be defined early
 const MENTION_REGEX_GLOBAL = /@\[([^\]]+)\]\(([^)]+)\)/g;
@@ -139,47 +140,7 @@ function looksLikeCode(text: string): { isCode: boolean; language: string } {
     return { isCode, language: matchedLang || 'text' };
 }
 
-// Common emoji shortcodes (name -> emoji)
-const EMOJI_SHORTCODES: Record<string, string> = {
-    // Smileys
-    smile: "😊", grin: "😀", joy: "😂", rofl: "🤣", wink: "😉",
-    heart_eyes: "😍", kiss: "😘", yum: "😋", stuck_out_tongue: "😛",
-    thinking: "🤔", shush: "🤫", raised_eyebrow: "🤨", neutral: "😐",
-    expressionless: "😑", unamused: "😒", rolling_eyes: "🙄", grimacing: "😬",
-    relieved: "😌", pensive: "😔", sleepy: "😪", drooling: "🤤", sleeping: "😴",
-    mask: "😷", nerd: "🤓", sunglasses: "😎", cowboy: "🤠", party: "🥳",
-    smirk: "😏", relaxed: "☺️", blush: "😊", innocent: "😇",
-    // Gestures
-    wave: "👋", ok: "👌", pinched: "🤌", peace: "✌️", crossed_fingers: "🤞",
-    love_you: "🤟", rock: "🤤", call_me: "🤙", shaka: "🤙🏼", point_up: "☝️",
-    thumbsup: "👍", thumbs_up: "👍", "+1": "👍", thumbsdown: "👎", thumbs_down: "👎", "-1": "👎",
-    fist: "✊", punch: "👊", clap: "👏", raised_hands: "🙌", pray: "🙏",
-    handshake: "🤝", muscle: "💪", flex: "💪",
-    // Hearts
-    heart: "❤️", red_heart: "❤️", orange_heart: "🧡", yellow_heart: "💛",
-    green_heart: "💚", blue_heart: "💙", purple_heart: "💜", black_heart: "🖤",
-    white_heart: "🤍", broken_heart: "💔", sparkling_heart: "💖",
-    // Symbols
-    fire: "🔥", lit: "🔥", star: "⭐", sparkles: "✨", zap: "⚡", boom: "💥",
-    100: "💯", check: "✅", x: "❌", question: "❓", exclamation: "❗",
-    eyes: "👀", eye: "👁️", brain: "🧠", skull: "💀", ghost: "👻",
-    // Objects
-    rocket: "🚀", moon: "🌙", sun: "☀️", rainbow: "🌈", cloud: "☁️",
-    money: "💰", gem: "💎", crown: "👑", trophy: "🏆", medal: "🏅",
-    gift: "🎁", balloon: "🎈", tada: "🎉", confetti: "🎊",
-    // Food & Drink
-    pizza: "🍕", burger: "🍔", fries: "🍟", taco: "🌮", sushi: "🍣",
-    coffee: "☕", beer: "🍺", wine: "🍷", cocktail: "🍸", cake: "🎂",
-    // Animals
-    dog: "🐶", cat: "🐱", unicorn: "🦄", bear: "🐻", panda: "🐼",
-    monkey: "🐵", chicken: "🐔", penguin: "🐧", butterfly: "🦋", bee: "🐝",
-    // Misc
-    poop: "💩", angry: "😠", rage: "🤬", cry: "😢", sob: "😭",
-    scream: "😱", cold_sweat: "😰", triumph: "😤", disappointed: "😞",
-    worried: "😟", confused: "😕", upside_down: "🙃", money_mouth: "🤑",
-    zipper_mouth: "🤐", nauseated: "🤢", sneezing: "🤧", hot: "🥵", cold: "🥶",
-    woozy: "🥴", dizzy: "😵", exploding_head: "🤯", pleading: "🥺",
-};
+// EMOJI_SHORTCODES imported from @/lib/emojiShortcodes
 
 export type MentionUser = {
     address: string;
@@ -189,6 +150,12 @@ export type MentionUser = {
     avatarEmoji?: string; // Emoji fallback for agents
 };
 
+export type PoapItem = {
+    eventId: number;
+    eventName: string;
+    imageUrl: string | null;
+};
+
 type MentionInputProps = {
     value: string;
     onChange: (value: string) => void;
@@ -196,6 +163,7 @@ type MentionInputProps = {
     placeholder?: string;
     disabled?: boolean;
     users: MentionUser[];
+    poaps?: PoapItem[]; // User's POAPs for /poap command
     className?: string;
     inputRef?: React.RefObject<HTMLTextAreaElement | null>;
     multiline?: boolean; // Enable Shift+Enter for new lines
@@ -211,6 +179,7 @@ export function MentionInput({
     placeholder,
     disabled,
     users,
+    poaps = [],
     className,
     inputRef: externalInputRef,
     multiline = true,
@@ -222,7 +191,7 @@ export function MentionInput({
     const [suggestionFilter, setSuggestionFilter] = useState("");
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
-    const [suggestionType, setSuggestionType] = useState<"mention" | "emoji">("mention");
+    const [suggestionType, setSuggestionType] = useState<"mention" | "emoji" | "poap">("mention");
     const internalInputRef = useRef<HTMLTextAreaElement>(null);
     const inputRef = externalInputRef || internalInputRef;
     const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -262,6 +231,11 @@ export function MentionInput({
     const filteredEmojis = Object.entries(EMOJI_SHORTCODES)
         .filter(([name]) => name.toLowerCase().includes(suggestionFilter.toLowerCase()))
         .slice(0, 8); // Limit to 8 suggestions
+
+    // Filter POAPs based on input
+    const filteredPoaps = poaps.filter((p) =>
+        p.eventName.toLowerCase().includes(suggestionFilter.toLowerCase())
+    ).slice(0, 6); // Limit to 6 suggestions
 
     // Format address for display
     const formatAddress = (address: string) => {
@@ -367,6 +341,19 @@ export function MentionInput({
         onChange(newRawValue);
 
         const textBeforeCursor = newDisplayValue.slice(0, displayCursorPos);
+
+        // Check for /poap command trigger
+        const poapMatch = textBeforeCursor.match(/(?:^|\s)\/poap\s(.+)$/i);
+        if (poapMatch && poaps.length > 0) {
+            const searchText = poapMatch[1];
+            const commandStartIndex = textBeforeCursor.lastIndexOf("/poap");
+            setMentionStartIndex(commandStartIndex);
+            setSuggestionFilter(searchText);
+            setSuggestionType("poap");
+            setShowSuggestions(true);
+            setSelectedIndex(0);
+            return;
+        }
 
         // Check for emoji shortcode trigger (:)
         const lastColonIndex = textBeforeCursor.lastIndexOf(":");
@@ -475,9 +462,42 @@ export function MentionInput({
         }, 0);
     }, [mentionStartIndex, value, displayValue, onChange, inputRef]);
 
+    // Handle selecting a POAP
+    const selectPoap = useCallback((poap: PoapItem) => {
+        if (mentionStartIndex === null) return;
+
+        const input = inputRef.current;
+        const displayCursorPos = input?.selectionStart || displayValue.length;
+        
+        // mentionStartIndex is in display coordinates - convert to raw
+        const rawMentionStart = displayToRawCursorPos(mentionStartIndex, value);
+        const rawCursorPos = displayToRawCursorPos(displayCursorPos, value);
+        
+        // Replace /poap <search> with the POAP embed format
+        const beforePoap = value.slice(0, rawMentionStart);
+        const afterCursor = value.slice(rawCursorPos);
+        const poapText = `[poap:${poap.eventId}:${poap.eventName}:${poap.imageUrl || ""}] `;
+        
+        const newValue = beforePoap + poapText + afterCursor;
+        onChange(newValue);
+        
+        setShowSuggestions(false);
+        setMentionStartIndex(null);
+        setSuggestionFilter("");
+        
+        // Focus and set cursor position
+        setTimeout(() => {
+            if (input) {
+                const newDisplayCursorPos = mentionStartIndex + poapText.length;
+                input.focus();
+                input.setSelectionRange(newDisplayCursorPos, newDisplayCursorPos);
+            }
+        }, 0);
+    }, [mentionStartIndex, value, displayValue, onChange, inputRef]);
+
     // Handle keyboard navigation in suggestions
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        const items = suggestionType === "emoji" ? filteredEmojis : filteredUsers;
+        const items = suggestionType === "poap" ? filteredPoaps : suggestionType === "emoji" ? filteredEmojis : filteredUsers;
         
         if (showSuggestions && items.length > 0) {
             if (e.key === "ArrowDown") {
@@ -496,7 +516,9 @@ export function MentionInput({
             }
             if (e.key === "Enter" || e.key === "Tab") {
                 e.preventDefault();
-                if (suggestionType === "emoji") {
+                if (suggestionType === "poap") {
+                    selectPoap(filteredPoaps[selectedIndex]);
+                } else if (suggestionType === "emoji") {
                     selectEmoji(filteredEmojis[selectedIndex][1]);
                 } else {
                     selectMention(filteredUsers[selectedIndex]);
@@ -599,21 +621,55 @@ export function MentionInput({
                 style={{ minHeight: '24px', maxHeight: `${24 * maxRows}px` }}
             />
             
-            {/* Suggestions Popup (Mentions or Emojis) */}
+            {/* Suggestions Popup (Mentions, Emojis, or POAPs) */}
             <AnimatePresence>
                 {showSuggestions && (
                     (suggestionType === "emoji" && filteredEmojis.length > 0) ||
-                    (suggestionType === "mention" && filteredUsers.length > 0)
+                    (suggestionType === "mention" && filteredUsers.length > 0) ||
+                    (suggestionType === "poap" && filteredPoaps.length > 0)
                 ) && (
                     <motion.div
                         ref={suggestionsRef}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full left-0 right-0 mb-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
+                        className="absolute bottom-full left-0 right-0 mb-2 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50 max-h-72 overflow-y-auto"
                     >
                         <div className="p-2">
-                            {suggestionType === "emoji" ? (
+                            {suggestionType === "poap" ? (
+                                <>
+                                    <p className="text-xs text-zinc-500 px-2 mb-1">
+                                        POAPs — type <code className="bg-zinc-700 px-1 rounded">/poap {suggestionFilter}</code>
+                                    </p>
+                                    {filteredPoaps.map((poap, index) => (
+                                        <button
+                                            key={poap.eventId}
+                                            onClick={() => selectPoap(poap)}
+                                            className={`w-full flex items-center gap-3 px-2 py-2 rounded-lg transition-colors ${
+                                                index === selectedIndex
+                                                    ? "bg-purple-500/20 text-white"
+                                                    : "hover:bg-zinc-700 text-zinc-300"
+                                            }`}
+                                        >
+                                            {poap.imageUrl ? (
+                                                <img
+                                                    src={poap.imageUrl}
+                                                    alt=""
+                                                    className="w-10 h-10 rounded-full object-cover ring-2 ring-purple-500/30"
+                                                />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold ring-2 ring-purple-500/30">
+                                                    POAP
+                                                </div>
+                                            )}
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className="font-medium truncate text-sm">{poap.eventName}</p>
+                                                <p className="text-xs text-zinc-500">Event #{poap.eventId}</p>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </>
+                            ) : suggestionType === "emoji" ? (
                                 <>
                                     <p className="text-xs text-zinc-500 px-2 mb-1">
                                         Emojis — type <code className="bg-zinc-700 px-1 rounded">:{suggestionFilter}</code>
@@ -782,4 +838,77 @@ export function getMentionedAddresses(text: string): string[] {
     
     MENTION_REGEX.lastIndex = 0;
     return addresses;
+}
+
+// ── POAP message parsing ───────────────────────────────────────
+// Format: [poap:eventId:eventName:imageUrl]
+const POAP_REGEX = /\[poap:(\d+):([^:\]]+):([^\]]*)\]/g;
+
+export type ParsedPoap = {
+    eventId: number;
+    eventName: string;
+    imageUrl: string | null;
+};
+
+/** Parse message text into parts that include POAP embeds */
+export function parsePoaps(text: string): Array<{
+    type: "text" | "poap";
+    content: string;
+    poap?: ParsedPoap;
+}> {
+    const parts: Array<{
+        type: "text" | "poap";
+        content: string;
+        poap?: ParsedPoap;
+    }> = [];
+    
+    let lastIndex = 0;
+    let match;
+    
+    while ((match = POAP_REGEX.exec(text)) !== null) {
+        // Add text before POAP
+        if (match.index > lastIndex) {
+            parts.push({
+                type: "text",
+                content: text.slice(lastIndex, match.index),
+            });
+        }
+        
+        // Add POAP
+        parts.push({
+            type: "poap",
+            content: match[2], // event name
+            poap: {
+                eventId: parseInt(match[1], 10),
+                eventName: match[2],
+                imageUrl: match[3] || null,
+            },
+        });
+        
+        lastIndex = match.index + match[0].length;
+    }
+    
+    // Add remaining text
+    if (lastIndex < text.length) {
+        parts.push({
+            type: "text",
+            content: text.slice(lastIndex),
+        });
+    }
+    
+    POAP_REGEX.lastIndex = 0;
+    
+    return parts.length > 0 ? parts : [{ type: "text", content: text }];
+}
+
+/** Check if a message contains a POAP embed */
+export function hasPoap(text: string): boolean {
+    const result = POAP_REGEX.test(text);
+    POAP_REGEX.lastIndex = 0;
+    return result;
+}
+
+/** For previews: strip POAP embeds to plain text */
+export function getPoapDisplayText(text: string): string {
+    return text.replace(POAP_REGEX, (_, _id: string, name: string) => `🏆 ${name}`);
 }

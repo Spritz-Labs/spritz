@@ -19,6 +19,7 @@ import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
 import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { MentionInput, type MentionUser } from "./MentionInput";
+import { usePoaps } from "@/hooks/usePoaps";
 import { MentionText } from "./MentionText";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { LinkPreview, detectUrls } from "./LinkPreview";
@@ -268,6 +269,9 @@ export function GroupChatModal({
         removeGroupMember,
         leaveGroup,
     } = useXMTPContext();
+
+    // Fetch user's POAPs for /poap command
+    const { poaps: userPoaps } = usePoaps(userAddress);
 
     // Build list of mentionable users from group members
     const mentionableUsers: MentionUser[] = useMemo(() => {
@@ -2311,6 +2315,7 @@ export function GroupChatModal({
                                         }
                                         disabled={!isInitialized}
                                         users={mentionableUsers}
+                                        poaps={userPoaps}
                                         className="flex-1 py-3 px-4 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50"
                                     />
                                     <button

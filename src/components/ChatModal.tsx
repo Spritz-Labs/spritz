@@ -41,6 +41,7 @@ import { useAnalytics } from "@/hooks/useAnalytics";
 import { createLogger } from "@/lib/logger";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { MentionInput } from "./MentionInput";
+import { usePoaps } from "@/hooks/usePoaps";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
 import {
@@ -303,6 +304,9 @@ export function ChatModal({
             );
         }
     }, [peerAddress]);
+
+    // Fetch user's POAPs for /poap command
+    const { poaps: userPoaps } = usePoaps(userAddress);
 
     // Generate conversation ID for this chat
     const conversationId = [userAddress, peerAddress]
@@ -2937,6 +2941,7 @@ export function ChatModal({
                                                 !isInitialized || !!chatError
                                             }
                                             users={[]} // DMs don't need mention suggestions
+                                            poaps={userPoaps}
                                             className={`w-full pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50 ${
                                                 isFullscreen
                                                     ? "py-4 px-5 text-lg"
