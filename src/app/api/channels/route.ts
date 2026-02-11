@@ -72,12 +72,17 @@ export async function GET(request: NextRequest) {
                 const lookupAddrs = await getMembershipLookupAddresses(
                     userAddress
                 );
-                if (lookupAddrs.length > 0) {
+                const alsoParam = request.nextUrl.searchParams.get("alsoAddresses");
+                const alsoAddresses = alsoParam
+                    ? alsoParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+                    : [];
+                const allAddrs = [...new Set([...lookupAddrs, ...alsoAddresses])];
+                if (allAddrs.length > 0) {
                     const { data: membership } = await supabase
                         .from("shout_channel_members")
                         .select("channel_id")
                         .eq("channel_id", channel.id)
-                        .in("user_address", lookupAddrs)
+                        .in("user_address", allAddrs)
                         .maybeSingle();
                     isMember = !!membership;
                 }
@@ -110,15 +115,60 @@ export async function GET(request: NextRequest) {
     }
 
     // If user address provided, check which channels they've joined (resolve ENS so we find rows stored by 0x)
+    // alsoAddresses: comma-separated list of other addresses (e.g. EOA, smart wallet) so membership works across sign-in methods
     let memberChannelIds: string[] = [];
     if (userAddress) {
+        const primaryNorm = userAddress.trim().toLowerCase();
         const lookupAddrs = await getMembershipLookupAddresses(userAddress);
-        if (lookupAddrs.length > 0) {
+        const alsoParam = request.nextUrl.searchParams.get("alsoAddresses");
+        const alsoAddresses = alsoParam
+            ? alsoParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+            : [];
+        const allAddrs = [...new Set([primaryNorm, ...lookupAddrs, ...alsoAddresses])];
+        if (allAddrs.length > 0) {
             const { data: memberships } = await supabase
                 .from("shout_channel_members")
                 .select("channel_id")
-                .in("user_address", lookupAddrs);
+                .in("user_address", allAddrs);
             memberChannelIds = memberships?.map((m) => m.channel_id) || [];
+        }
+
+        // The Bunker: only admins or moderators can see it. Check staff status first.
+        const [adminRes, modRes, bunkerRow] = await Promise.all([
+            supabase.from("shout_admins").select("wallet_address").in("wallet_address", allAddrs),
+            supabase.from("shout_moderators").select("user_address").in("user_address", allAddrs).limit(1),
+            supabase
+                .from("shout_public_channels")
+                .select("id")
+                .eq("name", "The Bunker")
+                .eq("access_level", "staff")
+                .eq("is_active", true)
+                .maybeSingle(),
+        ]);
+        const isAdmin = (adminRes.data?.length ?? 0) > 0;
+        const isModerator = (modRes.data?.length ?? 0) > 0;
+        const isStaff = isAdmin || isModerator;
+        const bunkerId = bunkerRow.data?.id;
+
+        if (bunkerId) {
+            // Only staff see The Bunker; remove it from membership for non-staff (e.g. old manual adds)
+            if (!isStaff) {
+                memberChannelIds = memberChannelIds.filter((id) => id !== bunkerId);
+            } else {
+                if (!memberChannelIds.includes(bunkerId)) {
+                    memberChannelIds.push(bunkerId);
+                }
+                const primaryAddr = (lookupAddrs[0] ?? userAddress).toLowerCase();
+                const { error: upsertErr } = await supabase
+                    .from("shout_channel_members")
+                    .upsert(
+                        { channel_id: bunkerId, user_address: primaryAddr },
+                        { onConflict: "channel_id,user_address" }
+                    );
+                if (upsertErr && upsertErr.code !== "23505") {
+                    console.warn("[Channels] Bunker staff upsert:", upsertErr.message);
+                }
+            }
         }
     }
 

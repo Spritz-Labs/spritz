@@ -59,6 +59,8 @@ type BrowseChannelsModalProps = {
     isOpen: boolean;
     onClose: () => void;
     userAddress: string;
+    /** Other addresses for channel membership lookup (e.g. EOA, smart wallet) so staff channels like The Bunker show for admins. */
+    channelLookupAddresses?: string[];
     /** Addresses to scan for POAPs (e.g. Smart Wallet + identity). If not set, uses userAddress only. */
     poapAddresses?: string[];
     onJoinChannel: (channel: PublicChannel) => void;
@@ -112,6 +114,7 @@ export function BrowseChannelsModal({
     isOpen,
     onClose,
     userAddress,
+    channelLookupAddresses,
     poapAddresses,
     onJoinChannel,
     onJoinLocationChat,
@@ -120,7 +123,12 @@ export function BrowseChannelsModal({
     onCreateLocationChat,
 }: BrowseChannelsModalProps) {
     const { channels, isLoading, joinChannel, leaveChannel, createChannel } =
-        useChannels(userAddress);
+        useChannels(userAddress, {
+            alsoAddresses:
+                channelLookupAddresses && channelLookupAddresses.length > 0
+                    ? channelLookupAddresses
+                    : undefined,
+        });
     const [selectedCategory, setSelectedCategory] = useState("all");
     const [searchQuery, setSearchQuery] = useState("");
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);

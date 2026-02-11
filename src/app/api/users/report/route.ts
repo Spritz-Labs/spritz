@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         const { data: adminCheck } = await supabase
             .from("shout_admins")
             .select("id")
-            .eq("address", session.userAddress.toLowerCase())
+            .eq("wallet_address", session.userAddress.toLowerCase())
             .single();
 
         if (isAdmin && adminCheck) {
@@ -183,7 +183,7 @@ export async function PATCH(request: NextRequest) {
         const { data: adminCheck } = await supabase
             .from("shout_admins")
             .select("id")
-            .eq("address", session.userAddress.toLowerCase())
+            .eq("wallet_address", session.userAddress.toLowerCase())
             .single();
 
         if (!adminCheck) {

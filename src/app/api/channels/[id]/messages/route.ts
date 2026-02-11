@@ -40,21 +40,62 @@ export type ChannelReaction = {
     created_at: string;
 };
 
+// Staff-only channels: only admins or moderators may access
+async function isStaffForChannel(
+    supabaseClient: ReturnType<typeof createClient>,
+    allAddrs: string[]
+): Promise<boolean> {
+    if (allAddrs.length === 0) return false;
+    const [adminRes, modRes] = await Promise.all([
+        supabaseClient.from("shout_admins").select("wallet_address").in("wallet_address", allAddrs).limit(1),
+        supabaseClient.from("shout_moderators").select("user_address").in("user_address", allAddrs).limit(1),
+    ]);
+    return (adminRes.data?.length ?? 0) > 0 || (modRes.data?.length ?? 0) > 0;
+}
+
 // GET /api/channels/[id]/messages - Get channel messages
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { id } = await params;
+    const { id: channelId } = await params;
     const limit = parseInt(request.nextUrl.searchParams.get("limit") || "100");
     const before = request.nextUrl.searchParams.get("before"); // For pagination
+
+    // Staff-only channels: require userAddress and staff status
+    const { data: channel } = await supabase
+        .from("shout_public_channels")
+        .select("id, access_level")
+        .eq("id", channelId)
+        .single();
+    if (channel?.access_level === "staff") {
+        let userAddress = request.nextUrl.searchParams.get("userAddress");
+        const alsoParam = request.nextUrl.searchParams.get("alsoAddresses");
+        let alsoAddresses = alsoParam
+            ? alsoParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+            : [];
+        // Fallback to session so staff channel works when frontend doesn't pass userAddress (e.g. useChannelMessages)
+        if (!userAddress) {
+            const session = await getAuthenticatedUser(request);
+            userAddress = session?.userAddress ?? null;
+        }
+        if (!userAddress) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+        const primaryNorm = userAddress.trim().toLowerCase();
+        const allAddrs = [...new Set([primaryNorm, ...lookupAddrs, ...alsoAddresses])];
+        if (!(await isStaffForChannel(supabase as ReturnType<typeof createClient>, allAddrs))) {
+            return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+    }
 
     let query = supabase
         .from("shout_channel_messages")
         .select(
             "*, reply_to:reply_to_id(id, sender_address, content, message_type), is_pinned, pinned_by, pinned_at"
         )
-        .eq("channel_id", id)
+        .eq("channel_id", channelId)
         .order("created_at", { ascending: false })
         .limit(limit);
 
@@ -132,6 +173,22 @@ export async function POST(
         }
 
         const normalizedAddress = senderAddress.toLowerCase();
+
+        // Staff-only channels: only admins or moderators may post
+        const { data: chan } = await supabase
+            .from("shout_public_channels")
+            .select("id, access_level")
+            .eq("id", id)
+            .single();
+        if (chan?.access_level === "staff") {
+            const allAddrs = [normalizedAddress];
+            if (!(await isStaffForChannel(supabase as ReturnType<typeof createClient>, allAddrs))) {
+                return NextResponse.json(
+                    { error: "This channel is for admins and moderators only." },
+                    { status: 403 }
+                );
+            }
+        }
 
         // Check if user is banned
         if (await isUserBanned(normalizedAddress)) {

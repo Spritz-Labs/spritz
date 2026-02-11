@@ -41,13 +41,21 @@ export async function GET(request: NextRequest) {
 
     try {
         if (scope === "all" && chatType) {
-            // Fetch both global and room-specific words
-            const { data: globalWords } = await supabase
+            // Fetch both global and room-specific words (table may not exist)
+            const { data: globalWords, error: globalErr } = await supabase
                 .from("shout_blocked_words")
                 .select("*")
                 .eq("scope", "global")
                 .eq("is_active", true)
                 .order("added_at", { ascending: false });
+            if (globalErr) {
+                const code = (globalErr as { code?: string }).code;
+                if (code === "PGRST106" || code === "42P01") {
+                    return NextResponse.json({ words: [] });
+                }
+                console.error("[BlockedWords] Fetch global error:", globalErr);
+                return NextResponse.json({ error: "Failed to fetch blocked words" }, { status: 500 });
+            }
 
             const roomQuery = supabase
                 .from("shout_blocked_words")
@@ -56,14 +64,18 @@ export async function GET(request: NextRequest) {
                 .eq("chat_type", chatType)
                 .eq("is_active", true)
                 .order("added_at", { ascending: false });
-
             if (chatId) {
                 roomQuery.eq("chat_id", chatId);
             } else {
                 roomQuery.is("chat_id", null);
             }
-
-            const { data: roomWords } = await roomQuery;
+            const { data: roomWords, error: roomErr } = await roomQuery;
+            if (roomErr) {
+                const code = (roomErr as { code?: string }).code;
+                if (code === "PGRST106" || code === "42P01") {
+                    return NextResponse.json({ words: [...(globalWords || [])] });
+                }
+            }
 
             return NextResponse.json({
                 words: [...(globalWords || []), ...(roomWords || [])],
@@ -92,6 +104,11 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error("[BlockedWords] Fetch error:", error);
+            // Table may not exist yet (PGRST106 / 42P01) - return empty list so UI doesn't 500
+            const code = (error as { code?: string }).code;
+            if (code === "PGRST106" || code === "42P01" || (error as { message?: string }).message?.includes("does not exist")) {
+                return NextResponse.json({ words: [] });
+            }
             return NextResponse.json(
                 { error: "Failed to fetch blocked words" },
                 { status: 500 },

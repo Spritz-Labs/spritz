@@ -115,7 +115,7 @@ export async function POST(
         if (isUuid) {
             const { data } = await supabase
                 .from("shout_public_channels")
-                .select("id, name, poap_event_id, poap_collection_id")
+                .select("id, name, access_level, poap_event_id, poap_collection_id")
                 .eq("id", id)
                 .eq("is_active", true)
                 .single();
@@ -124,7 +124,7 @@ export async function POST(
             // Slug lookup
             const { data } = await supabase
                 .from("shout_public_channels")
-                .select("id, name, poap_event_id, poap_collection_id")
+                .select("id, name, access_level, poap_event_id, poap_collection_id")
                 .eq("slug", id.toLowerCase())
                 .eq("is_active", true)
                 .single();
@@ -136,6 +136,22 @@ export async function POST(
                 { error: "Channel not found" },
                 { status: 404 },
             );
+        }
+
+        // Staff-only channels: only admins or moderators may join
+        if (channel.access_level === "staff") {
+            const allAddrs = [normalizedAddress];
+            const [adminRes, modRes] = await Promise.all([
+                supabase.from("shout_admins").select("wallet_address").in("wallet_address", allAddrs).limit(1),
+                supabase.from("shout_moderators").select("user_address").in("user_address", allAddrs).limit(1),
+            ]);
+            const isStaff = (adminRes.data?.length ?? 0) > 0 || (modRes.data?.length ?? 0) > 0;
+            if (!isStaff) {
+                return NextResponse.json(
+                    { error: "This channel is for admins and moderators only." },
+                    { status: 403 }
+                );
+            }
         }
 
         const poapEventId =

@@ -24,7 +24,11 @@ export async function GET(request: NextRequest) {
 
         if (error1) {
             console.error("[Block API] Error fetching blocks:", error1);
-            return NextResponse.json({ error: "Failed to fetch blocked users" }, { status: 500 });
+            // Graceful: return empty lists instead of 500 (e.g. table/column mismatch)
+            return NextResponse.json({
+                blockedUsers: [],
+                blockedBy: [],
+            });
         }
 
         // Get users who blocked me (for bidirectional blocking)

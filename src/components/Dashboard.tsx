@@ -492,6 +492,22 @@ function DashboardContent({
         }
         return addrs.length ? addrs : undefined;
     }, [smartWallet?.smartWalletAddress, connectedWalletAddress, userAddress]);
+
+    // Same set of addresses for channel membership lookup (so The Bunker etc. show when signed in with any linked address)
+    const channelLookupAddresses = useMemo(() => {
+        const addrs: string[] = [];
+        const u = userAddress?.toLowerCase();
+        if (smartWallet?.smartWalletAddress) {
+            const a = smartWallet.smartWalletAddress.toLowerCase();
+            if (a !== u) addrs.push(a);
+        }
+        if (connectedWalletAddress) {
+            const a = connectedWalletAddress.toLowerCase();
+            if (a !== u && !addrs.includes(a)) addrs.push(a);
+        }
+        return addrs;
+    }, [userAddress, smartWallet?.smartWalletAddress, connectedWalletAddress]);
+
     const { isAdmin, isSuperAdmin } = useAdminCheck(
         userAddress,
         adminAdditionalAddresses
@@ -1058,7 +1074,10 @@ function DashboardContent({
         isNotificationsEnabled,
         onNewChannelMessage,
         setActiveChannel,
-    } = useChannels(userAddress);
+    } = useChannels(userAddress, {
+        alsoAddresses:
+            channelLookupAddresses.length > 0 ? channelLookupAddresses : undefined,
+    });
     // For POAP scan: use Smart Wallet (passkey) + identity so we check both
     const poapAddresses = useMemo(() => {
         if (!userAddress || isSolanaUser) return [userAddress].filter(Boolean);
@@ -6403,6 +6422,11 @@ function DashboardContent({
                     fetchJoinedChannels();
                 }}
                 userAddress={userAddress}
+                channelLookupAddresses={
+                    channelLookupAddresses.length > 0
+                        ? channelLookupAddresses
+                        : undefined
+                }
                 poapAddresses={poapAddresses}
                 onJoinChannel={async (channel) => {
                     setIsBrowseChannelsOpen(false);

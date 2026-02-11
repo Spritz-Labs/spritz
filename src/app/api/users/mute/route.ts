@@ -24,7 +24,8 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error("[Mute API] Error fetching mutes:", error);
-            return NextResponse.json({ error: "Failed to fetch mutes" }, { status: 500 });
+            // Graceful: return empty list instead of 500 (e.g. schema not yet migrated)
+            return NextResponse.json({ mutes: [] });
         }
 
         return NextResponse.json({ mutes: data || [] });

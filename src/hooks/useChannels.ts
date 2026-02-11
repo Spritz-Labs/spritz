@@ -42,7 +42,16 @@ export type ChannelMessageReaction = {
     users: string[];
 };
 
-export function useChannels(userAddress: string | null) {
+export type UseChannelsOptions = {
+    /** Other addresses (e.g. EOA, smart wallet) to include in membership lookup so channels show correctly across sign-in methods */
+    alsoAddresses?: string[];
+};
+
+export function useChannels(
+    userAddress: string | null,
+    options?: UseChannelsOptions
+) {
+    const alsoAddresses = options?.alsoAddresses ?? [];
     const [channels, setChannels] = useState<PublicChannel[]>([]);
     const [joinedChannels, setJoinedChannels] = useState<PublicChannel[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -71,13 +80,18 @@ export function useChannels(userAddress: string | null) {
     // Track the currently open channel to avoid notifications for it
     const activeChannelRef = useRef<string | null>(null);
 
+    const alsoParam =
+        alsoAddresses.length > 0
+            ? `&alsoAddresses=${encodeURIComponent(alsoAddresses.join(","))}`
+            : "";
+
     const fetchChannels = useCallback(async () => {
         setIsLoading(true);
         setError(null);
 
         try {
             const url = userAddress
-                ? `/api/channels?userAddress=${encodeURIComponent(userAddress)}`
+                ? `/api/channels?userAddress=${encodeURIComponent(userAddress)}${alsoParam}`
                 : "/api/channels";
 
             const res = await fetch(url);
@@ -96,7 +110,7 @@ export function useChannels(userAddress: string | null) {
         } finally {
             setIsLoading(false);
         }
-    }, [userAddress]);
+    }, [userAddress, alsoParam]);
 
     const fetchJoinedChannels = useCallback(async () => {
         if (!userAddress) {
@@ -108,7 +122,7 @@ export function useChannels(userAddress: string | null) {
             const res = await fetch(
                 `/api/channels?userAddress=${encodeURIComponent(
                     userAddress
-                )}&joined=true`
+                )}&joined=true${alsoParam}`
             );
             const data = await res.json();
 
@@ -118,7 +132,7 @@ export function useChannels(userAddress: string | null) {
         } catch (e) {
             console.error("[useChannels] Error fetching joined channels:", e);
         }
-    }, [userAddress]);
+    }, [userAddress, alsoParam]);
 
     const joinChannel = useCallback(
         async (channelId: string): Promise<true | string> => {
