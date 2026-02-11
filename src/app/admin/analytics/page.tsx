@@ -22,6 +22,63 @@ import {
     Legend,
     ResponsiveContainer,
 } from "recharts";
+import {
+    KPICard,
+    TrendBadge,
+    Sparkline,
+    ChartCard,
+    SectionHeader,
+    AnalyticsSkeleton,
+    EmptyState,
+    FunnelChart,
+    RetentionHeatmap,
+    PeakHoursHeatmap,
+    SegmentDonut,
+} from "@/components/admin/analytics/KPICard";
+
+// V2 analytics data types
+type V2OverviewData = {
+    section: string;
+    activeUsers: { dau: number; wau: number; mau: number; prev_dau: number; prev_wau: number; prev_mau: number } | null;
+    dauSparkline: { date: string; value: number }[] | null;
+    segments: { total: number; power: number; active: number; casual: number; dormant: number; churned: number } | null;
+    funnel: { signed_up: number; sent_message: number; used_ai: number; used_wallet: number; repeat_users: number } | null;
+    comparison: {
+        current: { new_users: number; active_users: number; messages: number; dm_messages: number; channel_messages: number; alpha_messages: number; ai_prompts: number; friendships: number; agents_created: number };
+        previous: { new_users: number; active_users: number; messages: number; dm_messages: number; channel_messages: number; alpha_messages: number; ai_prompts: number; friendships: number; agents_created: number };
+    } | null;
+    totals: { users: number; agents: number; messages: number; dmMessages: number; channelMessages: number; alphaMessages: number } | null;
+};
+
+type V2UsersData = {
+    section: string;
+    signupCurve: { date: string; new_users: number; cumulative: number }[] | null;
+    retention: { cohort: string; size: number; d1: number; d3: number; d7: number; d14: number; d30: number }[] | null;
+    segments: { total: number; power: number; active: number; casual: number; dormant: number; churned: number } | null;
+    funnel: { signed_up: number; sent_message: number; used_ai: number; used_wallet: number; repeat_users: number } | null;
+    peakHours: { day: number; hour: number; count: number }[] | null;
+    topUsers: {
+        byMessages: { wallet_address: string; username: string | null; ens_name: string | null; messages_sent: number; last_login: string }[];
+        byPoints: { wallet_address: string; username: string | null; ens_name: string | null; points: number; last_login: string }[];
+        byFriends: { wallet_address: string; username: string | null; ens_name: string | null; friends_count: number; last_login: string }[];
+    };
+};
+
+type V2ChatData = {
+    section: string;
+    messageVolume: { date: string; dms: number; channels: number; alpha: number; ai_prompts: number; ai_responses: number; total: number }[] | null;
+    peakHours: { day: number; hour: number; count: number }[] | null;
+    comparison: V2OverviewData["comparison"];
+    topChannels: { id: string; name: string; emoji: string; member_count: number; message_count: number }[];
+};
+
+type V2AgentData = {
+    section: string;
+    agentLeaderboard: { id: string; name: string; emoji: string; visibility: string; owner: string; total_messages: number; period_prompts: number; unique_users: number; errors: number }[] | null;
+    messageVolume: V2ChatData["messageVolume"];
+    comparison: V2OverviewData["comparison"];
+    totals: { totalAiMessages: number; totalAgents: number };
+};
 
 type Period = "24h" | "7d" | "30d" | "90d" | "365d";
 type SectionTab = "overview" | "users" | "wallets" | "communication" | "chats" | "agents";
@@ -239,7 +296,9 @@ export default function AnalyticsPage() {
     } = useAdmin();
 
     const [data, setData] = useState<AnalyticsData | null>(null);
+    const [v2Data, setV2Data] = useState<V2OverviewData | V2UsersData | V2ChatData | V2AgentData | null>(null);
     const [isLoadingData, setIsLoadingData] = useState(false);
+    const [isLoadingV2, setIsLoadingV2] = useState(false);
     const [selectedPeriod, setSelectedPeriod] = useState<Period>("7d");
     const [activeSection, setActiveSection] = useState<SectionTab>("overview");
 
@@ -250,6 +309,28 @@ export default function AnalyticsPage() {
         if (user.ensName) return user.ensName;
         return formatAddress(user.address);
     };
+
+    // Fetch v2 data for the active section (uses RPC functions for richer insights)
+    const fetchV2Data = useCallback(async (section: string) => {
+        if (!isReady) return;
+        const authHeaders = getAuthHeaders();
+        if (!authHeaders) return;
+
+        setIsLoadingV2(true);
+        try {
+            const res = await fetch(`/api/admin/analytics/v2?section=${section}&period=${selectedPeriod}`, {
+                headers: authHeaders,
+            });
+            if (res.ok) {
+                const result = await res.json();
+                setV2Data(result);
+            }
+        } catch (err) {
+            console.error("[Analytics v2] Error:", err);
+        } finally {
+            setIsLoadingV2(false);
+        }
+    }, [isReady, getAuthHeaders, selectedPeriod]);
 
     const fetchAnalytics = useCallback(async () => {
         if (!isReady) return;
@@ -277,6 +358,21 @@ export default function AnalyticsPage() {
             fetchAnalytics();
         }
     }, [isAuthenticated, isAdmin, fetchAnalytics]);
+
+    // Fetch v2 data when section changes
+    useEffect(() => {
+        if (isAuthenticated && isAdmin) {
+            const sectionMap: Record<SectionTab, string> = {
+                overview: "overview",
+                users: "users",
+                chats: "chat",
+                agents: "agents",
+                wallets: "wallets",
+                communication: "overview", // reuse overview data
+            };
+            fetchV2Data(sectionMap[activeSection]);
+        }
+    }, [isAuthenticated, isAdmin, activeSection, fetchV2Data]);
 
     // Loading state
     if (isLoading) {
@@ -370,11 +466,8 @@ export default function AnalyticsPage() {
 
             {/* Loading State */}
             {isLoadingData && !data && (
-                <div className="max-w-7xl mx-auto px-4 py-20 flex justify-center">
-                    <div className="flex flex-col items-center gap-4">
-                        <div className="w-12 h-12 border-4 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
-                        <p className="text-zinc-400">Loading analytics...</p>
-                    </div>
+                <div className="max-w-7xl mx-auto px-4 py-6">
+                    <AnalyticsSkeleton rows={3} />
                 </div>
             )}
 
@@ -389,12 +482,12 @@ export default function AnalyticsPage() {
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.2 }}
                         >
-                            {activeSection === "overview" && <OverviewSection data={data} period={selectedPeriod} />}
-                            {activeSection === "users" && <UsersSection data={data} period={selectedPeriod} getDisplayName={getDisplayName} />}
+                            {activeSection === "overview" && <OverviewSection data={data} period={selectedPeriod} v2={v2Data as V2OverviewData} isLoadingV2={isLoadingV2} />}
+                            {activeSection === "users" && <UsersSection data={data} period={selectedPeriod} getDisplayName={getDisplayName} v2={v2Data as V2UsersData} isLoadingV2={isLoadingV2} />}
                             {activeSection === "wallets" && <WalletsSection data={data} period={selectedPeriod} />}
                             {activeSection === "communication" && <CommunicationSection data={data} period={selectedPeriod} />}
-                            {activeSection === "chats" && <ChatsSection period={selectedPeriod} />}
-                            {activeSection === "agents" && <AgentsSection data={data} period={selectedPeriod} />}
+                            {activeSection === "chats" && <ChatsSection period={selectedPeriod} v2={v2Data as V2ChatData} isLoadingV2={isLoadingV2} />}
+                            {activeSection === "agents" && <AgentsSection data={data} period={selectedPeriod} v2={v2Data as V2AgentData} isLoadingV2={isLoadingV2} />}
                         </motion.div>
                     </AnimatePresence>
                 </div>
@@ -407,55 +500,169 @@ export default function AnalyticsPage() {
 // SECTION COMPONENTS
 // ============================================
 
-function OverviewSection({ data, period }: { data: AnalyticsData; period: Period }) {
+function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData; period: Period; v2: V2OverviewData | null; isLoadingV2: boolean }) {
+    const comp = v2?.comparison;
+    const curr = comp?.current;
+    const prev = comp?.previous;
+    const activeUsers = v2?.activeUsers;
+    const segments = v2?.segments;
+    const funnel = v2?.funnel;
+    const dauSparkline = v2?.dauSparkline;
+
     return (
         <div className="space-y-6">
-            {/* Key Metrics Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <MetricCard label="Total Users" value={data.summary.totalUsers} icon="👥" trend={data.summary.newUsersCount} trendLabel="new" />
-                <MetricCard label="Active Users" value={data.summary.activeUsers} icon="🔥" subtext={`in ${period}`} />
-                <MetricCard label="Smart Wallets" value={data.summary.usersWithSmartWallet} icon="💳" trend={data.summary.walletsCreatedInPeriod} trendLabel="new" />
-                <MetricCard label="Transactions" value={data.summary.totalWalletTransactions} icon="📊" trend={data.summary.walletTxInPeriod} trendLabel="in period" />
-                <MetricCard label="Volume" value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`} icon="💰" isString />
-                <MetricCard label="AI Agents" value={data.summary.totalAgents} icon="🤖" trend={data.summary.newAgentsCount} trendLabel="new" />
+            {/* DAU / WAU / MAU — headline metrics */}
+            {activeUsers && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <KPICard
+                        label="Daily Active Users"
+                        value={activeUsers.dau}
+                        icon="🔥"
+                        size="large"
+                        current={activeUsers.dau}
+                        previous={activeUsers.prev_dau}
+                        trendLabel="vs yesterday"
+                        sparklineData={dauSparkline || undefined}
+                        sparklineKey="value"
+                        sparklineColor="#FF5500"
+                    />
+                    <KPICard
+                        label="Weekly Active Users"
+                        value={activeUsers.wau}
+                        icon="📈"
+                        size="large"
+                        current={activeUsers.wau}
+                        previous={activeUsers.prev_wau}
+                        trendLabel="vs prev week"
+                        sparklineColor="#3B82F6"
+                    />
+                    <KPICard
+                        label="Monthly Active Users"
+                        value={activeUsers.mau}
+                        icon="📊"
+                        size="large"
+                        current={activeUsers.mau}
+                        previous={activeUsers.prev_mau}
+                        trendLabel="vs prev month"
+                        sparklineColor="#10B981"
+                    />
+                </div>
+            )}
+
+            {/* Key Metrics with period comparison */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <KPICard
+                    label="Total Users"
+                    value={data.summary.totalUsers}
+                    icon="👥"
+                    current={curr?.new_users}
+                    previous={prev?.new_users}
+                    trendLabel="signups"
+                    subtext={`+${data.summary.newUsersCount} new`}
+                />
+                <KPICard
+                    label="Messages"
+                    value={data.summary.totalMessages}
+                    icon="💬"
+                    current={curr?.messages}
+                    previous={prev?.messages}
+                    trendLabel="vs prev"
+                />
+                <KPICard
+                    label="Smart Wallets"
+                    value={data.summary.usersWithSmartWallet}
+                    icon="💳"
+                    subtext={`+${data.summary.walletsCreatedInPeriod} new`}
+                />
+                <KPICard
+                    label="Transactions"
+                    value={data.summary.totalWalletTransactions}
+                    icon="📊"
+                    subtext={`${data.summary.walletTxInPeriod} in period`}
+                />
+                <KPICard
+                    label="Volume"
+                    value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`}
+                    icon="💰"
+                />
+                <KPICard
+                    label="AI Agents"
+                    value={data.summary.totalAgents}
+                    icon="🤖"
+                    current={curr?.agents_created}
+                    previous={prev?.agents_created}
+                    trendLabel="created"
+                    subtext={`+${data.summary.newAgentsCount} new`}
+                />
             </div>
 
-            {/* Secondary Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-                <SmallMetric label="Passkeys" value={data.summary.totalPasskeys} />
-                <SmallMetric label="Calls" value={data.summary.totalCalls} />
-                <SmallMetric label="Streams" value={data.summary.totalStreamsCreated} />
-                <SmallMetric label="Rooms" value={data.summary.totalRoomsCreated} />
-                <SmallMetric label="Messages" value={data.summary.totalMessages} />
-                <SmallMetric label="Points" value={data.summary.totalPoints} />
-                <SmallMetric label="Friendships" value={data.summary.acceptedFriendships} />
-                <SmallMetric label="Public Profiles" value={data.summary.publicProfilesCount} />
-            </div>
-            
-            {/* Message Breakdown */}
-            <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                <h3 className="text-sm font-semibold text-zinc-400 mb-3">Message Breakdown (in {period})</h3>
+            {/* User Segments */}
+            {segments && (
+                <ChartCard title="User Segments" description="Users segmented by recent activity level">
+                    <SegmentDonut
+                        segments={[
+                            { name: "Power Users", value: segments.power, color: "#FF5500" },
+                            { name: "Active (7d)", value: segments.active, color: "#3B82F6" },
+                            { name: "Casual (30d)", value: segments.casual, color: "#10B981" },
+                            { name: "Dormant (90d)", value: segments.dormant, color: "#F59E0B" },
+                            { name: "Churned", value: segments.churned, color: "#6B7280" },
+                        ]}
+                    />
+                </ChartCard>
+            )}
+
+            {/* Message Breakdown with comparison */}
+            <ChartCard title={`Message Breakdown (in ${period})`} description="Messages by type with period comparison">
                 <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-blue-400">{data.summary.dmMessagesInPeriod}</p>
-                        <p className="text-xs text-zinc-500 mt-1">DMs ({data.summary.totalDmMessages} total)</p>
+                        <p className="text-2xl font-bold text-blue-400">{data.summary.dmMessagesInPeriod.toLocaleString()}</p>
+                        <p className="text-xs text-zinc-500 mt-1">DMs ({data.summary.totalDmMessages.toLocaleString()} total)</p>
+                        {curr && prev && (
+                            <div className="mt-1">
+                                <TrendBadge current={curr.dm_messages} previous={prev.dm_messages} label="vs prev" />
+                            </div>
+                        )}
                     </div>
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-purple-400">{data.summary.channelMessagesInPeriod}</p>
-                        <p className="text-xs text-zinc-500 mt-1">Channels ({data.summary.totalChannelMessages} total)</p>
+                        <p className="text-2xl font-bold text-purple-400">{data.summary.channelMessagesInPeriod.toLocaleString()}</p>
+                        <p className="text-xs text-zinc-500 mt-1">Channels ({data.summary.totalChannelMessages.toLocaleString()} total)</p>
+                        {curr && prev && (
+                            <div className="mt-1">
+                                <TrendBadge current={curr.channel_messages} previous={prev.channel_messages} label="vs prev" />
+                            </div>
+                        )}
                     </div>
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-orange-400">{data.summary.alphaMessagesInPeriod}</p>
-                        <p className="text-xs text-zinc-500 mt-1">Alpha ({data.summary.totalAlphaMessages} total)</p>
+                        <p className="text-2xl font-bold text-orange-400">{data.summary.alphaMessagesInPeriod.toLocaleString()}</p>
+                        <p className="text-xs text-zinc-500 mt-1">Alpha ({data.summary.totalAlphaMessages.toLocaleString()} total)</p>
+                        {curr && prev && (
+                            <div className="mt-1">
+                                <TrendBadge current={curr.alpha_messages} previous={prev.alpha_messages} label="vs prev" />
+                            </div>
+                        )}
                     </div>
                 </div>
-            </div>
+            </ChartCard>
+
+            {/* User Journey Funnel */}
+            {funnel && (
+                <ChartCard title="User Journey Funnel" description="Conversion from signup through key milestones">
+                    <FunnelChart
+                        steps={[
+                            { label: "Signed Up", value: funnel.signed_up, color: "#3B82F6" },
+                            { label: "Sent Message", value: funnel.sent_message, color: "#8B5CF6" },
+                            { label: "Used AI Agent", value: funnel.used_ai, color: "#10B981" },
+                            { label: "Used Wallet", value: funnel.used_wallet, color: "#F59E0B" },
+                            { label: "Repeat Users", value: funnel.repeat_users, color: "#FF5500" },
+                        ]}
+                    />
+                </ChartCard>
+            )}
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* User Growth Chart */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">User Growth</h3>
+                <ChartCard title="User Growth" description="New signups and active users over time">
                     <div className="h-48">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={data.timeSeries}>
@@ -464,21 +671,25 @@ function OverviewSection({ data, period }: { data: AnalyticsData; period: Period
                                         <stop offset="5%" stopColor="#FF5500" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#FF5500" stopOpacity={0} />
                                     </linearGradient>
+                                    <linearGradient id="colorActive" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.2} />
+                                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                                    </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                                 <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
                                 <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
                                 <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                <Legend />
                                 <Area type="monotone" dataKey="newUsers" name="New Users" stroke="#FF5500" fill="url(#colorUsers)" strokeWidth={2} />
-                                <Area type="monotone" dataKey="logins" name="Active" stroke="#3B82F6" fill="transparent" strokeWidth={2} />
+                                <Area type="monotone" dataKey="logins" name="Active" stroke="#3B82F6" fill="url(#colorActive)" strokeWidth={2} />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
-                </div>
+                </ChartCard>
 
                 {/* Auth Method Breakdown */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Auth Methods</h3>
+                <ChartCard title="Auth Methods" description="How users authenticate">
                     <div className="h-48 flex items-center">
                         {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -493,15 +704,27 @@ function OverviewSection({ data, period }: { data: AnalyticsData; period: Period
                                 </PieChart>
                             </ResponsiveContainer>
                         ) : (
-                            <p className="text-zinc-500 text-center w-full">No data</p>
+                            <EmptyState icon="🔐" title="No auth data" />
                         )}
                     </div>
-                </div>
+                </ChartCard>
+            </div>
+
+            {/* Secondary Metrics */}
+            <SectionHeader title="Platform Totals" description="All-time cumulative metrics" />
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <SmallMetric label="Passkeys" value={data.summary.totalPasskeys} />
+                <SmallMetric label="Calls" value={data.summary.totalCalls} />
+                <SmallMetric label="Streams" value={data.summary.totalStreamsCreated} />
+                <SmallMetric label="Rooms" value={data.summary.totalRoomsCreated} />
+                <SmallMetric label="Messages" value={data.summary.totalMessages} />
+                <SmallMetric label="Points" value={data.summary.totalPoints} />
+                <SmallMetric label="Friendships" value={data.summary.acceptedFriendships} />
+                <SmallMetric label="Public Profiles" value={data.summary.publicProfilesCount} />
             </div>
 
             {/* Beta Access */}
-            <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                <h3 className="text-sm font-semibold text-zinc-400 mb-3">Wallet Beta Access</h3>
+            <ChartCard title="Wallet Beta Access">
                 <div className="grid grid-cols-3 gap-4">
                     <div className="text-center">
                         <p className="text-2xl font-bold text-amber-400">{data.summary.betaApplicantsCount}</p>
@@ -516,27 +739,110 @@ function OverviewSection({ data, period }: { data: AnalyticsData; period: Period
                         <p className="text-xs text-zinc-500">Pending</p>
                     </div>
                 </div>
-            </div>
+            </ChartCard>
         </div>
     );
 }
 
-function UsersSection({ data, period, getDisplayName }: { data: AnalyticsData; period: Period; getDisplayName: (user: TopUser) => string }) {
+function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data: AnalyticsData; period: Period; getDisplayName: (user: TopUser) => string; v2: V2UsersData | null; isLoadingV2: boolean }) {
+    const segments = v2?.segments;
+    const funnel = v2?.funnel;
+    const signupCurve = v2?.signupCurve;
+    const retention = v2?.retention;
+    const peakHours = v2?.peakHours;
+
     return (
         <div className="space-y-6">
             {/* User Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <MetricCard label="Total Users" value={data.summary.totalUsers} icon="👥" />
-                <MetricCard label="New Users" value={data.summary.newUsersCount} icon="✨" subtext={`in ${period}`} />
-                <MetricCard label="Active Users" value={data.summary.activeUsers} icon="🔥" subtext={`in ${period}`} />
-                <MetricCard label="Messages Sent" value={data.summary.messagesInPeriod} icon="💬" subtext={`in ${period}`} />
-                <MetricCard label="Friend Requests" value={data.summary.friendRequestsCount} icon="🤝" />
-                <MetricCard label="Invites Used" value={data.summary.invitesUsed} icon="🎟️" />
+                <KPICard label="Total Users" value={data.summary.totalUsers} icon="👥" />
+                <KPICard label="New Users" value={data.summary.newUsersCount} icon="✨" subtext={`in ${period}`} />
+                <KPICard label="Active Users" value={data.summary.activeUsers} icon="🔥" subtext={`in ${period}`} />
+                <KPICard label="Messages Sent" value={data.summary.messagesInPeriod} icon="💬" subtext={`in ${period}`} />
+                <KPICard label="Friend Requests" value={data.summary.friendRequestsCount} icon="🤝" />
+                <KPICard label="Invites Used" value={data.summary.invitesUsed} icon="🎟️" />
             </div>
 
-            {/* User Growth Chart */}
-            <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                <h3 className="text-sm font-semibold text-zinc-400 mb-3">User Activity Over Time</h3>
+            {/* User Segments */}
+            {segments && (
+                <ChartCard title="User Segmentation" description="Users grouped by activity level">
+                    <SegmentDonut
+                        segments={[
+                            { name: "Power Users", value: segments.power, color: "#FF5500" },
+                            { name: "Active (7d)", value: segments.active, color: "#3B82F6" },
+                            { name: "Casual (30d)", value: segments.casual, color: "#10B981" },
+                            { name: "Dormant (90d)", value: segments.dormant, color: "#F59E0B" },
+                            { name: "Churned (90d+)", value: segments.churned, color: "#6B7280" },
+                        ]}
+                    />
+                </ChartCard>
+            )}
+
+            {/* User Journey Funnel */}
+            {funnel && (
+                <ChartCard title="User Journey Funnel" description="Conversion from signup through key milestones">
+                    <FunnelChart
+                        steps={[
+                            { label: "Signed Up", value: funnel.signed_up, color: "#3B82F6" },
+                            { label: "Sent Message", value: funnel.sent_message, color: "#8B5CF6" },
+                            { label: "Used AI Agent", value: funnel.used_ai, color: "#10B981" },
+                            { label: "Used Wallet", value: funnel.used_wallet, color: "#F59E0B" },
+                            { label: "Repeat Users", value: funnel.repeat_users, color: "#FF5500" },
+                        ]}
+                    />
+                </ChartCard>
+            )}
+
+            {/* User Growth Curve (Cumulative) */}
+            {signupCurve && signupCurve.length > 0 && (
+                <ChartCard title="User Growth Curve" description="Cumulative signups with daily new user overlay">
+                    <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={signupCurve}>
+                                <defs>
+                                    <linearGradient id="colorCumulative" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#666"
+                                    tick={{ fill: "#999", fontSize: 10 }}
+                                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                />
+                                <YAxis yAxisId="left" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
+                                <YAxis yAxisId="right" orientation="right" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }}
+                                    labelFormatter={(d) => new Date(d as string).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                                />
+                                <Legend />
+                                <Area yAxisId="left" type="monotone" dataKey="cumulative" name="Total Users" stroke="#3B82F6" fill="url(#colorCumulative)" strokeWidth={2} />
+                                <Bar yAxisId="right" dataKey="new_users" name="New Users" fill="#FF5500" radius={[2, 2, 0, 0]} opacity={0.7} />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </ChartCard>
+            )}
+
+            {/* Retention Cohort Heatmap */}
+            {retention && retention.length > 0 && (
+                <ChartCard title="Retention Cohorts" description="Percentage of users returning by cohort week">
+                    <RetentionHeatmap cohorts={retention} />
+                </ChartCard>
+            )}
+
+            {/* Peak Hours Heatmap */}
+            {peakHours && peakHours.length > 0 && (
+                <ChartCard title="Peak Activity Hours" description="When your users are most active (hour x day of week)">
+                    <PeakHoursHeatmap data={peakHours} />
+                </ChartCard>
+            )}
+
+            {/* User Activity Timeline */}
+            <ChartCard title="User Activity Over Time" description="Daily new users and active users">
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data.timeSeries}>
@@ -560,9 +866,10 @@ function UsersSection({ data, period, getDisplayName }: { data: AnalyticsData; p
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
-            </div>
+            </ChartCard>
 
             {/* Top Users */}
+            <SectionHeader title="Top Users" description="Leaderboards across key engagement metrics" />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <TopUsersList title="Top by Points" icon="⭐" users={data.topUsers.byPoints} getDisplayName={getDisplayName} color="text-yellow-400" />
                 <TopUsersList title="Top by Messages" icon="💬" users={data.topUsers.byMessages} getDisplayName={getDisplayName} color="text-purple-400" />
@@ -571,8 +878,7 @@ function UsersSection({ data, period, getDisplayName }: { data: AnalyticsData; p
 
             {/* Points Breakdown */}
             {data.pointsBreakdown.length > 0 && (
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Points Distribution</h3>
+                <ChartCard title="Points Distribution" description="Points earned by activity type">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {data.pointsBreakdown.slice(0, 8).map((item, index) => (
                             <div key={item.reason} className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2">
@@ -584,7 +890,7 @@ function UsersSection({ data, period, getDisplayName }: { data: AnalyticsData; p
                             </div>
                         ))}
                     </div>
-                </div>
+                </ChartCard>
             )}
         </div>
     );
@@ -595,29 +901,29 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
         <div className="space-y-6">
             {/* Wallet Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <MetricCard label="Smart Wallets" value={data.summary.usersWithSmartWallet} icon="💳" subtext={`of ${data.summary.totalUsers} users`} />
-                <MetricCard label="Deployed" value={data.summary.deployedSmartWallets} icon="✅" subtext="on-chain" />
-                <MetricCard label="New Wallets" value={data.summary.walletsCreatedInPeriod} icon="✨" subtext={`in ${period}`} />
-                <MetricCard label="Passkeys" value={data.summary.totalPasskeys} icon="🔑" subtext={`${data.summary.passkeysWithSafeSigners} with signers`} />
-                <MetricCard label="New Passkeys" value={data.summary.passkeysInPeriod} icon="🆕" subtext={`in ${period}`} />
-                <MetricCard label="Embedded" value={data.summary.embeddedWallets} icon="🔐" subtext="wallets" />
+                <KPICard label="Smart Wallets" value={data.summary.usersWithSmartWallet} icon="💳" subtext={`of ${data.summary.totalUsers} users`} />
+                <KPICard label="Deployed" value={data.summary.deployedSmartWallets} icon="✅" subtext="on-chain" />
+                <KPICard label="New Wallets" value={data.summary.walletsCreatedInPeriod} icon="✨" subtext={`in ${period}`} />
+                <KPICard label="Passkeys" value={data.summary.totalPasskeys} icon="🔑" subtext={`${data.summary.passkeysWithSafeSigners} with signers`} />
+                <KPICard label="New Passkeys" value={data.summary.passkeysInPeriod} icon="🆕" subtext={`in ${period}`} />
+                <KPICard label="Embedded" value={data.summary.embeddedWallets} icon="🔐" subtext="wallets" />
             </div>
 
             {/* Transaction Stats */}
+            <SectionHeader title="Transactions" description="On-chain transaction activity" />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <MetricCard label="Total Tx" value={data.summary.totalWalletTransactions} icon="📊" subtext={`${data.summary.confirmedTransactions} confirmed`} />
-                <MetricCard label="Tx in Period" value={data.summary.walletTxInPeriod} icon="📈" subtext={`in ${period}`} />
-                <MetricCard label="Total Volume" value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`} icon="💰" isString />
-                <MetricCard label="Period Volume" value={`$${Math.round(data.summary.volumeInPeriod).toLocaleString()}`} icon="💵" isString subtext={`in ${period}`} />
-                <MetricCard label="Unique Tx Users" value={data.summary.uniqueTxUsers} icon="👥" />
-                <MetricCard label="Active Wallets" value={data.summary.usersWithTxHistory} icon="🔥" subtext="with tx history" />
+                <KPICard label="Total Tx" value={data.summary.totalWalletTransactions} icon="📊" subtext={`${data.summary.confirmedTransactions} confirmed`} />
+                <KPICard label="Tx in Period" value={data.summary.walletTxInPeriod} icon="📈" subtext={`in ${period}`} />
+                <KPICard label="Total Volume" value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`} icon="💰" />
+                <KPICard label="Period Volume" value={`$${Math.round(data.summary.volumeInPeriod).toLocaleString()}`} icon="💵" subtext={`in ${period}`} />
+                <KPICard label="Unique Tx Users" value={data.summary.uniqueTxUsers} icon="👥" />
+                <KPICard label="Active Wallets" value={data.summary.usersWithTxHistory} icon="🔥" subtext="with tx history" />
             </div>
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Auth Method Breakdown */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Auth Method Breakdown</h3>
+                <ChartCard title="Auth Method Breakdown" description="Distribution of wallet authentication types">
                     <div className="h-56">
                         {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -634,14 +940,13 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                                 </PieChart>
                             </ResponsiveContainer>
                         ) : (
-                            <p className="text-zinc-500 text-center py-20">No wallet data yet</p>
+                            <EmptyState icon="💳" title="No wallet data yet" />
                         )}
                     </div>
-                </div>
+                </ChartCard>
 
                 {/* Network Usage */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Network Usage</h3>
+                <ChartCard title="Network Usage" description="Transaction count by blockchain network">
                     <div className="h-56">
                         {data.networkStats && data.networkStats.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -654,17 +959,16 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                                 </BarChart>
                             </ResponsiveContainer>
                         ) : (
-                            <p className="text-zinc-500 text-center py-20">No transaction data yet</p>
+                            <EmptyState icon="🔗" title="No transaction data yet" />
                         )}
                     </div>
-                </div>
+                </ChartCard>
             </div>
 
             {/* Beta Access & Recent Users */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Beta Access */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Wallet Beta Access</h3>
+                <ChartCard title="Wallet Beta Access">
                     <div className="grid grid-cols-3 gap-4">
                         <div className="text-center p-4 bg-zinc-800/50 rounded-lg">
                             <p className="text-3xl font-bold text-amber-400">{data.summary.betaApplicantsCount}</p>
@@ -679,11 +983,10 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                             <p className="text-xs text-zinc-500 mt-1">Pending</p>
                         </div>
                     </div>
-                </div>
+                </ChartCard>
 
                 {/* Recent Smart Wallet Users */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Recent Smart Wallet Users</h3>
+                <ChartCard title="Recent Smart Wallet Users">
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                         {data.recentSmartWalletUsers?.length > 0 ? (
                             data.recentSmartWalletUsers.slice(0, 5).map((user) => (
@@ -698,10 +1001,10 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                                 </div>
                             ))
                         ) : (
-                            <p className="text-zinc-500 text-center py-4">No smart wallet users yet</p>
+                            <EmptyState icon="💳" title="No smart wallet users yet" />
                         )}
                     </div>
-                </div>
+                </ChartCard>
             </div>
         </div>
     );
@@ -711,41 +1014,34 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
     return (
         <div className="space-y-6">
             {/* Calls Stats */}
-            <div>
-                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Video & Voice Calls</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <MetricCard label="Total Calls" value={data.summary.totalCalls} icon="📞" />
-                    <MetricCard label="Voice Minutes" value={data.summary.totalVoiceMinutes} icon="🎤" />
-                    <MetricCard label="Video Minutes" value={data.summary.totalVideoMinutes} icon="🎥" />
-                </div>
+            <SectionHeader title="Video & Voice Calls" description="Real-time communication metrics" />
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <KPICard label="Total Calls" value={data.summary.totalCalls} icon="📞" />
+                <KPICard label="Voice Minutes" value={data.summary.totalVoiceMinutes} icon="🎤" />
+                <KPICard label="Video Minutes" value={data.summary.totalVideoMinutes} icon="🎥" />
             </div>
 
             {/* Streaming Stats */}
-            <div>
-                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Live Streaming</h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                    <MetricCard label="Streams Created" value={data.summary.streamsCreated} icon="📹" subtext={`(${data.summary.totalStreamsCreated} total)`} />
-                    <MetricCard label="Streams Started" value={data.summary.streamsStarted} icon="🔴" subtext={`(${data.summary.totalStreamsStarted} total)`} />
-                    <MetricCard label="Streams Ended" value={data.summary.streamsEnded} icon="⏹️" />
-                    <MetricCard label="Streaming Min" value={data.summary.totalStreamingMinutes} icon="⏱️" />
-                    <MetricCard label="Views" value={data.summary.totalStreamsViewed} icon="👁️" />
-                </div>
+            <SectionHeader title="Live Streaming" description="Streaming activity and engagement" />
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                <KPICard label="Streams Created" value={data.summary.streamsCreated} icon="📹" subtext={`(${data.summary.totalStreamsCreated} total)`} />
+                <KPICard label="Streams Started" value={data.summary.streamsStarted} icon="🔴" subtext={`(${data.summary.totalStreamsStarted} total)`} />
+                <KPICard label="Streams Ended" value={data.summary.streamsEnded} icon="⏹️" />
+                <KPICard label="Streaming Min" value={data.summary.totalStreamingMinutes} icon="⏱️" />
+                <KPICard label="Views" value={data.summary.totalStreamsViewed} icon="👁️" />
             </div>
 
             {/* Rooms & Scheduling */}
-            <div>
-                <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">Rooms & Scheduling</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <MetricCard label="Rooms Created" value={data.summary.roomsCreated} icon="🏠" subtext={`(${data.summary.totalRoomsCreated} total)`} />
-                    <MetricCard label="Rooms Joined" value={data.summary.totalRoomsJoined} icon="🚪" />
-                    <MetricCard label="Schedules Created" value={data.summary.schedulesCreated} icon="📅" subtext={`(${data.summary.totalSchedulesCreated} total)`} />
-                    <MetricCard label="Schedules Joined" value={data.summary.schedulesJoined} icon="✅" subtext={`(${data.summary.totalSchedulesJoined} total)`} />
-                </div>
+            <SectionHeader title="Rooms & Scheduling" description="Instant rooms and scheduled calls" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KPICard label="Rooms Created" value={data.summary.roomsCreated} icon="🏠" subtext={`(${data.summary.totalRoomsCreated} total)`} />
+                <KPICard label="Rooms Joined" value={data.summary.totalRoomsJoined} icon="🚪" />
+                <KPICard label="Schedules Created" value={data.summary.schedulesCreated} icon="📅" subtext={`(${data.summary.totalSchedulesCreated} total)`} />
+                <KPICard label="Schedules Joined" value={data.summary.schedulesJoined} icon="✅" subtext={`(${data.summary.totalSchedulesJoined} total)`} />
             </div>
 
             {/* Engagement Chart */}
-            <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                <h3 className="text-sm font-semibold text-zinc-400 mb-3">Engagement Over Time</h3>
+            <ChartCard title="Engagement Over Time" description="Daily messages, friend requests, and groups created">
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={data.timeSeries}>
@@ -760,26 +1056,27 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
-            </div>
+            </ChartCard>
         </div>
     );
 }
 
-function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }) {
+function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData; period: Period; v2: V2AgentData | null; isLoadingV2: boolean }) {
     const bySource = data.summary.agentMessagesBySource;
     const failed = data.summary.agentFailedInPeriod ?? 0;
     const topChannels = data.topChannelsByAgentUsage ?? [];
+    const leaderboard = v2?.agentLeaderboard;
 
     return (
         <div className="space-y-6">
             {/* Agent Stats */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <MetricCard label="Total Agents" value={data.summary.totalAgents} icon="🤖" />
-                <MetricCard label="New Agents" value={data.summary.newAgentsCount} icon="✨" subtext={`in ${period}`} />
-                <MetricCard label="Agent Messages" value={data.summary.agentMessagesInPeriod} icon="💬" subtext={`(${data.summary.totalAgentMessages} total)`} />
-                <MetricCard label="Unique Users" value={data.summary.uniqueAgentUsers} icon="👤" subtext="using agents" />
-                <MetricCard label="Knowledge Items" value={data.summary.knowledgeItemsCount} icon="📚" subtext={`${data.summary.indexedKnowledgeItems} indexed`} />
-                <MetricCard label="Official Agents" value={data.summary.officialAgents} icon="⭐" subtext="platform agents" />
+                <KPICard label="Total Agents" value={data.summary.totalAgents} icon="🤖" />
+                <KPICard label="New Agents" value={data.summary.newAgentsCount} icon="✨" subtext={`in ${period}`} />
+                <KPICard label="Agent Messages" value={data.summary.agentMessagesInPeriod} icon="💬" subtext={`(${data.summary.totalAgentMessages} total)`} />
+                <KPICard label="Unique Users" value={data.summary.uniqueAgentUsers} icon="👤" subtext="using agents" />
+                <KPICard label="Knowledge Items" value={data.summary.knowledgeItemsCount} icon="📚" subtext={`${data.summary.indexedKnowledgeItems} indexed`} />
+                <KPICard label="Official Agents" value={data.summary.officialAgents} icon="⭐" subtext="platform agents" />
             </div>
 
             {/* Usage by source + failed */}
@@ -919,6 +1216,48 @@ function AgentsSection({ data, period }: { data: AnalyticsData; period: Period }
                 </div>
             </div>
 
+            {/* Agent Leaderboard (v2 — richer data) */}
+            {leaderboard && leaderboard.length > 0 && (
+                <ChartCard title="Agent Leaderboard" description={`Ranked by usage in the last ${period}`}>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-zinc-800">
+                                    <th className="text-left text-zinc-500 font-medium px-3 py-2">#</th>
+                                    <th className="text-left text-zinc-500 font-medium px-3 py-2">Agent</th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Prompts</th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Users</th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Total Msgs</th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Errors</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {leaderboard.map((agent, i) => (
+                                    <tr key={agent.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                                        <td className="text-zinc-500 px-3 py-2">{i + 1}</td>
+                                        <td className="px-3 py-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg">{agent.emoji}</span>
+                                                <div>
+                                                    <p className="font-medium text-zinc-200">{agent.name}</p>
+                                                    <p className="text-xs text-zinc-500">
+                                                        {agent.visibility === "private" ? "🔒 Private" : agent.visibility === "friends" ? "👥 Friends" : agent.visibility === "official" ? "⭐ Official" : "🌍 Public"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="text-right text-cyan-400 font-medium px-3 py-2">{agent.period_prompts.toLocaleString()}</td>
+                                        <td className="text-right text-blue-400 px-3 py-2">{agent.unique_users}</td>
+                                        <td className="text-right text-zinc-300 px-3 py-2">{agent.total_messages.toLocaleString()}</td>
+                                        <td className={`text-right px-3 py-2 ${agent.errors > 0 ? "text-red-400" : "text-zinc-600"}`}>{agent.errors}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </ChartCard>
+            )}
+
             {/* Official Agents Integration */}
             {data.officialAgentsList?.length > 0 && (
                 <OfficialAgentsIntegration agents={data.officialAgentsList} />
@@ -947,7 +1286,7 @@ type ChatStats = {
     topLocationChats: { id: string; name: string; emoji: string; google_place_name: string; member_count: number; message_count: number }[];
 };
 
-function ChatsSection({ period }: { period: Period }) {
+function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatData | null; isLoadingV2: boolean }) {
     const { getAuthHeaders, isReady } = useAdmin();
     const [stats, setStats] = useState<ChatStats | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -1111,6 +1450,60 @@ function ChatsSection({ period }: { period: Period }) {
                         ))}
                     </div>
                 </div>
+            )}
+
+            {/* Message Volume Over Time (v2) */}
+            {v2?.messageVolume && v2.messageVolume.length > 0 && (
+                <ChartCard title="Message Volume Over Time" description="Daily messages by type (DMs, Channels, Alpha, AI)">
+                    <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={v2.messageVolume}>
+                                <defs>
+                                    <linearGradient id="colorDms" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorChannels" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorAlpha" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#FF5500" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#FF5500" stopOpacity={0} />
+                                    </linearGradient>
+                                    <linearGradient id="colorAi" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
+                                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                                <XAxis
+                                    dataKey="date"
+                                    stroke="#666"
+                                    tick={{ fill: "#999", fontSize: 10 }}
+                                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                />
+                                <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }}
+                                    labelFormatter={(d) => new Date(d as string).toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+                                />
+                                <Legend />
+                                <Area type="monotone" dataKey="dms" name="DMs" stroke="#3B82F6" fill="url(#colorDms)" strokeWidth={2} stackId="1" />
+                                <Area type="monotone" dataKey="channels" name="Channels" stroke="#8B5CF6" fill="url(#colorChannels)" strokeWidth={2} stackId="1" />
+                                <Area type="monotone" dataKey="alpha" name="Alpha" stroke="#FF5500" fill="url(#colorAlpha)" strokeWidth={2} stackId="1" />
+                                <Area type="monotone" dataKey="ai_prompts" name="AI Prompts" stroke="#10B981" fill="url(#colorAi)" strokeWidth={2} stackId="1" />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </ChartCard>
+            )}
+
+            {/* Peak Hours Heatmap (v2) */}
+            {v2?.peakHours && v2.peakHours.length > 0 && (
+                <ChartCard title="Peak Activity Hours" description="When messages are sent (UTC, hour x day of week)">
+                    <PeakHoursHeatmap data={v2.peakHours} />
+                </ChartCard>
             )}
 
             {/* Quick Link to Chats Admin */}
