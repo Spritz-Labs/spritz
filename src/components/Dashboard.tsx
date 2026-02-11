@@ -1238,13 +1238,33 @@ function DashboardContent({
     // Auto-join staff (admins/mods) to "The Bunker" channel
     const bunkerJoinAttempted = useRef(false);
     useEffect(() => {
-        if (!userAddress || !isAdmin || bunkerJoinAttempted.current) return;
-        // Only attempt once per session
-        bunkerJoinAttempted.current = true;
+        if (!userAddress || bunkerJoinAttempted.current) return;
 
-        const ensureBunkerMembership = async () => {
+        // Check if user is admin or moderator (mods may not have isAdmin flag)
+        const checkStaffAndJoinBunker = async () => {
+            // For non-admins, check if they're a moderator via API
+            let isStaff = isAdmin;
+            if (!isStaff) {
+                try {
+                    const modRes = await fetch(
+                        `/api/moderation?action=permissions&userAddress=${encodeURIComponent(userAddress)}`
+                    );
+                    if (modRes.ok) {
+                        const modData = await modRes.json();
+                        isStaff = modData.permissions?.isModerator || modData.permissions?.isAdmin;
+                    }
+                } catch {
+                    // Silent fail
+                }
+            }
+
+            if (!isStaff) return;
+
+            // Only attempt once per session
+            bunkerJoinAttempted.current = true;
+
             try {
-                // Find The Bunker channel
+                // Check if already joined
                 const res = await fetch(`/api/channels?userAddress=${encodeURIComponent(userAddress)}&joined=true`);
                 const data = await res.json();
                 const alreadyJoined = data.channels?.some((c: { name: string }) => c.name === "The Bunker");
@@ -1268,7 +1288,7 @@ function DashboardContent({
             }
         };
 
-        ensureBunkerMembership();
+        checkStaffAndJoinBunker();
     }, [userAddress, isAdmin, fetchJoinedChannels]);
 
     // Screen Wake Lock - prevents screen from dimming during calls and active chats
@@ -1788,6 +1808,8 @@ function DashboardContent({
             const lastMessageAt = lastMsgTime
                 ? toValidLastMessageAt(lastMsgTime)
                 : toValidLastMessageAt(fallbackTime);
+            // Staff channels are always pinned for visibility
+            const isStaff = channel.access_level === "staff";
             items.push({
                 id: channelKey,
                 type: "channel",
@@ -1795,13 +1817,14 @@ function DashboardContent({
                 avatar: channel.poap_image_url ?? channel.icon_url ?? null,
                 lastMessage:
                     lastMessagePreviews[channelKey] ||
-                    `${channel.member_count} members`,
+                    (isStaff ? "Staff only" : `${channel.member_count} members`),
                 lastMessageAt,
                 unreadCount: 0,
-                isPinned: pinnedIds.has(channelKey),
+                isPinned: pinnedIds.has(channelKey) || isStaff,
                 metadata: {
                     memberCount: channel.member_count,
-                    isPublic: true,
+                    isPublic: !isStaff,
+                    accessLevel: channel.access_level || "public",
                 },
             });
         });
