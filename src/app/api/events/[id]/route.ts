@@ -64,10 +64,12 @@ export async function GET(
             return NextResponse.json({ event, isRegistered: false });
         }
 
-        // Published: public response; don't expose created_by
-        const { created_by: _cb, ...event } = row;
+        // Published: public response
+        // Expose created_by so the UI can show check-in controls for the creator
+        const event = row;
         let isRegistered = false;
-        if (session && event.registration_enabled) {
+        let registrationStatus: string | null = null;
+        if (session) {
             const { data: registration } = await supabase
                 .from("shout_event_user_registrations")
                 .select("id, status")
@@ -75,11 +77,14 @@ export async function GET(
                 .eq("wallet_address", wallet)
                 .single();
             isRegistered = !!registration;
+            registrationStatus = registration?.status ?? null;
         }
 
         return NextResponse.json({
             event,
             isRegistered,
+            registrationStatus,
+            isCreator: !!isCreator,
         });
     } catch (error) {
         console.error("[Public Events] Error:", error);
