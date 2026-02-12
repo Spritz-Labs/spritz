@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
                                 channel_id: alienChannel.id,
                                 user_address: normalizedAddress,
                             });
-                            await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
+                            // member_count updated by DB trigger on shout_channel_members INSERT
                             console.log("[Login] Auto-joined Alien ID user to Alien channel:", normalizedAddress);
                         }
                     }
@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
                             channel_id: alienChannel.id,
                             user_address: normalizedAddress,
                         });
-                        await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
+                        // member_count updated by DB trigger on shout_channel_members INSERT
                         console.log("[Login] Auto-joined new Alien ID user to Alien channel:", normalizedAddress);
                     }
                 } catch (err) {

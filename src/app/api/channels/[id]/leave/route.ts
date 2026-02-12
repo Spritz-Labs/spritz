@@ -48,8 +48,7 @@ export async function POST(
             );
         }
 
-        // Decrement member count
-        await supabase.rpc("decrement_channel_members", { channel_uuid: id });
+        // member_count is updated by DB trigger on shout_channel_members DELETE
 
         return NextResponse.json({ success: true });
     } catch (e) {

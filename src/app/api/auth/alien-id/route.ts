@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
                             channel_id: alienChannel.id,
                             user_address: normalizedAlienAddress,
                         });
-                        await supabase.rpc("increment_channel_members", { channel_uuid: alienChannel.id });
+                        // member_count updated by DB trigger on shout_channel_members INSERT
                         console.log("[AlienId] Auto-joined user to Alien channel:", normalizedAlienAddress.slice(0, 20) + "...");
                     }
                 }

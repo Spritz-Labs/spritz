@@ -320,8 +320,7 @@ async function removeFromRoom(chatType: string, chatId: string | null, userAddre
                 .eq("channel_id", chatId)
                 .eq("user_address", userAddress);
 
-            // Decrement member count
-            try { await supabase.rpc("decrement_channel_members", { channel_uuid: chatId }); } catch {}
+            // member_count updated by DB trigger on shout_channel_members DELETE
         } else if (chatType === "location") {
             await supabase
                 .from("shout_location_chat_members")

@@ -386,8 +386,7 @@ export async function POST(
             );
         }
 
-        // Increment member count
-        await supabase.rpc("increment_channel_members", { channel_uuid: channelUuid });
+        // member_count is updated by DB trigger on shout_channel_members INSERT
 
         return NextResponse.json({ success: true, channelName: channel.name });
     } catch (e) {
