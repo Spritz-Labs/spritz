@@ -11,6 +11,9 @@ import { ENS_CACHE_TTL_MS } from "@/lib/constants";
 // This prevents memory leaks in long-running sessions
 const ensCache = getENSCache();
 
+// Cap initial friends fetch so Chats loads quickly for users with huge lists (e.g. welcome-DM recipients)
+const FRIENDS_INITIAL_LIMIT = 500;
+
 export type FriendRequest = {
     id: string;
     from_address: string;
@@ -41,10 +44,10 @@ export type Friend = {
 
 export function useFriendRequests(userAddress: string | null) {
     const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>(
-        []
+        [],
     );
     const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>(
-        []
+        [],
     );
     const [friends, setFriends] = useState<Friend[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -53,27 +56,30 @@ export function useFriendRequests(userAddress: string | null) {
     const isResolvingRef = useRef(false);
 
     // Cached ENS resolver with TTL (H-2 FIX: uses LRU cache)
-    const getCachedENS = useCallback(async (address: string) => {
-        const normalizedAddr = address.toLowerCase();
-        const cached = ensCache.get(normalizedAddr);
-        
-        // LRU cache handles TTL internally
-        if (cached) {
-            return cached;
-        }
-        
-        try {
-            const resolved = await resolveAddressOrENS(address);
-            const result = {
-                ensName: resolved?.ensName || null,
-                avatar: resolved?.avatar || null,
-            };
-            ensCache.set(normalizedAddr, result);
-            return result;
-        } catch {
-            return { ensName: null, avatar: null };
-        }
-    }, [resolveAddressOrENS]);
+    const getCachedENS = useCallback(
+        async (address: string) => {
+            const normalizedAddr = address.toLowerCase();
+            const cached = ensCache.get(normalizedAddr);
+
+            // LRU cache handles TTL internally
+            if (cached) {
+                return cached;
+            }
+
+            try {
+                const resolved = await resolveAddressOrENS(address);
+                const result = {
+                    ensName: resolved?.ensName || null,
+                    avatar: resolved?.avatar || null,
+                };
+                ensCache.set(normalizedAddr, result);
+                return result;
+            } catch {
+                return { ensName: null, avatar: null };
+            }
+        },
+        [resolveAddressOrENS],
+    );
 
     // Fetch all data - FAST version (no ENS blocking)
     const fetchData = useCallback(async () => {
@@ -105,25 +111,30 @@ export function useFriendRequests(userAddress: string | null) {
                 client
                     .from("shout_friends")
                     .select("*")
-                    .eq("user_address", normalizedAddress),
+                    .eq("user_address", normalizedAddress)
+                    .order("created_at", { ascending: false })
+                    .limit(FRIENDS_INITIAL_LIMIT),
             ]);
 
             // Batch fetch usernames in ONE query instead of N queries
-            const friendAddresses = (friendsData || []).map(f => 
-                normalizeAddress(f.friend_address)
+            const friendAddresses = (friendsData || []).map((f) =>
+                normalizeAddress(f.friend_address),
             );
-            
+
             let usernameMap: Record<string, string> = {};
             if (friendAddresses.length > 0) {
                 const { data: usernameData } = await client
                     .from("shout_usernames")
                     .select("wallet_address, username")
                     .in("wallet_address", friendAddresses);
-                
-                usernameMap = (usernameData || []).reduce((acc, row) => {
-                    acc[row.wallet_address.toLowerCase()] = row.username;
-                    return acc;
-                }, {} as Record<string, string>);
+
+                usernameMap = (usernameData || []).reduce(
+                    (acc, row) => {
+                        acc[row.wallet_address.toLowerCase()] = row.username;
+                        return acc;
+                    },
+                    {} as Record<string, string>,
+                );
             }
 
             // Build friends list with cached ENS data (instant) + batch usernames
@@ -140,8 +151,8 @@ export function useFriendRequests(userAddress: string | null) {
 
             // Batch-fetch usernames for incoming/outgoing request addresses
             const requestAddresses = [
-                ...(incoming || []).map(r => r.from_address.toLowerCase()),
-                ...(outgoing || []).map(r => r.to_address.toLowerCase()),
+                ...(incoming || []).map((r) => r.from_address.toLowerCase()),
+                ...(outgoing || []).map((r) => r.to_address.toLowerCase()),
             ].filter((v, i, a) => a.indexOf(v) === i); // unique
 
             let requestUsernameMap: Record<string, string> = {};
@@ -150,10 +161,13 @@ export function useFriendRequests(userAddress: string | null) {
                     .from("shout_usernames")
                     .select("wallet_address, username")
                     .in("wallet_address", requestAddresses);
-                requestUsernameMap = (reqUsernameData || []).reduce((acc, row) => {
-                    acc[row.wallet_address.toLowerCase()] = row.username;
-                    return acc;
-                }, {} as Record<string, string>);
+                requestUsernameMap = (reqUsernameData || []).reduce(
+                    (acc, row) => {
+                        acc[row.wallet_address.toLowerCase()] = row.username;
+                        return acc;
+                    },
+                    {} as Record<string, string>,
+                );
             }
 
             // Quick ENS lookup for incoming requests (usually just 0-3 items)
@@ -176,7 +190,7 @@ export function useFriendRequests(userAddress: string | null) {
                         fromAvatar: resolved?.avatar,
                         fromUsername: requestUsernameMap[addr] || null,
                     };
-                })
+                }),
             );
 
             // Resolve outgoing requests with usernames + ENS
@@ -199,7 +213,7 @@ export function useFriendRequests(userAddress: string | null) {
                         toAvatar: resolved?.avatar,
                         toUsername: requestUsernameMap[addr] || null,
                     };
-                })
+                }),
             );
 
             setIncomingRequests(resolvedIncoming);
@@ -218,59 +232,70 @@ export function useFriendRequests(userAddress: string | null) {
     }, [userAddress, getCachedENS]);
 
     // M-5 FIX: Separate effect for background ENS resolution with cleanup
-    const resolveENSInBackground = useCallback(async (
-        friendsData: Array<{ friend_address: string }>,
-        isMountedRef: React.MutableRefObject<boolean>
-    ) => {
-        if (!isResolvingRef.current && friendsData.length > 0) {
-            isResolvingRef.current = true;
-            
-            try {
-                await Promise.all(
-                    friendsData.map(async (friend) => {
-                        const addr = friend.friend_address.toLowerCase();
-                        // Skip if already cached
-                        if (ensCache.has(addr)) return null;
-                        return getCachedENS(friend.friend_address);
-                    })
-                );
-                
-                // M-5 FIX: Check if still mounted before updating state
-                if (isMountedRef.current) {
-                    setFriends(prev => prev.map(friend => {
-                        const cached = ensCache.get(friend.friend_address.toLowerCase());
-                        if (cached && (!friend.ensName && cached.ensName)) {
-                            return {
-                                ...friend,
-                                ensName: cached.ensName,
-                                avatar: cached.avatar,
-                            };
-                        }
-                        return friend;
-                    }));
+    const resolveENSInBackground = useCallback(
+        async (
+            friendsData: Array<{ friend_address: string }>,
+            isMountedRef: React.MutableRefObject<boolean>,
+        ) => {
+            if (!isResolvingRef.current && friendsData.length > 0) {
+                isResolvingRef.current = true;
+
+                try {
+                    await Promise.all(
+                        friendsData.map(async (friend) => {
+                            const addr = friend.friend_address.toLowerCase();
+                            // Skip if already cached
+                            if (ensCache.has(addr)) return null;
+                            return getCachedENS(friend.friend_address);
+                        }),
+                    );
+
+                    // M-5 FIX: Check if still mounted before updating state
+                    if (isMountedRef.current) {
+                        setFriends((prev) =>
+                            prev.map((friend) => {
+                                const cached = ensCache.get(
+                                    friend.friend_address.toLowerCase(),
+                                );
+                                if (
+                                    cached &&
+                                    !friend.ensName &&
+                                    cached.ensName
+                                ) {
+                                    return {
+                                        ...friend,
+                                        ensName: cached.ensName,
+                                        avatar: cached.avatar,
+                                    };
+                                }
+                                return friend;
+                            }),
+                        );
+                    }
+                } finally {
+                    isResolvingRef.current = false;
                 }
-            } finally {
-                isResolvingRef.current = false;
             }
-        }
-    }, [getCachedENS]);
+        },
+        [getCachedENS],
+    );
 
     // M-5 FIX: Track mount state for cleanup
     const isMountedRef = useRef(true);
-    
+
     // Initial fetch with proper cleanup
     useEffect(() => {
         isMountedRef.current = true;
-        
+
         const doFetch = async () => {
             const result = await fetchData();
             if (result?.friendsData && isMountedRef.current) {
                 resolveENSInBackground(result.friendsData, isMountedRef);
             }
         };
-        
+
         doFetch();
-        
+
         // Cleanup: prevent state updates after unmount
         return () => {
             isMountedRef.current = false;
@@ -295,7 +320,7 @@ export function useFriendRequests(userAddress: string | null) {
                 },
                 () => {
                     fetchData();
-                }
+                },
             )
             .on(
                 "postgres_changes",
@@ -307,7 +332,7 @@ export function useFriendRequests(userAddress: string | null) {
                 },
                 () => {
                     fetchData();
-                }
+                },
             )
             .subscribe();
 
@@ -332,7 +357,7 @@ export function useFriendRequests(userAddress: string | null) {
 
             if (!isSupabaseConfigured || !supabase) {
                 setError(
-                    "Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY"
+                    "Supabase not configured. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY",
                 );
                 return false;
             }
@@ -356,7 +381,7 @@ export function useFriendRequests(userAddress: string | null) {
 
                 // Check if already friends
                 console.log(
-                    "[sendFriendRequest] Checking if already friends..."
+                    "[sendFriendRequest] Checking if already friends...",
                 );
                 const { data: existingFriend, error: friendCheckError } =
                     await supabase
@@ -369,7 +394,7 @@ export function useFriendRequests(userAddress: string | null) {
                 if (friendCheckError) {
                     console.warn(
                         "[sendFriendRequest] Friend check warning:",
-                        friendCheckError
+                        friendCheckError,
                     );
                     // Don't fail, just continue - table might not exist yet
                 }
@@ -381,32 +406,32 @@ export function useFriendRequests(userAddress: string | null) {
 
                 // Check if request already exists (in either direction)
                 console.log(
-                    "[sendFriendRequest] Checking for existing requests..."
+                    "[sendFriendRequest] Checking for existing requests...",
                 );
                 const { data: existingRequests, error: requestCheckError } =
                     await supabase
                         .from("shout_friend_requests")
                         .select("id, status")
                         .or(
-                            `and(from_address.eq.${normalizedFrom},to_address.eq.${normalizedTo}),and(from_address.eq.${normalizedTo},to_address.eq.${normalizedFrom})`
+                            `and(from_address.eq.${normalizedFrom},to_address.eq.${normalizedTo}),and(from_address.eq.${normalizedTo},to_address.eq.${normalizedFrom})`,
                         );
 
                 if (requestCheckError) {
                     console.warn(
                         "[sendFriendRequest] Request check warning:",
-                        requestCheckError
+                        requestCheckError,
                     );
                     // Don't fail, just continue
                 }
 
                 console.log(
                     "[sendFriendRequest] Existing requests found:",
-                    existingRequests
+                    existingRequests,
                 );
 
                 // Only block if there's a pending request
                 const pendingRequest = existingRequests?.find(
-                    (r) => r.status === "pending"
+                    (r) => r.status === "pending",
                 );
                 if (pendingRequest) {
                     setError("Friend request already pending");
@@ -415,11 +440,11 @@ export function useFriendRequests(userAddress: string | null) {
 
                 // Delete any old rejected/accepted requests to allow fresh start
                 const oldRequests = existingRequests?.filter(
-                    (r) => r.status !== "pending"
+                    (r) => r.status !== "pending",
                 );
                 if (oldRequests && oldRequests.length > 0) {
                     console.log(
-                        "[sendFriendRequest] Cleaning up old requests..."
+                        "[sendFriendRequest] Cleaning up old requests...",
                     );
                     for (const req of oldRequests) {
                         await supabase
@@ -437,13 +462,13 @@ export function useFriendRequests(userAddress: string | null) {
                         {
                             wallet_address: normalizedFrom,
                         },
-                        { onConflict: "wallet_address" }
+                        { onConflict: "wallet_address" },
                     );
 
                 if (upsertError) {
                     console.error(
                         "[sendFriendRequest] Upsert error:",
-                        upsertError
+                        upsertError,
                     );
                 }
 
@@ -467,10 +492,11 @@ export function useFriendRequests(userAddress: string | null) {
                 if (insertError) {
                     console.error(
                         "[sendFriendRequest] Insert error details:",
-                        insertError
+                        insertError,
                     );
                     throw new Error(
-                        insertError.message || "Failed to create friend request"
+                        insertError.message ||
+                            "Failed to create friend request",
                     );
                 }
 
@@ -489,7 +515,7 @@ export function useFriendRequests(userAddress: string | null) {
                 setIsLoading(false);
             }
         },
-        [userAddress, fetchData]
+        [userAddress, fetchData],
     );
 
     // Accept friend request
@@ -541,14 +567,14 @@ export function useFriendRequests(userAddress: string | null) {
                 setError(
                     err instanceof Error
                         ? err.message
-                        : "Failed to accept request"
+                        : "Failed to accept request",
                 );
                 return false;
             } finally {
                 setIsLoading(false);
             }
         },
-        [userAddress, fetchData]
+        [userAddress, fetchData],
     );
 
     // Reject friend request
@@ -572,14 +598,14 @@ export function useFriendRequests(userAddress: string | null) {
                 setError(
                     err instanceof Error
                         ? err.message
-                        : "Failed to reject request"
+                        : "Failed to reject request",
                 );
                 return false;
             } finally {
                 setIsLoading(false);
             }
         },
-        [fetchData]
+        [fetchData],
     );
 
     // Cancel outgoing friend request
@@ -607,14 +633,14 @@ export function useFriendRequests(userAddress: string | null) {
                 setError(
                     err instanceof Error
                         ? err.message
-                        : "Failed to cancel request"
+                        : "Failed to cancel request",
                 );
                 return false;
             } finally {
                 setIsLoading(false);
             }
         },
-        [userAddress, fetchData]
+        [userAddress, fetchData],
     );
 
     // Remove friend
@@ -635,7 +661,7 @@ export function useFriendRequests(userAddress: string | null) {
                     .from("shout_friends")
                     .delete()
                     .or(
-                        `and(user_address.eq.${normalizedAddress},friend_address.eq.${friend.friend_address}),and(user_address.eq.${friend.friend_address},friend_address.eq.${normalizedAddress})`
+                        `and(user_address.eq.${normalizedAddress},friend_address.eq.${friend.friend_address}),and(user_address.eq.${friend.friend_address},friend_address.eq.${normalizedAddress})`,
                     );
 
                 await fetchData();
@@ -644,14 +670,14 @@ export function useFriendRequests(userAddress: string | null) {
                 setError(
                     err instanceof Error
                         ? err.message
-                        : "Failed to remove friend"
+                        : "Failed to remove friend",
                 );
                 return false;
             } finally {
                 setIsLoading(false);
             }
         },
-        [userAddress, friends, fetchData]
+        [userAddress, friends, fetchData],
     );
 
     // Update friend nickname
@@ -671,7 +697,7 @@ export function useFriendRequests(userAddress: string | null) {
                 return false;
             }
         },
-        [fetchData]
+        [fetchData],
     );
 
     return {

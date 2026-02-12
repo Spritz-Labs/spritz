@@ -7,7 +7,7 @@ import { getMembershipLookupAddresses } from "@/lib/ensResolution";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
 export type PublicChannel = {
@@ -60,23 +60,28 @@ export async function GET(request: NextRequest) {
             if (error) {
                 console.error(
                     "[Channels API] Error fetching POAP channel:",
-                    error
+                    error,
                 );
                 return NextResponse.json(
                     { error: "Failed to fetch channel" },
-                    { status: 500 }
+                    { status: 500 },
                 );
             }
             let isMember = false;
             if (channel && userAddress) {
-                const lookupAddrs = await getMembershipLookupAddresses(
-                    userAddress
-                );
-                const alsoParam = request.nextUrl.searchParams.get("alsoAddresses");
+                const lookupAddrs =
+                    await getMembershipLookupAddresses(userAddress);
+                const alsoParam =
+                    request.nextUrl.searchParams.get("alsoAddresses");
                 const alsoAddresses = alsoParam
-                    ? alsoParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+                    ? alsoParam
+                          .split(",")
+                          .map((a) => a.trim().toLowerCase())
+                          .filter(Boolean)
                     : [];
-                const allAddrs = [...new Set([...lookupAddrs, ...alsoAddresses])];
+                const allAddrs = [
+                    ...new Set([...lookupAddrs, ...alsoAddresses]),
+                ];
                 if (allAddrs.length > 0) {
                     const { data: membership } = await supabase
                         .from("shout_channel_members")
@@ -110,7 +115,7 @@ export async function GET(request: NextRequest) {
         console.error("[Channels API] Error fetching channels:", error);
         return NextResponse.json(
             { error: "Failed to fetch channels" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 
@@ -122,9 +127,14 @@ export async function GET(request: NextRequest) {
         const lookupAddrs = await getMembershipLookupAddresses(userAddress);
         const alsoParam = request.nextUrl.searchParams.get("alsoAddresses");
         const alsoAddresses = alsoParam
-            ? alsoParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+            ? alsoParam
+                  .split(",")
+                  .map((a) => a.trim().toLowerCase())
+                  .filter(Boolean)
             : [];
-        const allAddrs = [...new Set([primaryNorm, ...lookupAddrs, ...alsoAddresses])];
+        const allAddrs = [
+            ...new Set([primaryNorm, ...lookupAddrs, ...alsoAddresses]),
+        ];
         if (allAddrs.length > 0) {
             const { data: memberships } = await supabase
                 .from("shout_channel_members")
@@ -135,8 +145,15 @@ export async function GET(request: NextRequest) {
 
         // The Bunker: only admins or moderators can see it. Check staff status first.
         const [adminRes, modRes, bunkerRow] = await Promise.all([
-            supabase.from("shout_admins").select("wallet_address").in("wallet_address", allAddrs),
-            supabase.from("shout_moderators").select("user_address").in("user_address", allAddrs).limit(1),
+            supabase
+                .from("shout_admins")
+                .select("wallet_address")
+                .in("wallet_address", allAddrs),
+            supabase
+                .from("shout_moderators")
+                .select("user_address")
+                .in("user_address", allAddrs)
+                .limit(1),
             supabase
                 .from("shout_public_channels")
                 .select("id")
@@ -148,25 +165,33 @@ export async function GET(request: NextRequest) {
         const isAdmin = (adminRes.data?.length ?? 0) > 0;
         const isModerator = (modRes.data?.length ?? 0) > 0;
         const isStaff = isAdmin || isModerator;
-        const bunkerId = bunkerRow.data?.id;
+        // If access_level column or The Bunker doesn't exist yet, bunkerRow.error may be set
+        const bunkerId = bunkerRow.error ? null : bunkerRow.data?.id;
 
         if (bunkerId) {
             // Only staff see The Bunker; remove it from membership for non-staff (e.g. old manual adds)
             if (!isStaff) {
-                memberChannelIds = memberChannelIds.filter((id) => id !== bunkerId);
+                memberChannelIds = memberChannelIds.filter(
+                    (id) => id !== bunkerId,
+                );
             } else {
                 if (!memberChannelIds.includes(bunkerId)) {
                     memberChannelIds.push(bunkerId);
                 }
-                const primaryAddr = (lookupAddrs[0] ?? userAddress).toLowerCase();
+                const primaryAddr = (
+                    lookupAddrs[0] ?? userAddress
+                ).toLowerCase();
                 const { error: upsertErr } = await supabase
                     .from("shout_channel_members")
                     .upsert(
                         { channel_id: bunkerId, user_address: primaryAddr },
-                        { onConflict: "channel_id,user_address" }
+                        { onConflict: "channel_id,user_address" },
                     );
                 if (upsertErr && upsertErr.code !== "23505") {
-                    console.warn("[Channels] Bunker staff upsert:", upsertErr.message);
+                    console.warn(
+                        "[Channels] Bunker staff upsert:",
+                        upsertErr.message,
+                    );
                 }
             }
         }
@@ -188,7 +213,7 @@ export async function GET(request: NextRequest) {
 
     // Hide staff-only channels from non-members in the browse list
     const visibleChannels = channelsWithMembership.filter(
-        (c) => c.access_level !== "staff" || c.is_member
+        (c) => c.access_level !== "staff" || c.is_member,
     );
 
     return NextResponse.json({ channels: visibleChannels });
@@ -240,7 +265,7 @@ export async function POST(request: NextRequest) {
         const messagingType =
             poapEventId != null || poapCollectionId != null
                 ? "waku"
-                : bodyMessagingType ?? "standard";
+                : (bodyMessagingType ?? "standard");
 
         // Use session address, fall back to body for backward compatibility
         const creatorAddress = session?.userAddress || bodyCreatorAddress;
@@ -252,13 +277,13 @@ export async function POST(request: NextRequest) {
         if (!creatorAddress) {
             return NextResponse.json(
                 { error: "Authentication is required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
         if (!hasName && !hasPoap) {
             return NextResponse.json(
                 { error: "Name or POAP event details are required" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -268,14 +293,14 @@ export async function POST(request: NextRequest) {
                 {
                     error: "Invalid messaging type. Must be 'standard' or 'waku'",
                 },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
         // Warn if using unauthenticated fallback
         if (!session && bodyCreatorAddress) {
             console.warn(
-                "[Channels] Using unauthenticated creatorAddress - migrate to session auth"
+                "[Channels] Using unauthenticated creatorAddress - migrate to session auth",
             );
         }
 
@@ -295,15 +320,15 @@ export async function POST(request: NextRequest) {
             (isPoapCollectionChannel ? "Collection" : "POAP");
         const sanitizedName = sanitizeInput(
             isPoapChannel ? `POAP: ${baseName}` : baseName,
-            INPUT_LIMITS.SHORT_TEXT
+            INPUT_LIMITS.SHORT_TEXT,
         );
         const sanitizedDescription = description
             ? sanitizeInput(description, INPUT_LIMITS.MEDIUM_TEXT)
             : isPoapChannel
-            ? isPoapCollectionChannel
-                ? "Community channel for holders of POAPs in this collection."
-                : "Community channel for holders of this POAP."
-            : null;
+              ? isPoapCollectionChannel
+                  ? "Community channel for holders of POAPs in this collection."
+                  : "Community channel for holders of this POAP."
+              : null;
 
         // Check if channel name already exists
         const { data: existingByName } = await supabase
@@ -315,7 +340,7 @@ export async function POST(request: NextRequest) {
         if (existingByName) {
             return NextResponse.json(
                 { error: "A channel with this name already exists" },
-                { status: 400 }
+                { status: 400 },
             );
         }
 
@@ -332,7 +357,7 @@ export async function POST(request: NextRequest) {
                         error: "A channel for this POAP already exists",
                         existingChannelId: existingByPoap.id,
                     },
-                    { status: 400 }
+                    { status: 400 },
                 );
             }
         }
@@ -349,7 +374,7 @@ export async function POST(request: NextRequest) {
                         error: "A channel for this collection already exists",
                         existingChannelId: existingByCol.id,
                     },
-                    { status: 400 }
+                    { status: 400 },
                 );
             }
         }
@@ -398,7 +423,7 @@ export async function POST(request: NextRequest) {
             channelData.waku_symmetric_key = generateSymmetricKey();
             channelData.waku_content_topic = generateContentTopic(
                 tempId,
-                sanitizedName
+                sanitizedName,
             );
         }
 
@@ -412,7 +437,7 @@ export async function POST(request: NextRequest) {
             console.error("[Channels API] Error creating channel:", error);
             return NextResponse.json(
                 { error: "Failed to create channel" },
-                { status: 500 }
+                { status: 500 },
             );
         }
 
@@ -420,7 +445,7 @@ export async function POST(request: NextRequest) {
         if (messagingType === "waku" && channel) {
             const correctTopic = generateContentTopic(
                 channel.id,
-                sanitizedName
+                sanitizedName,
             );
             await supabase
                 .from("shout_public_channels")
@@ -440,7 +465,7 @@ export async function POST(request: NextRequest) {
         console.error("[Channels API] Error:", e);
         return NextResponse.json(
             { error: "Failed to process request" },
-            { status: 500 }
+            { status: 500 },
         );
     }
 }

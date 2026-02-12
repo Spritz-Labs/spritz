@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey 
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase =
+    supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // Kevin's wallet address
 const KEVIN_ADDRESS = "0x3f22f740d41518f5017b76eed3a63eb14d2e1b07";
@@ -23,39 +24,58 @@ function generateMessageId(): string {
 }
 
 // Welcome message content
-const WELCOME_MESSAGE = "Hey, its Kevin from Spritz! 😎 Thanks so much for joining and I hope you love the app! I am here if you need anything. 🍊";
+const WELCOME_MESSAGE =
+    "Hey, its Kevin from Spritz! 😎 Thanks so much for joining and I hope you love the app! I am here if you need anything. 🍊";
 
 // POST: Send welcome message from Kevin to a new user
 // This is called internally from track-login, not exposed to clients
 export async function POST(request: NextRequest) {
     if (!supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 500 },
+        );
     }
 
     try {
         // Check for internal API key to prevent abuse
         const authHeader = request.headers.get("x-internal-key");
-        const internalKey = process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-        
+        const internalKey =
+            process.env.INTERNAL_API_KEY ||
+            process.env.SUPABASE_SERVICE_ROLE_KEY;
+
         if (authHeader !== internalKey) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 },
+            );
         }
 
         const { recipientAddress } = await request.json();
 
         if (!recipientAddress) {
-            return NextResponse.json({ error: "Recipient address required" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Recipient address required" },
+                { status: 400 },
+            );
         }
 
         const normalizedRecipient = recipientAddress.toLowerCase();
 
         // Don't send welcome message to Kevin himself
         if (normalizedRecipient === KEVIN_ADDRESS) {
-            return NextResponse.json({ success: true, skipped: true, reason: "sender is recipient" });
+            return NextResponse.json({
+                success: true,
+                skipped: true,
+                reason: "sender is recipient",
+            });
         }
 
         // Generate conversation ID
-        const conversationId = getDmContentTopic(KEVIN_ADDRESS, normalizedRecipient);
+        const conversationId = getDmContentTopic(
+            KEVIN_ADDRESS,
+            normalizedRecipient,
+        );
         const messageId = generateMessageId();
 
         // Check if welcome message already sent to this user
@@ -68,11 +88,15 @@ export async function POST(request: NextRequest) {
 
         if (existingWelcome) {
             console.log("[Welcome] Already sent to:", normalizedRecipient);
-            return NextResponse.json({ success: true, skipped: true, reason: "already sent" });
+            return NextResponse.json({
+                success: true,
+                skipped: true,
+                reason: "already sent",
+            });
         }
 
-        // First, add Kevin as a friend so the chat will show up in their list
-        // Check if already friends
+        // One-way friendship only: new user has Kevin as friend so the welcome chat shows in their list.
+        // We do NOT add (Kevin, newUser) so Kevin's friend list doesn't grow with every signup (perf).
         const { data: existingFriend } = await supabase
             .from("shout_friends")
             .select("id")
@@ -81,23 +105,20 @@ export async function POST(request: NextRequest) {
             .maybeSingle();
 
         if (!existingFriend) {
-            // Add bidirectional friendship (both directions needed)
-            const { error: friendError } = await supabase.from("shout_friends").insert([
-                {
+            const { error: friendError } = await supabase
+                .from("shout_friends")
+                .insert({
                     user_address: normalizedRecipient,
                     friend_address: KEVIN_ADDRESS,
-                },
-                {
-                    user_address: KEVIN_ADDRESS,
-                    friend_address: normalizedRecipient,
-                },
-            ]);
+                });
 
             if (friendError) {
                 console.error("[Welcome] Error adding friend:", friendError);
-                // Continue anyway - message is more important
             } else {
-                console.log("[Welcome] Added Kevin as friend for:", normalizedRecipient);
+                console.log(
+                    "[Welcome] Added Kevin as friend for (one-way):",
+                    normalizedRecipient,
+                );
             }
         }
 
@@ -115,13 +136,24 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             console.error("[Welcome] Error sending message:", error);
-            return NextResponse.json({ error: "Failed to send welcome message" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to send welcome message" },
+                { status: 500 },
+            );
         }
 
-        console.log("[Welcome] Sent to:", normalizedRecipient, "messageId:", messageId);
+        console.log(
+            "[Welcome] Sent to:",
+            normalizedRecipient,
+            "messageId:",
+            messageId,
+        );
         return NextResponse.json({ success: true, messageId });
     } catch (error) {
         console.error("[Welcome] Error:", error);
-        return NextResponse.json({ error: "Failed to send welcome message" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to send welcome message" },
+            { status: 500 },
+        );
     }
 }

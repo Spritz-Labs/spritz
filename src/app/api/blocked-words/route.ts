@@ -54,7 +54,10 @@ export async function GET(request: NextRequest) {
                     return NextResponse.json({ words: [] });
                 }
                 console.error("[BlockedWords] Fetch global error:", globalErr);
-                return NextResponse.json({ error: "Failed to fetch blocked words" }, { status: 500 });
+                return NextResponse.json(
+                    { error: "Failed to fetch blocked words" },
+                    { status: 500 },
+                );
             }
 
             const roomQuery = supabase
@@ -73,7 +76,9 @@ export async function GET(request: NextRequest) {
             if (roomErr) {
                 const code = (roomErr as { code?: string }).code;
                 if (code === "PGRST106" || code === "42P01") {
-                    return NextResponse.json({ words: [...(globalWords || [])] });
+                    return NextResponse.json({
+                        words: [...(globalWords || [])],
+                    });
                 }
             }
 
@@ -106,7 +111,13 @@ export async function GET(request: NextRequest) {
             console.error("[BlockedWords] Fetch error:", error);
             // Table may not exist yet (PGRST106 / 42P01) - return empty list so UI doesn't 500
             const code = (error as { code?: string }).code;
-            if (code === "PGRST106" || code === "42P01" || (error as { message?: string }).message?.includes("does not exist")) {
+            if (
+                code === "PGRST106" ||
+                code === "42P01" ||
+                (error as { message?: string }).message?.includes(
+                    "does not exist",
+                )
+            ) {
                 return NextResponse.json({ words: [] });
             }
             return NextResponse.json(
@@ -118,7 +129,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ words: data || [] });
     } catch (error) {
         console.error("[BlockedWords] GET error:", error);
-        return NextResponse.json({ error: "Internal error" }, { status: 500 });
+        return NextResponse.json({ words: [] });
     }
 }
 
@@ -200,29 +211,32 @@ export async function POST(request: NextRequest) {
                 );
             }
             console.error("[BlockedWords] Insert error:", error);
-            console.error("[BlockedWords] Insert error details:", JSON.stringify({
-                code: error.code,
-                message: error.message,
-                details: error.details,
-                hint: error.hint,
-                insertPayload: {
-                    word: word.trim().toLowerCase(),
-                    scope: scope || "global",
-                    chat_type: scope === "room" ? chatType : null,
-                    chat_id: scope === "room" ? chatId || null : null,
-                    action: action || "block",
-                    is_regex: isRegex || false,
-                    added_by: userAddress,
-                },
-            }));
+            console.error(
+                "[BlockedWords] Insert error details:",
+                JSON.stringify({
+                    code: error.code,
+                    message: error.message,
+                    details: error.details,
+                    hint: error.hint,
+                    insertPayload: {
+                        word: word.trim().toLowerCase(),
+                        scope: scope || "global",
+                        chat_type: scope === "room" ? chatType : null,
+                        chat_id: scope === "room" ? chatId || null : null,
+                        action: action || "block",
+                        is_regex: isRegex || false,
+                        added_by: userAddress,
+                    },
+                }),
+            );
             return NextResponse.json(
-                { 
+                {
                     error: "Failed to add blocked word",
                     debug: {
                         code: error.code,
                         message: error.message,
                         hint: error.hint,
-                    }
+                    },
                 },
                 { status: 500 },
             );
@@ -355,7 +369,8 @@ async function checkBlockedWordsPermission(
             .select("creator_address")
             .eq("id", chatId)
             .single();
-        if (channel?.creator_address?.toLowerCase() === userAddress) return true;
+        if (channel?.creator_address?.toLowerCase() === userAddress)
+            return true;
     }
 
     if (chatType === "location" && chatId) {

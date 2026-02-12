@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-import { supabase, isSupabaseConfigured } from "@/config/supabase";
 
 export const dynamic = "force-dynamic";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase =
+    supabaseUrl && supabaseServiceKey
+        ? createClient(supabaseUrl, supabaseServiceKey)
+        : null;
+
 // GET /api/users/block - Get blocked users list
 export async function GET(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -43,7 +53,7 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({
             blockedUsers: blockedByMe || [],
-            blockedBy: blockedMe?.map(b => b.blocker_address) || [],
+            blockedBy: blockedMe?.map((b) => b.blocker_address) || [],
         });
     } catch (err) {
         console.error("[Block API] Error:", err);
@@ -53,8 +63,11 @@ export async function GET(request: NextRequest) {
 
 // POST /api/users/block - Block a user
 export async function POST(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -67,29 +80,41 @@ export async function POST(request: NextRequest) {
         const { userAddress, reason } = body;
 
         if (!userAddress) {
-            return NextResponse.json({ error: "Missing user address" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Missing user address" },
+                { status: 400 },
+            );
         }
 
         // Can't block yourself
         if (userAddress.toLowerCase() === session.userAddress.toLowerCase()) {
-            return NextResponse.json({ error: "Cannot block yourself" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Cannot block yourself" },
+                { status: 400 },
+            );
         }
 
         const { data, error } = await supabase
             .from("shout_blocked_users")
-            .upsert({
-                blocker_address: session.userAddress.toLowerCase(),
-                blocked_address: userAddress.toLowerCase(),
-                reason: reason || null,
-            }, {
-                onConflict: "blocker_address,blocked_address",
-            })
+            .upsert(
+                {
+                    blocker_address: session.userAddress.toLowerCase(),
+                    blocked_address: userAddress.toLowerCase(),
+                    reason: reason || null,
+                },
+                {
+                    onConflict: "blocker_address,blocked_address",
+                },
+            )
             .select()
             .single();
 
         if (error) {
             console.error("[Block API] Error blocking user:", error);
-            return NextResponse.json({ error: "Failed to block user" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to block user" },
+                { status: 500 },
+            );
         }
 
         // Also remove any friend relationship (optional - cleanup)
@@ -97,7 +122,9 @@ export async function POST(request: NextRequest) {
             await supabase
                 .from("shout_friends")
                 .delete()
-                .or(`and(user_address.eq.${session.userAddress.toLowerCase()},friend_address.eq.${userAddress.toLowerCase()}),and(user_address.eq.${userAddress.toLowerCase()},friend_address.eq.${session.userAddress.toLowerCase()})`);
+                .or(
+                    `and(user_address.eq.${session.userAddress.toLowerCase()},friend_address.eq.${userAddress.toLowerCase()}),and(user_address.eq.${userAddress.toLowerCase()},friend_address.eq.${session.userAddress.toLowerCase()})`,
+                );
         } catch {
             // Ignore friend cleanup errors
         }
@@ -111,8 +138,11 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/users/block - Unblock a user
 export async function DELETE(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -125,7 +155,10 @@ export async function DELETE(request: NextRequest) {
         const userAddress = searchParams.get("userAddress");
 
         if (!userAddress) {
-            return NextResponse.json({ error: "Missing user address" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Missing user address" },
+                { status: 400 },
+            );
         }
 
         const { error } = await supabase
@@ -136,7 +169,10 @@ export async function DELETE(request: NextRequest) {
 
         if (error) {
             console.error("[Block API] Error unblocking user:", error);
-            return NextResponse.json({ error: "Failed to unblock user" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to unblock user" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({ success: true });

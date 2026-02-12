@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-import { supabase, isSupabaseConfigured } from "@/config/supabase";
 
 export const dynamic = "force-dynamic";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase =
+    supabaseUrl && supabaseServiceKey
+        ? createClient(supabaseUrl, supabaseServiceKey)
+        : null;
 
 // Report types - validation only (types exported from hooks)
 const VALID_REPORT_TYPES = [
     "spam",
-    "harassment", 
+    "harassment",
     "hate_speech",
     "violence",
     "scam",
@@ -18,8 +25,11 @@ const VALID_REPORT_TYPES = [
 
 // GET /api/users/report - Get reports (admin only) or user's own reports
 export async function GET(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -51,17 +61,23 @@ export async function GET(request: NextRequest) {
             }
         } else {
             // Regular users can only see their own reports
-            query = query.eq("reporter_address", session.userAddress.toLowerCase());
+            query = query.eq(
+                "reporter_address",
+                session.userAddress.toLowerCase(),
+            );
         }
 
         const { data, error } = await query.limit(100);
 
         if (error) {
             console.error("[Report API] Error fetching reports:", error);
-            return NextResponse.json({ error: "Failed to fetch reports" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to fetch reports" },
+                { status: 500 },
+            );
         }
 
-        return NextResponse.json({ 
+        return NextResponse.json({
             reports: data || [],
             isAdmin: !!adminCheck,
         });
@@ -73,8 +89,11 @@ export async function GET(request: NextRequest) {
 
 // POST /api/users/report - Submit a report
 export async function POST(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -84,11 +103,11 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { 
-            reportedAddress, 
-            reportType, 
-            description, 
-            conversationType, 
+        const {
+            reportedAddress,
+            reportType,
+            description,
+            conversationType,
             conversationId,
             messageId,
             messageContent,
@@ -96,17 +115,28 @@ export async function POST(request: NextRequest) {
         } = body;
 
         if (!reportedAddress || !reportType) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Missing required fields" },
+                { status: 400 },
+            );
         }
 
         // Can't report yourself
-        if (reportedAddress.toLowerCase() === session.userAddress.toLowerCase()) {
-            return NextResponse.json({ error: "Cannot report yourself" }, { status: 400 });
+        if (
+            reportedAddress.toLowerCase() === session.userAddress.toLowerCase()
+        ) {
+            return NextResponse.json(
+                { error: "Cannot report yourself" },
+                { status: 400 },
+            );
         }
 
         // Validate report type
         if (!VALID_REPORT_TYPES.includes(reportType)) {
-            return NextResponse.json({ error: "Invalid report type" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Invalid report type" },
+                { status: 400 },
+            );
         }
 
         // Check for duplicate report (same reporter, reported, type in last 24h)
@@ -116,13 +146,19 @@ export async function POST(request: NextRequest) {
             .eq("reporter_address", session.userAddress.toLowerCase())
             .eq("reported_address", reportedAddress.toLowerCase())
             .eq("report_type", reportType)
-            .gte("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+            .gte(
+                "created_at",
+                new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+            )
             .limit(1);
 
         if (existingReport && existingReport.length > 0) {
-            return NextResponse.json({ 
-                error: "You've already reported this user for this reason recently" 
-            }, { status: 400 });
+            return NextResponse.json(
+                {
+                    error: "You've already reported this user for this reason recently",
+                },
+                { status: 400 },
+            );
         }
 
         // Create the report
@@ -136,7 +172,9 @@ export async function POST(request: NextRequest) {
                 conversation_type: conversationType || null,
                 conversation_id: conversationId || null,
                 message_id: messageId || null,
-                message_content: messageContent ? messageContent.substring(0, 1000) : null, // Limit content
+                message_content: messageContent
+                    ? messageContent.substring(0, 1000)
+                    : null, // Limit content
                 status: "pending",
             })
             .select()
@@ -144,20 +182,24 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             console.error("[Report API] Error creating report:", error);
-            return NextResponse.json({ error: "Failed to submit report" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to submit report" },
+                { status: 500 },
+            );
         }
 
         // Optionally block the user
         if (alsoBlock) {
-            await supabase
-                .from("shout_blocked_users")
-                .upsert({
+            await supabase.from("shout_blocked_users").upsert(
+                {
                     blocker_address: session.userAddress.toLowerCase(),
                     blocked_address: reportedAddress.toLowerCase(),
                     reason: `Reported for: ${reportType}`,
-                }, {
+                },
+                {
                     onConflict: "blocker_address,blocked_address",
-                });
+                },
+            );
         }
 
         return NextResponse.json({ success: true, report: data });
@@ -169,8 +211,11 @@ export async function POST(request: NextRequest) {
 
 // PATCH /api/users/report - Update report status (admin only)
 export async function PATCH(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -187,19 +232,33 @@ export async function PATCH(request: NextRequest) {
             .single();
 
         if (!adminCheck) {
-            return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+            return NextResponse.json(
+                { error: "Admin access required" },
+                { status: 403 },
+            );
         }
 
         const body = await request.json();
         const { reportId, status, adminNotes } = body;
 
         if (!reportId || !status) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Missing required fields" },
+                { status: 400 },
+            );
         }
 
-        const validStatuses = ["pending", "reviewed", "action_taken", "dismissed"];
+        const validStatuses = [
+            "pending",
+            "reviewed",
+            "action_taken",
+            "dismissed",
+        ];
         if (!validStatuses.includes(status)) {
-            return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Invalid status" },
+                { status: 400 },
+            );
         }
 
         const { data, error } = await supabase
@@ -216,7 +275,10 @@ export async function PATCH(request: NextRequest) {
 
         if (error) {
             console.error("[Report API] Error updating report:", error);
-            return NextResponse.json({ error: "Failed to update report" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to update report" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({ success: true, report: data });

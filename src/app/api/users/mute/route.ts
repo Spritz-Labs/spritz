@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-import { supabase, isSupabaseConfigured } from "@/config/supabase";
 
 export const dynamic = "force-dynamic";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase =
+    supabaseUrl && supabaseServiceKey
+        ? createClient(supabaseUrl, supabaseServiceKey)
+        : null;
+
 // GET /api/users/mute - Get muted conversations for user
 export async function GET(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -20,7 +30,9 @@ export async function GET(request: NextRequest) {
             .from("shout_muted_conversations")
             .select("*")
             .eq("user_address", session.userAddress.toLowerCase())
-            .or(`muted_until.is.null,muted_until.gt.${new Date().toISOString()}`);
+            .or(
+                `muted_until.is.null,muted_until.gt.${new Date().toISOString()}`,
+            );
 
         if (error) {
             console.error("[Mute API] Error fetching mutes:", error);
@@ -37,8 +49,11 @@ export async function GET(request: NextRequest) {
 
 // POST /api/users/mute - Mute a conversation
 export async function POST(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -51,11 +66,17 @@ export async function POST(request: NextRequest) {
         const { conversationType, conversationId, duration } = body;
 
         if (!conversationType || !conversationId) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Missing required fields" },
+                { status: 400 },
+            );
         }
 
         if (!["dm", "group", "channel"].includes(conversationType)) {
-            return NextResponse.json({ error: "Invalid conversation type" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Invalid conversation type" },
+                { status: 400 },
+            );
         }
 
         // Calculate muted_until based on duration
@@ -64,16 +85,24 @@ export async function POST(request: NextRequest) {
             const now = new Date();
             switch (duration) {
                 case "1h":
-                    mutedUntil = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+                    mutedUntil = new Date(
+                        now.getTime() + 60 * 60 * 1000,
+                    ).toISOString();
                     break;
                 case "8h":
-                    mutedUntil = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString();
+                    mutedUntil = new Date(
+                        now.getTime() + 8 * 60 * 60 * 1000,
+                    ).toISOString();
                     break;
                 case "1d":
-                    mutedUntil = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+                    mutedUntil = new Date(
+                        now.getTime() + 24 * 60 * 60 * 1000,
+                    ).toISOString();
                     break;
                 case "1w":
-                    mutedUntil = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+                    mutedUntil = new Date(
+                        now.getTime() + 7 * 24 * 60 * 60 * 1000,
+                    ).toISOString();
                     break;
                 default:
                     mutedUntil = null; // Forever
@@ -82,21 +111,28 @@ export async function POST(request: NextRequest) {
 
         const { data, error } = await supabase
             .from("shout_muted_conversations")
-            .upsert({
-                user_address: session.userAddress.toLowerCase(),
-                conversation_type: conversationType,
-                conversation_id: conversationId.toLowerCase(),
-                muted_until: mutedUntil,
-                updated_at: new Date().toISOString(),
-            }, {
-                onConflict: "user_address,conversation_type,conversation_id",
-            })
+            .upsert(
+                {
+                    user_address: session.userAddress.toLowerCase(),
+                    conversation_type: conversationType,
+                    conversation_id: conversationId.toLowerCase(),
+                    muted_until: mutedUntil,
+                    updated_at: new Date().toISOString(),
+                },
+                {
+                    onConflict:
+                        "user_address,conversation_type,conversation_id",
+                },
+            )
             .select()
             .single();
 
         if (error) {
             console.error("[Mute API] Error creating mute:", error);
-            return NextResponse.json({ error: "Failed to mute conversation" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to mute conversation" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({ success: true, mute: data });
@@ -108,8 +144,11 @@ export async function POST(request: NextRequest) {
 
 // DELETE /api/users/mute - Unmute a conversation
 export async function DELETE(request: NextRequest) {
-    if (!isSupabaseConfigured || !supabase) {
-        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    if (!supabase) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 },
+        );
     }
 
     const session = await getAuthenticatedUser(request);
@@ -123,7 +162,10 @@ export async function DELETE(request: NextRequest) {
         const conversationId = searchParams.get("conversationId");
 
         if (!conversationType || !conversationId) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+            return NextResponse.json(
+                { error: "Missing required fields" },
+                { status: 400 },
+            );
         }
 
         const { error } = await supabase
@@ -135,7 +177,10 @@ export async function DELETE(request: NextRequest) {
 
         if (error) {
             console.error("[Mute API] Error deleting mute:", error);
-            return NextResponse.json({ error: "Failed to unmute conversation" }, { status: 500 });
+            return NextResponse.json(
+                { error: "Failed to unmute conversation" },
+                { status: 500 },
+            );
         }
 
         return NextResponse.json({ success: true });
