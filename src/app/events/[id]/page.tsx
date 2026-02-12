@@ -856,8 +856,8 @@ export default function EventDetailPage() {
 
                         {/* Actions */}
                         <div className="flex flex-col gap-3 pt-4 border-t border-zinc-800">
-                            {/* Registration */}
-                            {!hasExternalRsvp && (
+                            {/* Spritz Registration (primary when enabled) */}
+                            {event.registration_enabled && (
                                 <>
                                     {isRegistered ? (
                                         <div className="py-3 px-4 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm font-medium flex items-center justify-between">
@@ -895,7 +895,7 @@ export default function EventDetailPage() {
                                             >
                                                 {registering
                                                     ? "Registering…"
-                                                    : "Register"}
+                                                    : "Register with Spritz"}
                                             </button>
                                             {registerError && (
                                                 <p className="text-sm text-red-400">
@@ -906,14 +906,21 @@ export default function EventDetailPage() {
                                     )}
                                 </>
                             )}
+                            {/* External RSVP: primary if Spritz registration is off, secondary if on */}
                             {hasExternalRsvp && (
                                 <a
                                     href={event.rsvp_url!}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="w-full text-center py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
+                                    className={
+                                        event.registration_enabled
+                                            ? "w-full text-center py-2.5 px-4 rounded-xl border border-zinc-700 text-zinc-300 text-sm font-medium hover:bg-zinc-800 hover:border-zinc-600 transition-all"
+                                            : "w-full text-center py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all"
+                                    }
                                 >
-                                    RSVP / Register
+                                    {event.registration_enabled
+                                        ? "Also RSVP on event site ↗"
+                                        : "RSVP / Register ↗"}
                                 </a>
                             )}
 

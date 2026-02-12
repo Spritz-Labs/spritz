@@ -26,6 +26,7 @@ interface GlobalEvent {
     organizer: string | null;
     event_url: string | null;
     rsvp_url: string | null;
+    banner_image_url: string | null;
     tags: string[];
     blockchain_focus: string[] | null;
     source: string;
@@ -226,7 +227,10 @@ export default function AdminEventsPage() {
         registration_enabled: false,
         blockchain_focus: "",
         tags: "",
+        banner_image_url: "",
     });
+    const [bannerFile, setBannerFile] = useState<File | null>(null);
+    const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
     // Scrape form state
     const [scrapeUrl, setScrapeUrl] = useState("");
@@ -358,8 +362,38 @@ export default function AdminEventsPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        let bannerUrl = formData.banner_image_url;
+
+        // Upload banner image if a new file was selected
+        if (bannerFile) {
+            setIsUploadingBanner(true);
+            try {
+                const uploadForm = new FormData();
+                uploadForm.append("file", bannerFile);
+                uploadForm.append("context", "events");
+                const uploadRes = await fetch("/api/upload", {
+                    method: "POST",
+                    body: uploadForm,
+                });
+                if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    bannerUrl = uploadData.url;
+                } else {
+                    console.error("Failed to upload banner image");
+                    setIsUploadingBanner(false);
+                    return;
+                }
+            } catch (err) {
+                console.error("Banner upload error:", err);
+                setIsUploadingBanner(false);
+                return;
+            }
+            setIsUploadingBanner(false);
+        }
+
         const eventData = {
             ...formData,
+            banner_image_url: bannerUrl || null,
             blockchain_focus: formData.blockchain_focus
                 ? formData.blockchain_focus.split(",").map((s) => s.trim())
                 : null,
@@ -845,7 +879,9 @@ export default function AdminEventsPage() {
             registration_enabled: false,
             blockchain_focus: "",
             tags: "",
+            banner_image_url: "",
         });
+        setBannerFile(null);
     };
 
     const isAddEventFormDirty = () => {
@@ -896,7 +932,9 @@ export default function AdminEventsPage() {
             registration_enabled: event.registration_enabled,
             blockchain_focus: event.blockchain_focus?.join(", ") || "",
             tags: event.tags?.join(", ") || "",
+            banner_image_url: event.banner_image_url || "",
         });
+        setBannerFile(null);
         setShowAddModal(true);
     };
 
@@ -2127,6 +2165,65 @@ export default function AdminEventsPage() {
                                         </label>
                                     </div>
                                 </div>
+
+                                {/* Banner Image Upload */}
+                                <div className="col-span-2">
+                                    <label className="block text-sm text-zinc-400 mb-1">
+                                        Banner Image
+                                    </label>
+                                    <div className="flex items-start gap-4">
+                                        <div className="flex-1">
+                                            <input
+                                                type="file"
+                                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0] || null;
+                                                    setBannerFile(file);
+                                                }}
+                                                className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-sm file:bg-zinc-700 file:text-white file:cursor-pointer"
+                                            />
+                                            {formData.banner_image_url && !bannerFile && (
+                                                <div className="mt-2 flex items-center gap-2">
+                                                    <p className="text-xs text-zinc-500">
+                                                        Current image in use. Choose a new file to replace.
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            setFormData({
+                                                                ...formData,
+                                                                banner_image_url: "",
+                                                            })
+                                                        }
+                                                        className="text-xs text-red-400 hover:text-red-300 underline"
+                                                    >
+                                                        Remove
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {bannerFile && (
+                                                <p className="mt-1 text-xs text-green-400">
+                                                    New image selected: {bannerFile.name}
+                                                </p>
+                                            )}
+                                        </div>
+                                        {(formData.banner_image_url || bannerFile) && (
+                                            <div className="w-24 h-16 rounded-lg overflow-hidden border border-zinc-700 flex-shrink-0">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img
+                                                    src={
+                                                        bannerFile
+                                                            ? URL.createObjectURL(bannerFile)
+                                                            : formData.banner_image_url
+                                                    }
+                                                    alt="Banner preview"
+                                                    className="w-full h-full object-cover"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
                                 <div className="flex justify-end gap-3 pt-4 border-t border-zinc-800">
                                     <button
                                         type="button"
@@ -2137,11 +2234,14 @@ export default function AdminEventsPage() {
                                     </button>
                                     <button
                                         type="submit"
-                                        className="px-6 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:from-[#FF6600] hover:to-[#FF5500] text-white rounded-xl font-medium transition-all shadow-lg shadow-[#FF5500]/20"
+                                        disabled={isUploadingBanner}
+                                        className="px-6 py-2.5 bg-gradient-to-r from-[#FF5500] to-[#e04d00] hover:from-[#FF6600] hover:to-[#FF5500] text-white rounded-xl font-medium transition-all shadow-lg shadow-[#FF5500]/20 disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
-                                        {editingEvent
-                                            ? "Save Changes"
-                                            : "Add Event"}
+                                        {isUploadingBanner
+                                            ? "Uploading..."
+                                            : editingEvent
+                                              ? "Save Changes"
+                                              : "Add Event"}
                                     </button>
                                 </div>
                             </form>
