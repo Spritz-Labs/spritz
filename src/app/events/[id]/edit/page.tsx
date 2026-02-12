@@ -208,7 +208,7 @@ export default function EditEventPage() {
                 <div className="absolute top-0 left-0 w-full h-[400px] bg-[radial-gradient(ellipse_at_top,rgba(255,85,0,0.08)_0%,transparent_60%)]" />
             </div>
 
-            <header className="sticky top-0 z-50 bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-800/50">
+            <header className="sticky top-0 z-50 bg-[#09090b]/80 backdrop-blur-xl border-b border-zinc-800/50" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
                 <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
                     <Link
                         href="/events/manage"

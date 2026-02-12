@@ -149,6 +149,7 @@ export async function PATCH(
                 value = null;
             }
             // Empty string → null for TIME/DATE (Postgres rejects '')
+            // event_date is NOT NULL, so skip it entirely when empty
             if (
                 (field === "start_time" ||
                     field === "end_time" ||
@@ -157,6 +158,7 @@ export async function PATCH(
                 typeof value === "string" &&
                 value.trim() === ""
             ) {
+                if (field === "event_date") continue; // skip — NOT NULL column
                 value = null;
             }
             // max_attendees: empty string or invalid number → null
