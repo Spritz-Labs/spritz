@@ -1007,6 +1007,10 @@ export function WakuProvider({
 
     // Track which chat is currently open (to avoid incrementing unread for open chats)
     const activeChatPeerRef = useRef<string | null>(null);
+    // Grace period: recently-closed chats are immune to unread increments for a few seconds.
+    // This prevents the race condition where closing a chat → activeChatPeerRef = null →
+    // Supabase realtime fires → unread increments for an already-read message.
+    const recentlyReadPeersRef = useRef<Set<string>>(new Set());
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nodeRef = useRef<any>(null);
@@ -2067,10 +2071,24 @@ export function WakuProvider({
     // Set the active chat peer (to prevent incrementing unread for open chats)
     const setActiveChatPeer = useCallback(
         (peerAddress: string | null) => {
+            const previousPeer = activeChatPeerRef.current;
             activeChatPeerRef.current = peerAddress?.toLowerCase() || null;
-            // If setting an active peer, also mark as read immediately
+
             if (peerAddress) {
+                // Opening a chat: mark as read immediately
                 markAsRead(peerAddress);
+                // Remove from grace period if re-opening
+                recentlyReadPeersRef.current.delete(peerAddress.toLowerCase());
+            } else if (previousPeer) {
+                // Closing a chat: add to grace period to prevent unread from
+                // reappearing due to Supabase realtime race condition.
+                // Also explicitly mark as read one more time to be safe.
+                markAsRead(previousPeer);
+                recentlyReadPeersRef.current.add(previousPeer);
+                // Remove from grace period after 8 seconds
+                setTimeout(() => {
+                    recentlyReadPeersRef.current.delete(previousPeer);
+                }, 8000);
             }
         },
         [markAsRead]
@@ -2225,7 +2243,11 @@ export function WakuProvider({
                     const senderLower = msg.sender_address.toLowerCase();
 
                     // Only increment unread if this chat is not currently open
-                    if (activeChatPeerRef.current !== senderLower) {
+                    // AND not in the grace period (recently closed / recently read)
+                    const isChatOpen = activeChatPeerRef.current === senderLower;
+                    const isRecentlyRead = recentlyReadPeersRef.current.has(senderLower);
+
+                    if (!isChatOpen && !isRecentlyRead) {
                         log.debug(
                             "[Waku] Incrementing unread for:",
                             senderLower
@@ -2235,13 +2257,18 @@ export function WakuProvider({
                             [senderLower]: (prev[senderLower] || 0) + 1,
                         }));
 
-                        // Trigger notification callbacks with placeholder content
-                        // (actual content will be decrypted when user opens the chat)
+                        // Trigger notification callbacks
+                        // For plaintext messages (welcome/broadcast/system), include real content
+                        const isPlaintext = ["welcome", "system", "broadcast"].includes(msg.message_type);
+                        const callbackContent = isPlaintext
+                            ? msg.encrypted_content
+                            : "New message received";
+
                         newMessageCallbacksRef.current.forEach((callback) => {
                             try {
                                 callback({
                                     senderAddress: msg.sender_address,
-                                    content: "New message received",
+                                    content: callbackContent,
                                     conversationId: msg.conversation_id,
                                 });
                             } catch (err) {
@@ -2253,7 +2280,9 @@ export function WakuProvider({
                         });
                     } else {
                         log.debug(
-                            "[Waku] Chat is open, skipping unread increment"
+                            "[Waku] Chat is open or recently read, skipping unread increment for:",
+                            senderLower,
+                            isChatOpen ? "(open)" : "(recently read)"
                         );
                     }
                 }

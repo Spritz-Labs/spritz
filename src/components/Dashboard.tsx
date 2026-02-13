@@ -5840,12 +5840,32 @@ function DashboardContent({
                     peerAvatar={chatFriend?.avatar}
                     peerEnsName={chatFriend?.ensName}
                     peerUsername={chatFriend?.reachUsername}
-                    onMessageSent={(preview) => {
+                    onMessageSent={() => {
+                        // Just update the timestamp for sorting; the preview
+                        // is handled by onPreviewUpdate which always has the
+                        // correct last message from either person.
                         if (chatFriend) {
-                            updateLastMessageTime(
-                                chatFriend.address.toLowerCase(),
-                                preview
-                            );
+                            setLastMessageTimes((prev) => ({
+                                ...prev,
+                                [chatFriend.address.toLowerCase()]: Date.now(),
+                            }));
+                        }
+                    }}
+                    onPreviewUpdate={(preview) => {
+                        if (chatFriend) {
+                            // Set the preview text (already formatted by ChatModal
+                            // with "You: " prefix and special message labels)
+                            const key = chatFriend.address.toLowerCase();
+                            startTransition(() => {
+                                setLastMessagePreviews((prev) => ({
+                                    ...prev,
+                                    [key]: preview,
+                                }));
+                                setLastMessageTimes((prev) => ({
+                                    ...prev,
+                                    [key]: Date.now(),
+                                }));
+                            });
                         }
                     }}
                     onOpenUserCard={(address) => setUserCardAddress(address)}

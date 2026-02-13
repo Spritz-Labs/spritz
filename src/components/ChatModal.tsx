@@ -98,6 +98,7 @@ type ChatModalProps = {
     /** Peer's Spritz @username (shown as secondary info when ENS is the primary name) */
     peerUsername?: string | null;
     onMessageSent?: (messagePreview?: string) => void; // Callback when a message is sent
+    onPreviewUpdate?: (preview: string) => void; // Callback to update preview in chat list (most recent message)
     onOpenUserCard?: (address: string) => void; // Callback to open a user's profile card
 };
 
@@ -248,6 +249,7 @@ export function ChatModal({
     peerEnsName,
     peerUsername,
     onMessageSent,
+    onPreviewUpdate,
     onOpenUserCard,
 }: ChatModalProps) {
     const [messages, setMessages] = useState<Message[]>([]);
@@ -581,6 +583,29 @@ export function ChatModal({
         }
     }, [messages]);
 
+    // Update the chat list preview whenever messages change (covers ALL paths:
+    // initial load, Waku stream, polling, etc.)
+    useEffect(() => {
+        if (!isOpen || messages.length === 0 || !onPreviewUpdate) return;
+        // Get the most recent message (last in chronologically sorted array)
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg || !lastMsg.content) return;
+        const isOwn = lastMsg.senderAddress.toLowerCase() === userAddress.toLowerCase();
+        const prefix = isOwn ? "You: " : "";
+
+        // Format special message types
+        let text = lastMsg.content;
+        if (text.startsWith("VOICE:") || text.startsWith("ENCRYPTED_VOICE:")) text = "Voice message";
+        else if (text.startsWith("PIXEL_ART:") || text.startsWith("[PIXEL_ART]") || text.startsWith("data:image/png;base64,")) text = "Pixel art";
+        else if (text.startsWith("ENCRYPTED_IMAGE:")) text = "Photo";
+        else if (text.startsWith("LOCATION:") || text.startsWith("[LOCATION]")) text = "Shared a location";
+        else if (text.startsWith("GIF:") || text.match(/^https?:\/\/.*\.(gif|giphy)/i)) text = "GIF";
+        const maxLen = isOwn ? 46 : 50;
+        if (text.length > maxLen) text = text.slice(0, maxLen) + "...";
+
+        onPreviewUpdate(prefix + text);
+    }, [messages, isOpen, userAddress, onPreviewUpdate]);
+
     // Initialize Waku when modal opens
     useEffect(() => {
         if (isOpen && !isInitialized && !isInitializing) {
@@ -623,6 +648,11 @@ export function ChatModal({
         previousPeerRef.current = peerAddress;
     }, [peerAddress]);
 
+    // Keep a ref to the latest messages so we can read them at close time
+    // without adding `messages` to the close effect's dependency array.
+    const messagesRef = useRef<Message[]>([]);
+    messagesRef.current = messages;
+
     // Reset state when modal closes
     useEffect(() => {
         if (isOpen) {
@@ -640,16 +670,33 @@ export function ChatModal({
                 "- marking as read"
             );
         } else {
+            // Final mark-as-read before closing: write read receipts for all
+            // peer messages to the database so they persist and don't come back as unread.
+            const currentMessages = messagesRef.current;
+            if (currentMessages.length > 0) {
+                const peerMsgIds = currentMessages
+                    .filter(
+                        (m) =>
+                            m.senderAddress.toLowerCase() !==
+                            userAddress.toLowerCase()
+                    )
+                    .map((m) => m.id);
+                if (peerMsgIds.length > 0) {
+                    markMessagesRead(peerMsgIds);
+                }
+                markAsRead(peerAddress);
+            }
+
             setMessages([]);
             setChatError(null);
             setChatState("checking");
             setBypassCheck(false);
             // Clear typing indicator when modal closes
             stopTyping();
-            // Clear active chat peer
+            // Clear active chat peer (triggers grace period in WakuProvider)
             setActiveChatPeer(null);
         }
-    }, [isOpen, stopTyping, setActiveChatPeer, markAsRead, peerAddress]);
+    }, [isOpen, stopTyping, setActiveChatPeer, markAsRead, peerAddress, userAddress, markMessagesRead]);
 
     // Load messages and start streaming when initialized
     useEffect(() => {
