@@ -95,8 +95,9 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // One-way friendship only: new user has Kevin as friend so the welcome chat shows in their list.
-        // We do NOT add (Kevin, newUser) so Kevin's friend list doesn't grow with every signup (perf).
+        // Bidirectional friendship: new user ↔ Kevin
+        // Both directions so Kevin can broadcast to "friends" and new user sees Kevin in their list.
+        // Direction 1: new user → Kevin (so welcome chat shows in new user's list)
         const { data: existingFriend } = await supabase
             .from("shout_friends")
             .select("id")
@@ -113,10 +114,36 @@ export async function POST(request: NextRequest) {
                 });
 
             if (friendError) {
-                console.error("[Welcome] Error adding friend:", friendError);
+                console.error("[Welcome] Error adding friend (user→Kevin):", friendError);
             } else {
                 console.log(
-                    "[Welcome] Added Kevin as friend for (one-way):",
+                    "[Welcome] Added Kevin as friend for:",
+                    normalizedRecipient,
+                );
+            }
+        }
+
+        // Direction 2: Kevin → new user (so Kevin can broadcast to "friends" and see user in DMs)
+        const { data: existingReverse } = await supabase
+            .from("shout_friends")
+            .select("id")
+            .eq("user_address", KEVIN_ADDRESS)
+            .eq("friend_address", normalizedRecipient)
+            .maybeSingle();
+
+        if (!existingReverse) {
+            const { error: reverseError } = await supabase
+                .from("shout_friends")
+                .insert({
+                    user_address: KEVIN_ADDRESS,
+                    friend_address: normalizedRecipient,
+                });
+
+            if (reverseError) {
+                console.error("[Welcome] Error adding friend (Kevin→user):", reverseError);
+            } else {
+                console.log(
+                    "[Welcome] Added new user as friend for Kevin:",
                     normalizedRecipient,
                 );
             }

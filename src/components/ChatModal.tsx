@@ -269,6 +269,8 @@ export function ChatModal({
     );
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showSearch, setShowSearch] = useState(false);
+    const [hasMoreMessages, setHasMoreMessages] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
     const [selectedMessageConfig, setSelectedMessageConfig] =
         useState<MessageActionConfig | null>(null);
@@ -352,6 +354,7 @@ export function ChatModal({
     const modalRef = useRef<HTMLDivElement>(null);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamRef = useRef<any>(null);
+    const previousScrollHeightRef = useRef(0);
 
     // Draft messages persistence
     const { draft, saveDraft, clearDraft } = useDraftMessages(
@@ -400,6 +403,8 @@ export function ChatModal({
         initialize,
         sendMessage,
         getMessages,
+        fetchOlderMessages,
+        searchAllMessages,
         streamMessages,
         canMessage,
         markAsRead,
@@ -696,6 +701,8 @@ export function ChatModal({
                         }));
 
                     setMessages(formattedMessages);
+                    // If we got fewer than 50 messages, there are no more to load
+                    setHasMoreMessages(formattedMessages.length >= 50);
 
                     // Fetch read receipts for messages we sent
                     if (formattedMessages.length > 0) {
@@ -896,6 +903,85 @@ export function ChatModal({
         markMessagesRead,
         markAsRead,
     ]);
+
+    // Load more messages on scroll (pagination)
+    const loadMoreMessages = useCallback(async () => {
+        if (isLoadingMore || !hasMoreMessages || messages.length === 0) return;
+
+        setIsLoadingMore(true);
+        try {
+            // Get the oldest message timestamp as the cursor
+            const oldestMessage = messages[0]; // Messages are sorted chronologically
+            const beforeTimestamp = oldestMessage.sentAt.toISOString();
+
+            const result = await fetchOlderMessages(peerAddress, beforeTimestamp);
+
+            if (result.messages.length > 0) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const olderFormatted: Message[] = result.messages
+                    .filter((msg: any) => {
+                        return (
+                            typeof msg.content === "string" &&
+                            msg.content.trim() !== ""
+                        );
+                    })
+                    .map((msg: any) => ({
+                        id: msg.id,
+                        content: msg.content,
+                        senderAddress: msg.senderInboxId,
+                        sentAt: new Date(Number(msg.sentAtNs) / 1000000),
+                    }));
+
+                // Prepend older messages, avoiding duplicates
+                setMessages((prev) => {
+                    const existingIds = new Set(prev.map((m) => m.id));
+                    const newOnes = olderFormatted.filter(
+                        (m) => !existingIds.has(m.id)
+                    );
+                    return [...newOnes, ...prev];
+                });
+            }
+
+            setHasMoreMessages(result.hasMore);
+        } catch (err) {
+            console.error("[Chat] Failed to load more messages:", err);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    }, [isLoadingMore, hasMoreMessages, messages, peerAddress, fetchOlderMessages]);
+
+    // Handle scroll to load more messages
+    // With flex-col-reverse: scrollTop=0 is at BOTTOM (newest), scrolling UP increases scrollTop
+    const handleScroll = useCallback(() => {
+        const container = messagesContainerRef.current;
+        if (!container) return;
+
+        // Load more when scrolled near the TOP (older messages) - scrollTop approaches max
+        const scrollMax = container.scrollHeight - container.clientHeight;
+        if (
+            !isLoadingMore &&
+            hasMoreMessages &&
+            scrollMax - container.scrollTop < 100
+        ) {
+            previousScrollHeightRef.current = container.scrollHeight;
+            loadMoreMessages();
+        }
+    }, [isLoadingMore, hasMoreMessages, loadMoreMessages]);
+
+    // Preserve scroll position after loading more messages
+    useEffect(() => {
+        if (!isLoadingMore && previousScrollHeightRef.current > 0) {
+            const container = messagesContainerRef.current;
+            if (container) {
+                const newScrollHeight = container.scrollHeight;
+                const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
+                if (scrollDiff > 0) {
+                    container.scrollTop += scrollDiff;
+                }
+            }
+            previousScrollHeightRef.current = 0;
+        }
+    }, [isLoadingMore, messages]);
 
     // Reference to track sent message IDs for read receipt checking
     const sentMessageIdsRef = useRef<string[]>([]);
@@ -1785,6 +1871,7 @@ export function ChatModal({
                             {/* Messages - flex-col-reverse so newest at bottom */}
                             <div
                                 ref={messagesContainerRef}
+                                onScroll={handleScroll}
                                 role="log"
                                 aria-label="Chat messages"
                                 className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain p-4 flex flex-col-reverse"
@@ -2815,6 +2902,22 @@ export function ChatModal({
                                         });
                                     })()}
                                 </div>
+
+                                {/* Loading indicator at visual TOP (end of DOM with column-reverse) */}
+                                {isLoadingMore && (
+                                    <div className="flex justify-center py-4">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
+                                    </div>
+                                )}
+                                {!isLoadingMore &&
+                                    hasMoreMessages &&
+                                    messages.length > 0 && (
+                                        <div className="flex justify-center py-2">
+                                            <span className="text-xs text-zinc-500">
+                                                Scroll up to load more
+                                            </span>
+                                        </div>
+                                    )}
                             </div>
 
                             {/* Typing Indicator - positioned above input area */}
@@ -3165,6 +3268,7 @@ export function ChatModal({
                     {/* Message Search Overlay */}
                     <MessageSearch
                         messages={messages}
+                        fetchAllMessages={() => searchAllMessages(peerAddress)}
                         onSelectMessage={(msgId) => {
                             // Scroll to message (could implement smooth scrolling)
                             const element = document.getElementById(

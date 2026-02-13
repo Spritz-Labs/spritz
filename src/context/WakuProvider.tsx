@@ -653,10 +653,12 @@ async function saveMessageToSupabase(
 
 // Fetch messages from Supabase (decrypted)
 // limit: max messages to fetch (0 = all). Fetches the LATEST messages.
+// before: ISO timestamp - fetch messages sent before this time (for pagination)
 async function fetchMessagesFromSupabase(
     conversationId: string,
     keys: DmKeyResult | Uint8Array, // Accept either dual keys or single key (for groups)
-    limit = 0
+    limit = 0,
+    before?: string // ISO timestamp cursor for pagination
 ): Promise<
     Array<{
         id: string;
@@ -678,6 +680,11 @@ async function fetchMessagesFromSupabase(
             .select("message_id, encrypted_content, sender_address, sent_at, conversation_id, message_type")
             .eq("conversation_id", conversationId)
             .order("sent_at", { ascending: false });
+
+        // Pagination: fetch messages before a given timestamp
+        if (before) {
+            query = query.lt("sent_at", before);
+        }
 
         if (limit > 0) {
             query = query.limit(limit);
@@ -854,6 +861,13 @@ type WakuContextType = {
     getMessages: (
         peerAddress: string,
         forceRefresh?: boolean
+    ) => Promise<unknown[]>;
+    fetchOlderMessages: (
+        peerAddress: string,
+        beforeTimestamp: string
+    ) => Promise<{ messages: unknown[]; hasMore: boolean }>;
+    searchAllMessages: (
+        peerAddress: string
     ) => Promise<unknown[]>;
     streamMessages: (
         peerAddress: string,
@@ -1754,6 +1768,103 @@ export function WakuProvider({
                 return mergedMessages;
             } catch (err) {
                 log.error("[Waku] Failed to get messages:", err);
+                return [];
+            }
+        },
+        [userAddress, getDmSymmetricKey]
+    );
+
+    // Fetch older messages for pagination (load more on scroll)
+    const fetchOlderMessages = useCallback(
+        async (
+            peerAddress: string,
+            beforeTimestamp: string
+        ): Promise<{ messages: unknown[]; hasMore: boolean }> => {
+            if (!userAddress) {
+                return { messages: [], hasMore: false };
+            }
+
+            try {
+                const contentTopic = getDmContentTopic(userAddress, peerAddress);
+                const dmKeys = await getDmSymmetricKey(peerAddress);
+
+                const PAGE_SIZE = 50;
+                const olderMessages = await fetchMessagesFromSupabase(
+                    contentTopic,
+                    dmKeys,
+                    PAGE_SIZE,
+                    beforeTimestamp
+                );
+
+                console.log(
+                    "[Waku] Fetched",
+                    olderMessages.length,
+                    "older messages before",
+                    beforeTimestamp
+                );
+
+                // Mark as processed
+                olderMessages.forEach((m) => {
+                    processedMessageIds.current.add(m.id);
+                });
+
+                // Merge into cache
+                const cacheKey = contentTopic;
+                const existingCache = messagesCache.current.get(cacheKey) || [];
+                const existingIds = new Set(existingCache.map((m: any) => m.id));
+                const newMessages = olderMessages.filter(
+                    (m) => !existingIds.has(m.id)
+                );
+
+                if (newMessages.length > 0) {
+                    const merged = [...newMessages, ...existingCache];
+                    merged.sort(
+                        (a: any, b: any) =>
+                            Number(a.sentAtNs) - Number(b.sentAtNs)
+                    );
+                    messagesCache.current.set(cacheKey, merged);
+                    persistMessages(cacheKey, merged);
+                }
+
+                return {
+                    messages: olderMessages,
+                    hasMore: olderMessages.length >= PAGE_SIZE,
+                };
+            } catch (err) {
+                log.error("[Waku] Failed to fetch older messages:", err);
+                return { messages: [], hasMore: false };
+            }
+        },
+        [userAddress, getDmSymmetricKey]
+    );
+
+    // Fetch ALL messages for search (no limit, decrypted)
+    const searchAllMessages = useCallback(
+        async (peerAddress: string): Promise<unknown[]> => {
+            if (!userAddress) {
+                return [];
+            }
+
+            try {
+                const contentTopic = getDmContentTopic(userAddress, peerAddress);
+                const dmKeys = await getDmSymmetricKey(peerAddress);
+
+                console.log("[Waku] Fetching ALL messages for search");
+                const allMessages = await fetchMessagesFromSupabase(
+                    contentTopic,
+                    dmKeys,
+                    0 // No limit - fetch all
+                );
+
+                console.log(
+                    "[Waku] Search: fetched",
+                    allMessages.length,
+                    "total messages"
+                );
+
+                return allMessages;
+            } catch (err) {
+                log.error("[Waku] Failed to fetch all messages for search:", err);
                 return [];
             }
         },
@@ -3368,6 +3479,8 @@ export function WakuProvider({
                 revokeAllInstallations,
                 sendMessage,
                 getMessages,
+                fetchOlderMessages,
+                searchAllMessages,
                 streamMessages,
                 canMessage,
                 canMessageBatch,

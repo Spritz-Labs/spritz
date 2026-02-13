@@ -11,12 +11,13 @@ type Message = {
 };
 
 type MessageSearchProps = {
-    messages: Message[];
+    messages: Message[]; // Currently loaded messages (fallback)
     onSelectMessage: (messageId: string) => void;
     onClose: () => void;
     isOpen: boolean;
     userAddress: string;
     peerName: string;
+    fetchAllMessages?: () => Promise<unknown[]>; // Fetch ALL messages for comprehensive search
 };
 
 export function MessageSearch({
@@ -26,9 +27,12 @@ export function MessageSearch({
     isOpen,
     userAddress,
     peerName,
+    fetchAllMessages,
 }: MessageSearchProps) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<Message[]>([]);
+    const [allMessages, setAllMessages] = useState<Message[] | null>(null);
+    const [isLoadingAll, setIsLoadingAll] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
 
     // Focus input when opened
@@ -38,15 +42,48 @@ export function MessageSearch({
         }
     }, [isOpen]);
 
+    // Fetch all messages when search opens (for comprehensive search)
+    useEffect(() => {
+        if (isOpen && fetchAllMessages && !allMessages && !isLoadingAll) {
+            setIsLoadingAll(true);
+            fetchAllMessages()
+                .then((msgs) => {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    const formatted: Message[] = (msgs as any[])
+                        .filter(
+                            (msg) =>
+                                typeof msg.content === "string" &&
+                                msg.content.trim() !== ""
+                        )
+                        .map((msg) => ({
+                            id: msg.id,
+                            content: msg.content,
+                            senderAddress: msg.senderInboxId,
+                            sentAt: new Date(Number(msg.sentAtNs) / 1000000),
+                        }));
+                    setAllMessages(formatted);
+                })
+                .catch((err) => {
+                    console.error("[Search] Failed to fetch all messages:", err);
+                    // Fall back to loaded messages
+                    setAllMessages(null);
+                })
+                .finally(() => {
+                    setIsLoadingAll(false);
+                });
+        }
+    }, [isOpen, fetchAllMessages, allMessages, isLoadingAll]);
+
     // Reset on close
     useEffect(() => {
         if (!isOpen) {
             setQuery("");
             setResults([]);
+            setAllMessages(null);
         }
     }, [isOpen]);
 
-    // Search messages
+    // Search messages - use allMessages if available, otherwise fall back to loaded messages
     const handleSearch = useCallback(
         (searchQuery: string) => {
             setQuery(searchQuery);
@@ -56,8 +93,9 @@ export function MessageSearch({
                 return;
             }
 
+            const searchableMessages = allMessages || messages;
             const lowerQuery = searchQuery.toLowerCase();
-            const filtered = messages.filter((msg) =>
+            const filtered = searchableMessages.filter((msg) =>
                 msg.content.toLowerCase().includes(lowerQuery)
             );
 
@@ -68,8 +106,15 @@ export function MessageSearch({
 
             setResults(filtered.slice(0, 50)); // Limit to 50 results
         },
-        [messages]
+        [messages, allMessages]
     );
+
+    // Re-run search when allMessages finishes loading (user may have typed while loading)
+    useEffect(() => {
+        if (allMessages && query.trim()) {
+            handleSearch(query);
+        }
+    }, [allMessages]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Handle keyboard navigation
     const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -118,6 +163,9 @@ export function MessageSearch({
             )
         );
     };
+
+    const searchableCount = allMessages?.length ?? messages.length;
+    const isSearchingAll = !!allMessages;
 
     return (
         <AnimatePresence>
@@ -201,6 +249,12 @@ export function MessageSearch({
 
                     {/* Results */}
                     <div className="flex-1 overflow-y-auto">
+                        {isLoadingAll && (
+                            <div className="flex items-center justify-center gap-2 py-3 text-zinc-500">
+                                <div className="animate-spin rounded-full h-4 w-4 border-2 border-zinc-600 border-t-orange-500" />
+                                <span className="text-xs">Loading all messages for search...</span>
+                            </div>
+                        )}
                         {!query.trim() ? (
                             <div className="flex flex-col items-center justify-center h-full text-zinc-500">
                                 <svg
@@ -218,7 +272,9 @@ export function MessageSearch({
                                 </svg>
                                 <p className="text-sm">Search your conversation</p>
                                 <p className="text-xs text-zinc-600 mt-1">
-                                    {messages.length} messages to search
+                                    {isLoadingAll
+                                        ? "Loading all messages..."
+                                        : `${searchableCount} messages to search${isSearchingAll ? " (all)" : ""}`}
                                 </p>
                             </div>
                         ) : results.length === 0 ? (
@@ -245,6 +301,7 @@ export function MessageSearch({
                             <div className="p-2">
                                 <p className="text-xs text-zinc-500 px-2 py-1">
                                     {results.length} result{results.length !== 1 ? "s" : ""}
+                                    {isSearchingAll ? " (searching all messages)" : ""}
                                 </p>
                                 {results.map((msg) => {
                                     const isOwn =
@@ -281,5 +338,3 @@ export function MessageSearch({
         </AnimatePresence>
     );
 }
-
-
