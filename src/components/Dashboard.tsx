@@ -1389,31 +1389,36 @@ function DashboardContent({
             if (!messagesData) return;
 
             const allMessages = JSON.parse(messagesData);
-            const updates: Record<string, number> = {};
+            const timeUpdates: Record<string, number> = {};
+            const previewUpdates: Record<string, string> = {};
             const userAddrLower = userAddress.toLowerCase();
 
             Object.entries(allMessages).forEach(([topic, messages]) => {
                 if (!Array.isArray(messages) || messages.length === 0) return;
 
-                // Find the latest message timestamp
+                // Find the latest message (by timestamp)
                 let latestTime = 0;
-                messages.forEach((msg: { sentAtNs?: string | bigint }) => {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                let latestMsg: any = null;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                messages.forEach((msg: any) => {
                     const timestamp = msg.sentAtNs
                         ? Number(BigInt(msg.sentAtNs) / BigInt(1000000)) // Convert nanoseconds to milliseconds
                         : 0;
                     if (timestamp > latestTime) {
                         latestTime = timestamp;
+                        latestMsg = msg;
                     }
                 });
 
                 if (latestTime === 0) return;
 
                 // Extract conversation key from topic
-                // DM topics: /shout/1/dm-{addr1}-{addr2}/proto
+                // DM topics: /shout/1/dm-{addr1}-{addr2}/proto or /spritz/1/dm/{addr1}-{addr2}/proto
                 // Group topics: /shout/1/group-{groupId}/proto
                 // Channel topics: handled separately
-                if (topic.includes("/dm-")) {
-                    const match = topic.match(/\/dm-([a-f0-9x-]+)\/proto$/i);
+                if (topic.includes("/dm-") || topic.includes("/dm/")) {
+                    const match = topic.match(/\/dm[-/]([a-f0-9x-]+)\/proto$/i);
                     if (match) {
                         // DM topic format: dm-{addr1}-{addr2} sorted alphabetically
                         const dmPair = match[1];
@@ -1430,7 +1435,24 @@ function DashboardContent({
                                 !lastMessageTimes[key] ||
                                 latestTime > lastMessageTimes[key]
                             ) {
-                                updates[key] = latestTime;
+                                timeUpdates[key] = latestTime;
+                            }
+                            // Extract preview from latest message (if not already set)
+                            if (!lastMessagePreviews[key] && latestMsg?.content) {
+                                const isOwn =
+                                    latestMsg.senderInboxId?.toLowerCase() ===
+                                    userAddrLower;
+                                const content = latestMsg.content;
+                                // Simple preview formatting
+                                let preview = content;
+                                if (preview.startsWith("VOICE:") || preview.startsWith("ENCRYPTED_VOICE:")) preview = "Voice message";
+                                else if (preview.startsWith("PIXEL_ART:") || preview.startsWith("data:image/png;base64,")) preview = "Pixel art";
+                                else if (preview.startsWith("ENCRYPTED_IMAGE:")) preview = "Photo";
+                                else if (preview.startsWith("LOCATION:")) preview = "Shared a location";
+                                else if (preview.startsWith("GIF:")) preview = "GIF";
+                                const maxLen = isOwn ? 46 : 50;
+                                if (preview.length > maxLen) preview = preview.slice(0, maxLen) + "...";
+                                previewUpdates[key] = (isOwn ? "You: " : "") + preview;
                             }
                         }
                     }
@@ -1443,24 +1465,32 @@ function DashboardContent({
                             !lastMessageTimes[key] ||
                             latestTime > lastMessageTimes[key]
                         ) {
-                            updates[key] = latestTime;
+                            timeUpdates[key] = latestTime;
                         }
                     }
                 }
             });
 
-            if (Object.keys(updates).length > 0) {
+            if (Object.keys(timeUpdates).length > 0) {
                 console.log(
                     "[Dashboard] Loaded message times from storage:",
-                    Object.keys(updates).length,
+                    Object.keys(timeUpdates).length,
                     "conversations"
                 );
-                setLastMessageTimes((prev) => ({ ...prev, ...updates }));
+                setLastMessageTimes((prev) => ({ ...prev, ...timeUpdates }));
+            }
+            if (Object.keys(previewUpdates).length > 0) {
+                console.log(
+                    "[Dashboard] Loaded message previews from storage:",
+                    Object.keys(previewUpdates).length,
+                    "conversations"
+                );
+                setLastMessagePreviews((prev) => ({ ...prev, ...previewUpdates }));
             }
         } catch (error) {
             console.error("[Dashboard] Failed to scan stored messages:", error);
         }
-    }, [userAddress, lastMessageTimes]);
+    }, [userAddress, lastMessageTimes, lastMessagePreviews]);
 
     // Persist last message times to localStorage
     useEffect(() => {
@@ -1489,6 +1519,75 @@ function DashboardContent({
             }
         }
     }, [lastMessagePreviews, userAddress]);
+
+    // Fetch last message previews from Supabase on initial load
+    // This covers cases where localStorage is empty (new device, cleared cache, etc.)
+    const hasFetchedPreviewsFromDB = useRef(false);
+    useEffect(() => {
+        if (!userAddress || hasFetchedPreviewsFromDB.current) return;
+        hasFetchedPreviewsFromDB.current = true;
+
+        (async () => {
+            try {
+                const res = await fetch("/api/dm/previews", {
+                    credentials: "include",
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.previews || data.previews.length === 0) return;
+
+                const userAddrLower = userAddress.toLowerCase();
+                const timeUpdates: Record<string, number> = {};
+                const previewUpdates: Record<string, string> = {};
+
+                for (const msg of data.previews) {
+                    const peerAddress = msg.peer_address?.toLowerCase();
+                    if (!peerAddress || peerAddress === userAddrLower) continue;
+
+                    const msgTime = new Date(msg.sent_at).getTime();
+                    // Only update if we don't have a more recent timestamp
+                    if (!lastMessageTimes[peerAddress] || msgTime > lastMessageTimes[peerAddress]) {
+                        timeUpdates[peerAddress] = msgTime;
+                    }
+
+                    // Only update preview if we don't already have one
+                    if (!lastMessagePreviews[peerAddress]) {
+                        const isOwn = msg.sender_address?.toLowerCase() === userAddrLower;
+                        const prefix = isOwn ? "You: " : "";
+                        if (msg.content) {
+                            // Plaintext content (welcome/broadcast/system)
+                            const text = msg.content.length > 50
+                                ? msg.content.slice(0, 50) + "..."
+                                : msg.content;
+                            previewUpdates[peerAddress] = prefix + text;
+                        } else {
+                            // Encrypted message - show type-based placeholder
+                            const typeLabel = msg.message_type === "text" ? "Message" : msg.message_type;
+                            previewUpdates[peerAddress] = prefix + (typeLabel || "Message");
+                        }
+                    }
+                }
+
+                if (Object.keys(timeUpdates).length > 0) {
+                    startTransition(() =>
+                        setLastMessageTimes((prev) => ({ ...prev, ...timeUpdates }))
+                    );
+                }
+                if (Object.keys(previewUpdates).length > 0) {
+                    startTransition(() =>
+                        setLastMessagePreviews((prev) => ({ ...prev, ...previewUpdates }))
+                    );
+                    console.log(
+                        "[Dashboard] Loaded",
+                        Object.keys(previewUpdates).length,
+                        "previews from Supabase"
+                    );
+                }
+            } catch (err) {
+                console.error("[Dashboard] Failed to fetch DM previews:", err);
+            }
+        })();
+    }, [userAddress]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Update last message times when unread counts change (new message received)
     const prevUnreadCountsRef = useRef<Record<string, number>>({});
@@ -1923,6 +2022,38 @@ function DashboardContent({
         toValidLastMessageAt,
     ]);
 
+    // Format a message content string into a short preview for the chat list.
+    // Handles special message types (voice, pixel art, images, locations, etc.)
+    // isOwn: true adds "You: " prefix so you can tell who sent the last message at a glance.
+    const formatMessagePreview = useCallback(
+        (content: string, isOwn: boolean): string => {
+            const prefix = isOwn ? "You: " : "";
+            let text = content;
+
+            // Detect special message types and show friendly labels
+            if (text.startsWith("VOICE:") || text.startsWith("ENCRYPTED_VOICE:")) {
+                text = "Voice message";
+            } else if (text.startsWith("PIXEL_ART:") || text.startsWith("data:image/png;base64,")) {
+                text = "Pixel art";
+            } else if (text.startsWith("ENCRYPTED_IMAGE:")) {
+                text = "Photo";
+            } else if (text.startsWith("LOCATION:")) {
+                text = "Shared a location";
+            } else if (text.startsWith("GIF:") || text.match(/^https?:\/\/.*\.(gif|giphy)/i)) {
+                text = "GIF";
+            }
+
+            // Truncate to keep preview compact
+            const maxLen = isOwn ? 46 : 50; // Account for "You: " prefix
+            if (text.length > maxLen) {
+                text = text.slice(0, maxLen) + "...";
+            }
+
+            return prefix + text;
+        },
+        []
+    );
+
     // Function to update last message time and preview when user sends a message (non-urgent to keep list responsive)
     const updateLastMessageTime = useCallback(
         (chatKey: string, messagePreview?: string) => {
@@ -1932,10 +2063,7 @@ function DashboardContent({
                     [chatKey]: Date.now(),
                 }));
                 if (messagePreview) {
-                    const preview =
-                        messagePreview.length > 50
-                            ? messagePreview.slice(0, 50) + "..."
-                            : messagePreview;
+                    const preview = formatMessagePreview(messagePreview, true);
                     setLastMessagePreviews((prev) => ({
                         ...prev,
                         [chatKey]: preview,
@@ -1943,7 +2071,7 @@ function DashboardContent({
                 }
             });
         },
-        []
+        [formatMessagePreview]
     );
 
     // Open chat from URL parameter (e.g., ?chat=0x123...)
@@ -2412,12 +2540,22 @@ function DashboardContent({
 
         const unsubscribe = onNewMessage(({ senderAddress, content }) => {
             const senderAddressLower = senderAddress.toLowerCase();
-            startTransition(() =>
+            startTransition(() => {
                 setLastMessageTimes((prev) => ({
                     ...prev,
                     [senderAddressLower]: Date.now(),
-                }))
-            );
+                }));
+                // Update preview with the received message content.
+                // Don't overwrite a real preview with the "New message received" placeholder
+                // (Supabase realtime handler sends placeholder when actual content is encrypted)
+                if (content && content !== "New message received") {
+                    const preview = formatMessagePreview(content, false);
+                    setLastMessagePreviews((prev) => ({
+                        ...prev,
+                        [senderAddressLower]: preview,
+                    }));
+                }
+            });
 
             // Skip notification if we're already viewing this conversation
             if (chatFriend?.address.toLowerCase() === senderAddressLower) {
@@ -2470,6 +2608,7 @@ function DashboardContent({
         notifyMessage,
         userSettings.soundEnabled,
         chatFriend,
+        formatMessagePreview,
     ]);
 
     // Listen for new channel messages and show toast + notification
