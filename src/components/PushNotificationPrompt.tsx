@@ -58,6 +58,8 @@ type PushNotificationPromptProps = {
     permission: NotificationPermission;
     onEnable: () => Promise<boolean>;
     onSkip: () => void;
+    /** If false, the prompt will not show until this becomes true (used to wait for encryption modal) */
+    canShow?: boolean;
 };
 
 export function PushNotificationPrompt({
@@ -67,6 +69,7 @@ export function PushNotificationPrompt({
     permission,
     onEnable,
     onSkip,
+    canShow = true,
 }: PushNotificationPromptProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [usernameInput, setUsernameInput] = useState("");
@@ -136,6 +139,7 @@ export function PushNotificationPrompt({
     }, [userAddress, isSupported, isSubscribed, permission, isUsernameFetching, shouldNeverShow, onEnable]);
 
     // Check if we should show the username prompt (separate from notification auto-enable)
+    // Waits for canShow to be true (encryption modal dismissed first)
     useEffect(() => {
         // Clear any existing timer
         if (timerRef.current) {
@@ -146,6 +150,8 @@ export function PushNotificationPrompt({
         if (hasShownRef.current) return;
         if (!userAddress) return;
         if (isUsernameFetching) return;
+        // Wait for encryption modal to be dismissed before showing username prompt
+        if (!canShow) return;
 
         // PRIORITY CHECK: If user clicked "Don't Ask Again" - NEVER show again
         if (shouldNeverShow()) {
@@ -162,9 +168,9 @@ export function PushNotificationPrompt({
             return;
         }
 
-        console.log("[PushNotificationPrompt] Will show username prompt in 2 seconds");
+        console.log("[PushNotificationPrompt] Will show username prompt in 500ms");
 
-        // Show username prompt after a short delay
+        // Show username prompt after a very short delay (encryption modal already handled)
         timerRef.current = setTimeout(() => {
             if (hasShownRef.current) return;
             if (shouldNeverShow()) {
@@ -177,7 +183,7 @@ export function PushNotificationPrompt({
             hasShownRef.current = true;
             setIsOpen(true);
             console.log("[PushNotificationPrompt] Username prompt opened");
-        }, 2000);
+        }, 500);
 
         return () => {
             if (timerRef.current) {
@@ -185,7 +191,7 @@ export function PushNotificationPrompt({
                 timerRef.current = null;
             }
         };
-    }, [userAddress, currentUsername, isUsernameFetching, shouldNeverShow]);
+    }, [userAddress, currentUsername, isUsernameFetching, shouldNeverShow, canShow]);
 
     // Debounced username availability check
     useEffect(() => {

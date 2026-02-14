@@ -3269,6 +3269,11 @@ function DashboardContent({
         ? "solana"
         : "wallet";
 
+    // Onboarding flow orchestration:
+    // 1. Encryption upgrade modal shows first (if needed)
+    // 2. Username claim modal shows after encryption modal is dismissed (or not needed)
+    const [canShowUsernamePrompt, setCanShowUsernamePrompt] = useState(false);
+
     return (
         <>
             {/* Messaging Key Restore Banner - prompts users to restore key when missing */}
@@ -3284,7 +3289,7 @@ function DashboardContent({
                 }
                 onOpenSettings={() => setIsSettingsModalOpen(true)}
             />
-            {/* Messaging Key Upgrade Banner - shows once for legacy key users */}
+            {/* Messaging Key Upgrade Modal - shows immediately after login for legacy key users */}
             <MessagingKeyUpgradeBanner
                 userAddress={userAddress}
                 authType={
@@ -3295,6 +3300,8 @@ function DashboardContent({
                         | "digitalid"
                         | "solana"
                 }
+                onDismiss={() => setCanShowUsernamePrompt(true)}
+                onNotNeeded={() => setCanShowUsernamePrompt(true)}
             />
 
             <div className="min-h-screen bg-zinc-950 flex flex-col">
@@ -6002,7 +6009,7 @@ function DashboardContent({
                 userAddress={userAddress}
             />
 
-            {/* First-time Push Notification Prompt */}
+            {/* First-time Username Claim Prompt - shows after encryption modal is handled */}
             <PushNotificationPrompt
                 userAddress={userAddress}
                 isSupported={pushSupported}
@@ -6010,6 +6017,7 @@ function DashboardContent({
                 permission={pushPermission}
                 onEnable={subscribeToPush}
                 onSkip={() => {}}
+                canShow={canShowUsernamePrompt}
             />
 
             {/* QR Code Modal / Invite Friends */}
