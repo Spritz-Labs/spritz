@@ -519,6 +519,23 @@ export default function EventDetailPage() {
     // Modals
     const [showMyQR, setShowMyQR] = useState(false);
     const [showCheckinScanner, setShowCheckinScanner] = useState(false);
+    const autoRegisterAttempted = useRef(false);
+    // Track if user arrived via login redirect with pending action (prevents redirect loop)
+    const [pendingAction, setPendingAction] = useState<string | null>(() => {
+        if (typeof window !== "undefined") {
+            return new URLSearchParams(window.location.search).get("action");
+        }
+        return null;
+    });
+
+    // Safety timeout: if pending action doesn't resolve in 10s, clear it so user can retry
+    useEffect(() => {
+        if (!pendingAction || isAuthenticated) return;
+        const timer = setTimeout(() => {
+            setPendingAction(null);
+        }, 10000);
+        return () => clearTimeout(timer);
+    }, [pendingAction, isAuthenticated]);
 
     useEffect(() => {
         if (!id) return;
@@ -565,11 +582,37 @@ export default function EventDetailPage() {
         fetchInterest();
     }, [id]);
 
+    // Auto-register or auto-interest after login redirect
+    // When the URL has ?action=register (or interested/going), automatically perform
+    // that action once the user is authenticated and the event is loaded.
+    useEffect(() => {
+        if (!isAuthenticated || !event || autoRegisterAttempted.current) return;
+        const urlParams = new URLSearchParams(window.location.search);
+        const action = urlParams.get("action");
+        if (!action) return;
+
+        // Clean the URL so it doesn't re-trigger
+        autoRegisterAttempted.current = true;
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, "", cleanUrl);
+
+        if (action === "register" && event.registration_enabled && !isRegistered) {
+            // Auto-register
+            handleRegister();
+        } else if ((action === "interested" || action === "going") && !isRegistered) {
+            handleInterest(action);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, event, isRegistered]);
+
     const handleInterest = async (type: "interested" | "going") => {
         if (!isAuthenticated) {
-            window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}`)}`;
+            // Don't redirect if we already have a pending action (came from login redirect)
+            if (pendingAction) return;
+            window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}?action=${type}`)}`;
             return;
         }
+        setPendingAction(null);
         setIsLoadingInterest(true);
         try {
             const alreadyThis =
@@ -628,6 +671,14 @@ export default function EventDetailPage() {
 
     const handleRegister = async () => {
         if (!event) return;
+        // If not authenticated, redirect to login with auto-register intent
+        if (!isAuthenticated) {
+            // Don't redirect if we already have a pending action (came from login redirect)
+            if (pendingAction) return;
+            window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}?action=register`)}`;
+            return;
+        }
+        setPendingAction(null);
         setRegisterError(null);
         setRegistering(true);
         try {
@@ -645,7 +696,8 @@ export default function EventDetailPage() {
                 setGoingCount((c) => c + 1);
             } else {
                 if (res.status === 401) {
-                    window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}`)}`;
+                    // Session expired or not synced yet - redirect to login
+                    window.location.href = `/?login=true&redirect=${encodeURIComponent(`/events/${id}?action=register`)}`;
                     return;
                 }
                 setRegisterError(data.error || "Registration failed");
@@ -812,6 +864,16 @@ export default function EventDetailPage() {
                                 </div>
                             )}
 
+                        {/* Welcome callout for new/unauthenticated users */}
+                        {!isAuthenticated && event.registration_enabled && (
+                            <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-[#FF5500]/10 to-orange-500/5 border border-[#FF5500]/20">
+                                <p className="text-sm text-zinc-300 leading-relaxed">
+                                    <span className="font-semibold text-[#FF5500]">Spritz</span> is a Web3 social app for events & messaging.
+                                    Sign in to register, connect with attendees, and get event updates.
+                                </p>
+                            </div>
+                        )}
+
                         {/* Interested / Going */}
                         <div className="flex gap-2 mb-4">
                             <button
@@ -890,12 +952,14 @@ export default function EventDetailPage() {
                                         <>
                                             <button
                                                 onClick={handleRegister}
-                                                disabled={registering}
+                                                disabled={registering || (!!pendingAction && !isAuthenticated)}
                                                 className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#e04d00] text-white font-semibold hover:shadow-lg hover:shadow-[#FF5500]/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                             >
-                                                {registering
-                                                    ? "Registering…"
-                                                    : "Register with Spritz"}
+                                                {registering || (pendingAction === "register" && !isAuthenticated)
+                                                    ? "Completing registration…"
+                                                    : isAuthenticated
+                                                      ? "Register with Spritz"
+                                                      : "Sign in to Register"}
                                             </button>
                                             {registerError && (
                                                 <p className="text-sm text-red-400">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { SpritzLogo } from "./SpritzLogo";
 
@@ -332,12 +332,28 @@ export function PWAInstallPrompt() {
         setShowPrompt(false);
     };
 
-    if (!showPrompt && !showUpdatePrompt) {
+    // Update available: no longer show a banner that blocks the UI.
+    // Users can check for updates manually in Settings > Check for App Updates.
+    // Silently tell the waiting worker to activate; user gets the new version on next reload.
+    const silentUpdateSent = useRef(false);
+    useEffect(() => {
+        if (showUpdatePrompt && waitingWorker && !silentUpdateSent.current) {
+            silentUpdateSent.current = true;
+            try {
+                waitingWorker.postMessage({ type: "SKIP_WAITING" });
+                console.log("[PWA] Update silently activated - will apply on next reload");
+            } catch {
+                // ignore - worker may have already been activated
+            }
+        }
+    }, [showUpdatePrompt, waitingWorker]);
+
+    if (!showPrompt) {
         return null;
     }
 
     // Install prompt UI
-    const installPromptUI = showPrompt ? (
+    const installPromptUI = (
         <AnimatePresence>
             <motion.div
                 initial={{ opacity: 0, y: 50 }}
@@ -431,84 +447,7 @@ export function PWAInstallPrompt() {
                 </div>
             </motion.div>
         </AnimatePresence>
-    ) : null;
-
-    // Update available UI (shown instead of install prompt)
-    if (showUpdatePrompt) {
-        return (
-            <AnimatePresence>
-                <motion.div
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 50 }}
-                    className="fixed bottom-32 left-4 right-4 z-[100]"
-                >
-                    <div className="glass-card rounded-2xl p-4 shadow-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-900/20 to-emerald-800/20 backdrop-blur-xl">
-                        <div className="flex items-start gap-3">
-                            {/* Update Icon */}
-                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center flex-shrink-0">
-                                <svg
-                                    className="w-6 h-6 text-white"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                    />
-                                </svg>
-                            </div>
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                                <h3 className="text-white font-semibold text-sm mb-1">
-                                    Update Available
-                                </h3>
-                                <p className="text-zinc-400 text-xs leading-relaxed">
-                                    A new version of Spritz is available with
-                                    improvements and bug fixes.
-                                </p>
-                            </div>
-
-                            {/* Close button */}
-                            <button
-                                onClick={() => setShowUpdatePrompt(false)}
-                                className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
-                                aria-label="Dismiss"
-                            >
-                                <svg
-                                    className="w-5 h-5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
-
-                        {/* Update button */}
-                        <motion.button
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            onClick={handleUpdate}
-                            className="mt-3 w-full py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-sm font-medium hover:from-emerald-400 hover:to-emerald-500 transition-all"
-                        >
-                            Update Now
-                        </motion.button>
-                    </div>
-                </motion.div>
-            </AnimatePresence>
-        );
-    }
+    );
 
     return installPromptUI;
 }

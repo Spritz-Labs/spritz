@@ -69,15 +69,14 @@ export function PushNotificationPrompt({
     onSkip,
 }: PushNotificationPromptProps) {
     const [isOpen, setIsOpen] = useState(false);
-    const [isEnabling, setIsEnabling] = useState(false);
-    const [step, setStep] = useState<"username" | "notifications">("username");
     const [usernameInput, setUsernameInput] = useState("");
     const [isChecking, setIsChecking] = useState(false);
     const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
     const [isClaiming, setIsClaiming] = useState(false);
     
-    // Use ref to track if we've already shown the prompt in this session
+    // Use ref to track if we've already shown the prompt / auto-enabled in this session
     const hasShownRef = useRef(false);
+    const autoEnableAttemptedRef = useRef(false);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
     // Track if we've done the initial neverAsk check
     const initialCheckDoneRef = useRef(false);
@@ -91,13 +90,52 @@ export function PushNotificationPrompt({
     }, [currentUsername]);
 
     // SYNCHRONOUS CHECK: Run immediately when userAddress becomes available
-    // This prevents any race conditions with the async effect
     const shouldNeverShow = useCallback(() => {
         if (!userAddress) return false;
         return hasNeverAskFlag(userAddress);
     }, [userAddress]);
 
-    // Check if we should show the prompt
+    // Auto-enable push notifications silently (browser's native prompt is the confirmation)
+    // This replaces the old "Never Miss a Call" step entirely.
+    useEffect(() => {
+        if (autoEnableAttemptedRef.current) return;
+        if (!userAddress || !isSupported) return;
+        if (isSubscribed) return; // Already subscribed
+        if (permission === "denied") return; // User already denied via browser
+        if (shouldNeverShow()) return; // User clicked "Don't Ask Again"
+
+        // Wait for username fetch to complete
+        if (isUsernameFetching) return;
+
+        // Check if already prompted for this address
+        const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
+        const hasPrompted = localStorage.getItem(promptedKey);
+        if (hasPrompted && permission === "granted") return; // Already set up
+
+        // Auto-enable after a short delay to let the app settle
+        const timer = setTimeout(async () => {
+            if (autoEnableAttemptedRef.current) return;
+            autoEnableAttemptedRef.current = true;
+
+            console.log("[PushNotificationPrompt] Auto-requesting notification permission (browser native prompt)");
+            
+            // Store prompted flag
+            localStorage.setItem(promptedKey, "true");
+            
+            // This triggers the browser's native permission dialog
+            // No custom UI needed - the native dialog IS the confirmation
+            try {
+                await onEnable();
+                console.log("[PushNotificationPrompt] Auto-enable completed");
+            } catch (err) {
+                console.error("[PushNotificationPrompt] Auto-enable failed:", err);
+            }
+        }, 3000); // 3s delay - let the app fully load first
+
+        return () => clearTimeout(timer);
+    }, [userAddress, isSupported, isSubscribed, permission, isUsernameFetching, shouldNeverShow, onEnable]);
+
+    // Check if we should show the username prompt (separate from notification auto-enable)
     useEffect(() => {
         // Clear any existing timer
         if (timerRef.current) {
@@ -105,93 +143,40 @@ export function PushNotificationPrompt({
             timerRef.current = null;
         }
 
-        // If already shown in this session, don't show again
-        if (hasShownRef.current) {
-            console.log("[PushNotificationPrompt] Already shown in this session");
-            return;
-        }
-
-        if (!userAddress) {
-            console.log("[PushNotificationPrompt] No user address");
-            return;
-        }
-
-        // Wait for username fetch to complete before making any decisions
-        // This prevents the race condition where we show the username step
-        // while the username is still being loaded from the API
-        if (isUsernameFetching) {
-            console.log("[PushNotificationPrompt] Waiting for username fetch to complete");
-            return;
-        }
+        if (hasShownRef.current) return;
+        if (!userAddress) return;
+        if (isUsernameFetching) return;
 
         // PRIORITY CHECK: If user clicked "Don't Ask Again" - NEVER show again
-        // This check must happen first and be absolute
         if (shouldNeverShow()) {
-            console.log("[PushNotificationPrompt] User clicked 'Don't Ask Again' - never showing");
-            hasShownRef.current = true; // Prevent any future attempts this session
+            hasShownRef.current = true;
             initialCheckDoneRef.current = true;
             return;
         }
         
         initialCheckDoneRef.current = true;
 
-        if (!isSupported) {
-            console.log("[PushNotificationPrompt] Push notifications not supported");
+        // If user already has a username, no need to show the modal at all
+        if (currentUsername) {
+            console.log("[PushNotificationPrompt] User has username, skipping modal");
             return;
         }
 
-        // Check if already prompted for this specific address
-        const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
-        const hasPrompted = localStorage.getItem(promptedKey);
-        
-        // If user has both username AND has been prompted, don't show again
-        if (hasPrompted && currentUsername) {
-            console.log("[PushNotificationPrompt] Already prompted for this address and has username");
-            return;
-        }
+        console.log("[PushNotificationPrompt] Will show username prompt in 2 seconds");
 
-        // Don't show if permission already denied
-        if (permission === "denied") {
-            console.log("[PushNotificationPrompt] Permission already denied");
-            return;
-        }
-
-        // Skip if they have both username AND are subscribed
-        if (isSubscribed && currentUsername) {
-            console.log("[PushNotificationPrompt] Already subscribed and has username");
-            return;
-        }
-
-        console.log("[PushNotificationPrompt] Will show prompt in 2 seconds", {
-            userAddress: userAddress.slice(0, 10),
-            isSupported,
-            isSubscribed,
-            permission,
-            hasUsername: !!currentUsername,
-        });
-
-        // Show prompt after a short delay (let the app settle first)
+        // Show username prompt after a short delay
         timerRef.current = setTimeout(() => {
-            // Double-check we haven't shown it already and neverAsk hasn't been set
-            if (hasShownRef.current) {
-                return;
-            }
-            // Re-check neverAsk in case it was set during the timeout
+            if (hasShownRef.current) return;
             if (shouldNeverShow()) {
-                console.log("[PushNotificationPrompt] neverAsk was set during timeout - not showing");
                 hasShownRef.current = true;
                 return;
             }
+            // Re-check username via ref
+            if (currentUsernameRef.current) return;
+            
             hasShownRef.current = true;
             setIsOpen(true);
-            // Use the ref for the latest username value (avoids stale closure)
-            const latestUsername = currentUsernameRef.current;
-            if (latestUsername) {
-                setStep("notifications");
-            } else {
-                setStep("username");
-            }
-            console.log("[PushNotificationPrompt] Prompt opened, step:", latestUsername ? "notifications" : "username");
+            console.log("[PushNotificationPrompt] Username prompt opened");
         }, 2000);
 
         return () => {
@@ -200,11 +185,11 @@ export function PushNotificationPrompt({
                 timerRef.current = null;
             }
         };
-    }, [userAddress, isSupported, isSubscribed, permission, currentUsername, isUsernameFetching, shouldNeverShow]);
+    }, [userAddress, currentUsername, isUsernameFetching, shouldNeverShow]);
 
     // Debounced username availability check
     useEffect(() => {
-        if (step !== "username" || !usernameInput || usernameInput.length < 3) {
+        if (!isOpen || !usernameInput || usernameInput.length < 3) {
             setIsAvailable(null);
             return;
         }
@@ -223,7 +208,7 @@ export function PushNotificationPrompt({
         }, 300);
 
         return () => clearTimeout(timer);
-    }, [usernameInput, checkAvailability, currentUsername, step]);
+    }, [usernameInput, checkAvailability, currentUsername, isOpen]);
 
     const isValidUsername = usernameInput.length >= 3 && usernameInput.length <= 20 && /^[a-zA-Z0-9_]+$/.test(usernameInput);
 
@@ -235,31 +220,8 @@ export function PushNotificationPrompt({
         setIsClaiming(false);
         
         if (success) {
-            setStep("notifications");
-        }
-    };
-
-    const handleNext = () => {
-        if (currentUsername) {
-            setStep("notifications");
-        } else if (isValidUsername && isAvailable) {
-            handleClaimUsername();
-        }
-    };
-
-    const handleEnable = async () => {
-        setIsEnabling(true);
-        // Store prompted flag per address
-        if (userAddress) {
-            const promptedKey = `${PUSH_PROMPTED_KEY}_${userAddress.toLowerCase()}`;
-            localStorage.setItem(promptedKey, "true");
-        }
-        
-        const success = await onEnable();
-        
-        setIsEnabling(false);
-        if (success) {
-            hasShownRef.current = true; // Mark as shown
+            // Username claimed - close the modal. Notifications are handled automatically.
+            hasShownRef.current = true;
             setIsOpen(false);
         }
     };
@@ -269,14 +231,14 @@ export function PushNotificationPrompt({
         if (userAddress) {
             setNeverAskFlag(userAddress);
         }
-        hasShownRef.current = true; // Mark as shown
+        hasShownRef.current = true;
         setIsOpen(false);
         onSkip();
     };
 
     const handleLater = () => {
         // Don't set the prompted flag - we'll ask again next session
-        hasShownRef.current = true; // Mark as shown for this session
+        hasShownRef.current = true;
         setIsOpen(false);
     };
 
@@ -292,7 +254,7 @@ export function PushNotificationPrompt({
                         className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
                     />
 
-                    {/* Modal */}
+                    {/* Modal - Username claim only */}
                     <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -300,228 +262,106 @@ export function PushNotificationPrompt({
                         className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-sm z-50"
                     >
                         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl">
-                            {/* Step indicator */}
-                            <div className="flex items-center justify-center gap-2 mb-6">
-                                <div className={`w-2 h-2 rounded-full ${step === "username" ? "bg-[#FF5500]" : "bg-zinc-600"}`} />
-                                <div className={`w-2 h-2 rounded-full ${step === "notifications" ? "bg-[#FF5500]" : "bg-zinc-600"}`} />
-                            </div>
+                            <motion.div
+                                key="username"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="space-y-6"
+                            >
+                                {/* Icon */}
+                                <div className="flex justify-center">
+                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF5500] to-[#FB8D22] flex items-center justify-center">
+                                        <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
+                                    </div>
+                                </div>
 
-                            <AnimatePresence mode="wait">
-                                {step === "username" ? (
-                                    <motion.div
-                                        key="username"
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: 20 }}
-                                        className="space-y-6"
-                                    >
-                                        {/* Icon */}
-                                        <div className="flex justify-center">
-                                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF5500] to-[#FB8D22] flex items-center justify-center">
-                                                <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                </svg>
+                                {/* Title */}
+                                <h2 className="text-xl font-bold text-white text-center mb-2">
+                                    Claim Your Username
+                                </h2>
+
+                                {/* Description */}
+                                <p className="text-zinc-400 text-center text-sm mb-4">
+                                    Choose a unique username so friends can find you easily.
+                                </p>
+
+                                {/* Username input */}
+                                <div className="space-y-2">
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={usernameInput}
+                                            onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                                            placeholder="username"
+                                            className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500] focus:border-transparent"
+                                            maxLength={20}
+                                        />
+                                        {usernameInput && (
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                                                {isChecking ? (
+                                                    <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
+                                                ) : isAvailable === true ? (
+                                                    <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                    </svg>
+                                                ) : isAvailable === false ? (
+                                                    <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                ) : null}
                                             </div>
-                                        </div>
-
-                                        {/* Title */}
-                                        <h2 className="text-xl font-bold text-white text-center mb-2">
-                                            Claim Your Username
-                                        </h2>
-
-                                        {/* Description */}
-                                        <p className="text-zinc-400 text-center text-sm mb-4">
-                                            Choose a unique username so friends can find you easily.
+                                        )}
+                                    </div>
+                                    
+                                    {usernameInput && !isValidUsername && (
+                                        <p className="text-xs text-red-400">
+                                            Username must be 3-20 characters, letters, numbers, and underscores only
                                         </p>
-
-                                        {/* Username input */}
-                                        <div className="space-y-2">
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    value={usernameInput}
-                                                    onChange={(e) => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-                                                    placeholder="username"
-                                                    className="w-full px-4 py-3 rounded-xl bg-zinc-800 border border-zinc-700 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500] focus:border-transparent"
-                                                    maxLength={20}
-                                                />
-                                                {usernameInput && (
-                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                        {isChecking ? (
-                                                            <div className="w-4 h-4 border-2 border-zinc-500 border-t-transparent rounded-full animate-spin" />
-                                                        ) : isAvailable === true ? (
-                                                            <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        ) : isAvailable === false ? (
-                                                            <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                            </svg>
-                                                        ) : null}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            
-                                            {usernameInput && !isValidUsername && (
-                                                <p className="text-xs text-red-400">
-                                                    Username must be 3-20 characters, letters, numbers, and underscores only
-                                                </p>
-                                            )}
-                                            
-                                            {isAvailable === false && (
-                                                <p className="text-xs text-red-400">
-                                                    This username is already taken
-                                                </p>
-                                            )}
-                                        </div>
-
-                                        {/* Next button */}
-                                        <button
-                                            onClick={handleNext}
-                                            disabled={!isValidUsername || !isAvailable || isClaiming || isChecking}
-                                            className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-medium transition-all hover:shadow-lg hover:shadow-[#FB8D22]/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                                        >
-                                            {isClaiming ? (
-                                                <>
-                                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                    Claiming...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    Next
-                                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                    </svg>
-                                                </>
-                                            )}
-                                        </button>
-
-                                        {/* Skip buttons */}
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setStep("notifications");
-                                                }}
-                                                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors text-sm font-medium"
-                                            >
-                                                Skip
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleSkip}
-                                                className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 transition-colors text-sm font-medium"
-                                            >
-                                                Don&apos;t Ask Again
-                                            </button>
-                                        </div>
-                                    </motion.div>
-                                ) : (
-                                    <motion.div
-                                        key="notifications"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        exit={{ opacity: 0, x: -20 }}
-                                    >
-                                        {/* Icon */}
-                                        <div className="flex justify-center mb-4">
-                                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#FF5500] to-[#FB8D22] flex items-center justify-center">
-                                                <svg
-                                                    className="w-8 h-8 text-white"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={2}
-                                                        d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-                                                    />
-                                                </svg>
-                                            </div>
-                                        </div>
-
-                                        {/* Title */}
-                                        <h2 className="text-xl font-bold text-white text-center mb-2">
-                                            Never Miss a Call
-                                        </h2>
-
-                                        {/* Description */}
-                                        <p className="text-zinc-400 text-center text-sm mb-6">
-                                            Enable push notifications to get alerted when friends call you, even when Spritz isn't open.
+                                    )}
+                                    
+                                    {isAvailable === false && (
+                                        <p className="text-xs text-red-400">
+                                            This username is already taken
                                         </p>
+                                    )}
+                                </div>
 
-                                        {/* Benefits */}
-                                        <div className="space-y-2 mb-6">
-                                            <div className="flex items-center gap-3 text-sm">
-                                                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                                                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                </div>
-                                                <span className="text-zinc-300">Incoming call alerts</span>
-                                            </div>
-                                            <div className="flex items-center gap-3 text-sm">
-                                                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                                                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                </div>
-                                                <span className="text-zinc-300">Friend request notifications</span>
-                                            </div>
-                                            <div className="flex items-center gap-3 text-sm">
-                                                <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                                                    <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                </div>
-                                                <span className="text-zinc-300">You can disable anytime in settings</span>
-                                            </div>
-                                        </div>
+                                {/* Claim button */}
+                                <button
+                                    onClick={handleClaimUsername}
+                                    disabled={!isValidUsername || !isAvailable || isClaiming || isChecking}
+                                    className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-medium transition-all hover:shadow-lg hover:shadow-[#FB8D22]/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    {isClaiming ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                            Claiming...
+                                        </>
+                                    ) : (
+                                        "Claim Username"
+                                    )}
+                                </button>
 
-                                        {/* Buttons */}
-                                        <div className="space-y-2">
-                                            <button
-                                                onClick={handleEnable}
-                                                disabled={isEnabling}
-                                                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FB8D22] text-white font-medium transition-all hover:shadow-lg hover:shadow-[#FB8D22]/25 disabled:opacity-70 flex items-center justify-center gap-2"
-                                            >
-                                                {isEnabling ? (
-                                                    <>
-                                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                        Enabling...
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                                                        </svg>
-                                                        Enable Notifications
-                                                    </>
-                                                )}
-                                            </button>
-                                            
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={handleLater}
-                                                    disabled={isEnabling}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-medium transition-colors disabled:opacity-50"
-                                                >
-                                                    Maybe Later
-                                                </button>
-                                                <button
-                                                    onClick={handleSkip}
-                                                    disabled={isEnabling}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 font-medium transition-colors disabled:opacity-50"
-                                                >
-                                                    Don't Ask Again
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
+                                {/* Skip buttons */}
+                                <div className="flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleLater}
+                                        className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors text-sm font-medium"
+                                    >
+                                        Skip
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSkip}
+                                        className="flex-1 py-2.5 px-4 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 text-zinc-500 transition-colors text-sm font-medium"
+                                    >
+                                        Don&apos;t Ask Again
+                                    </button>
+                                </div>
+                            </motion.div>
                         </div>
                     </motion.div>
                 </>
