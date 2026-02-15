@@ -306,6 +306,30 @@ async function checkRulesPermission(
         }
     }
 
+    // Check token chat creator or admin
+    if (chatType === "token" && chatId) {
+        const { data: tokenChat } = await supabase
+            .from("shout_token_chats")
+            .select("created_by")
+            .eq("id", chatId)
+            .single();
+
+        if (tokenChat?.created_by?.toLowerCase() === userAddress) {
+            return true;
+        }
+
+        const { data: tokenMember } = await supabase
+            .from("shout_token_chat_members")
+            .select("role")
+            .eq("chat_id", chatId)
+            .eq("member_address", userAddress)
+            .single();
+
+        if (tokenMember?.role === "admin" || tokenMember?.role === "moderator") {
+            return true;
+        }
+    }
+
     // Check moderator with manage permissions
     if (chatType === "channel" && chatId) {
         // Check per-channel moderator

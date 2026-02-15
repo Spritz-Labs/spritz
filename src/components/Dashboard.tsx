@@ -6841,6 +6841,10 @@ function DashboardContent({
                     chat={selectedTokenChat}
                     getUserInfo={getAlphaUserInfo}
                     onOpenUserCard={(address) => setUserCardAddress(address)}
+                    onLeave={() => {
+                        setIsTokenChatOpen(false);
+                        setSelectedTokenChat(null);
+                    }}
                 />
             )}
 

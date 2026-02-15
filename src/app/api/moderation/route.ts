@@ -544,8 +544,60 @@ async function getUserPermissions(userAddress: string, channelId: string | null)
                 canPin: true,
                 canDelete: true,
                 canMute: true,
-                canManageMods: true, // Owners can manage their channel's mods
+                canManageMods: true,
             };
+        }
+
+        // Check if token chat creator or admin/moderator member
+        if (channelId.startsWith("tc_")) {
+            const { data: tokenChat } = await supabase
+                .from("shout_token_chats")
+                .select("created_by")
+                .eq("id", channelId)
+                .single();
+
+            if (tokenChat?.created_by?.toLowerCase() === userAddress.toLowerCase()) {
+                return {
+                    isAdmin: false,
+                    isSuperAdmin: false,
+                    isModerator: true,
+                    canPin: true,
+                    canDelete: true,
+                    canMute: true,
+                    canManageMods: true,
+                };
+            }
+
+            const { data: tokenMember } = await supabase
+                .from("shout_token_chat_members")
+                .select("role")
+                .eq("chat_id", channelId)
+                .eq("member_address", userAddress.toLowerCase())
+                .single();
+
+            if (tokenMember?.role === "admin") {
+                return {
+                    isAdmin: false,
+                    isSuperAdmin: false,
+                    isModerator: true,
+                    canPin: true,
+                    canDelete: true,
+                    canMute: true,
+                    canManageMods: true,
+                };
+            }
+
+            if (tokenMember?.role === "moderator") {
+                return {
+                    isAdmin: false,
+                    isSuperAdmin: false,
+                    isModerator: true,
+                    canPin: true,
+                    canDelete: true,
+                    canMute: true,
+                    canManageMods: false,
+                };
+            }
         }
     }
 

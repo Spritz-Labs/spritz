@@ -17,6 +17,7 @@ export type TokenChat = {
     token_symbol: string | null;
     token_decimals: number;
     token_image: string | null;
+    icon_url: string | null;
     min_balance: string;
     min_balance_display: string | null;
     is_official: boolean;

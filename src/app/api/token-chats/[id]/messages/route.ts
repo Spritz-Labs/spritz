@@ -101,6 +101,89 @@ export async function GET(
     }
 }
 
+// DELETE /api/token-chats/[id]/messages - Delete a message
+export async function DELETE(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> },
+) {
+    const { id: chatId } = await params;
+    const { searchParams } = new URL(request.url);
+    const messageId = searchParams.get("messageId");
+    const userAddress = searchParams.get("userAddress")?.toLowerCase();
+
+    if (!messageId || !userAddress) {
+        return NextResponse.json({ error: "Missing messageId or userAddress" }, { status: 400 });
+    }
+
+    try {
+        // Get the message
+        const { data: message } = await supabase
+            .from("shout_token_chat_messages")
+            .select("sender_address")
+            .eq("id", messageId)
+            .eq("chat_id", chatId)
+            .single();
+
+        if (!message) {
+            return NextResponse.json({ error: "Message not found" }, { status: 404 });
+        }
+
+        const isOwn = message.sender_address.toLowerCase() === userAddress;
+
+        // Check if admin/moderator (can delete any message)
+        let canModerate = false;
+        if (!isOwn) {
+            // Check global admin
+            const { data: admin } = await supabase
+                .from("shout_admins")
+                .select("id")
+                .eq("wallet_address", userAddress)
+                .single();
+            if (admin) canModerate = true;
+
+            // Check token chat creator
+            if (!canModerate) {
+                const { data: chat } = await supabase
+                    .from("shout_token_chats")
+                    .select("created_by")
+                    .eq("id", chatId)
+                    .single();
+                if (chat?.created_by?.toLowerCase() === userAddress) canModerate = true;
+            }
+
+            // Check member role
+            if (!canModerate) {
+                const { data: member } = await supabase
+                    .from("shout_token_chat_members")
+                    .select("role")
+                    .eq("chat_id", chatId)
+                    .eq("member_address", userAddress)
+                    .single();
+                if (member?.role === "admin" || member?.role === "moderator") canModerate = true;
+            }
+        }
+
+        if (!isOwn && !canModerate) {
+            return NextResponse.json({ error: "Not authorized to delete this message" }, { status: 403 });
+        }
+
+        const { error } = await supabase
+            .from("shout_token_chat_messages")
+            .delete()
+            .eq("id", messageId);
+
+        if (error) {
+            console.error("[token-chat-messages] Delete error:", error);
+            return NextResponse.json({ error: "Failed to delete message" }, { status: 500 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (err) {
+        console.error("[token-chat-messages] Error:", err);
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    }
+}
+
 // POST /api/token-chats/[id]/messages - Send a message
 export async function POST(
     request: NextRequest,

@@ -492,13 +492,17 @@ const ChatRow = memo(
                                         : ""
                                 }`}
                             >
-                                <span className="text-white font-bold text-base sm:text-lg">
-                                    {chat.type === "token" && chat.metadata.emoji
-                                        ? chat.metadata.emoji
-                                        : chat.type === "location" && chat.metadata.emoji
-                                        ? chat.metadata.emoji
-                                        : chat.name[0]?.toUpperCase() ?? "?"}
-                                </span>
+                                {chat.type === "token" && chat.metadata.tokenChat?.icon_url ? (
+                                    <img src={chat.metadata.tokenChat.icon_url} alt={chat.name} className="w-full h-full rounded-full object-cover" />
+                                ) : (
+                                    <span className="text-white font-bold text-base sm:text-lg">
+                                        {chat.type === "token" && chat.metadata.emoji
+                                            ? chat.metadata.emoji
+                                            : chat.type === "location" && chat.metadata.emoji
+                                            ? chat.metadata.emoji
+                                            : chat.name[0]?.toUpperCase() ?? "?"}
+                                    </span>
+                                )}
                             </div>
                             {chat.type === "dm" && chat.isOnline && (
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-zinc-900 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />

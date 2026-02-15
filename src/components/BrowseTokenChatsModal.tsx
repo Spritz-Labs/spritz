@@ -278,9 +278,13 @@ export function BrowseTokenChatsModal({
                                         className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl p-3 hover:bg-zinc-800 transition-colors"
                                     >
                                         <div className="flex items-start gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-lg shrink-0">
-                                                {chat.emoji || "🪙"}
-                                            </div>
+                                            {chat.icon_url ? (
+                                                <img src={chat.icon_url} alt={chat.name} className="w-10 h-10 rounded-full object-cover shrink-0" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center text-lg shrink-0">
+                                                    {chat.emoji || "🪙"}
+                                                </div>
+                                            )}
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
                                                     <p className="text-white font-semibold text-sm truncate">

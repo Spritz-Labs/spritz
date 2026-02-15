@@ -13,6 +13,13 @@ import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
+import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
+import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
+import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { toast } from "sonner";
+import { useModeration } from "@/hooks/useModeration";
+import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
+import { QuickMuteDialog } from "./ModerationPanel";
 import {
     MessageActionBar,
     type MessageActionConfig,
@@ -30,6 +37,8 @@ import { MentionText } from "./MentionText";
 import { ScrollToBottom } from "./ScrollToBottom";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 
 // Helpers
 function isGifMessage(content: string): boolean {
@@ -69,6 +78,7 @@ interface TokenChatModalProps {
         avatar: string | null;
     } | null;
     onOpenUserCard?: (address: string) => void;
+    onLeave?: () => void;
 }
 
 export function TokenChatModal({
@@ -78,6 +88,7 @@ export function TokenChatModal({
     chat,
     getUserInfo,
     onOpenUserCard,
+    onLeave,
 }: TokenChatModalProps) {
     // Messages state
     const [messages, setMessages] = useState<TokenChatMessage[]>([]);
@@ -87,16 +98,37 @@ export function TokenChatModal({
     const [hasMore, setHasMore] = useState(false);
     const [memberCount, setMemberCount] = useState(0);
 
+    // Chat data (mutable copy for live updates)
+    const [chatData, setChatData] = useState<TokenChat | null>(chat);
+
     // UI state
     const [showInfo, setShowInfo] = useState(false);
     const [showMembersList, setShowMembersList] = useState(false);
     const [showPixelArt, setShowPixelArt] = useState(false);
+    const [showRulesPanel, setShowRulesPanel] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const [replyingTo, setReplyingTo] = useState<TokenChatMessage | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<MessageActionConfig | null>(null);
     const [showMessageActions, setShowMessageActions] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [isUploading] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+
+    // Settings edit state
+    const [editName, setEditName] = useState("");
+    const [editDescription, setEditDescription] = useState("");
+    const [editEmoji, setEditEmoji] = useState("");
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+    // Icon upload state
+    const [chatIcon, setChatIcon] = useState<string | null>(null);
+    const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+    const iconInputRef = useRef<HTMLInputElement>(null);
+
+    // User popup state for moderation
+    const [selectedUser, setSelectedUser] = useState<string | null>(null);
+    const [userPopupPosition, setUserPopupPosition] = useState<{ x: number; y: number } | null>(null);
+    const [muteTarget, setMuteTarget] = useState<{ address: string; name: string } | null>(null);
 
     // Refs
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -108,27 +140,54 @@ export function TokenChatModal({
     const justSentMessageRef = useRef(false);
 
     const timezone = useUserTimezone();
-    const chain = chat ? getChainById(chat.token_chain_id) : null;
+    const chain = chatData ? getChainById(chatData.token_chain_id) : null;
+
+    // Moderation hooks
+    const { rules: chatRules } = useChatRules("token", chatData?.id || null);
+    const roomBans = useRoomBans("token", chatData?.id || null);
+    const moderation = useModeration(userAddress, chatData?.id || null);
+    const { getRoleBadge } = useRoleBadges();
+    const { isAdmin: isGlobalAdmin } = useAdminCheck(userAddress);
+    const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
+
+    // Permission checks
+    const isChatCreator = chatData?.created_by?.toLowerCase() === userAddress?.toLowerCase();
+    const canModerateChat = isGlobalAdmin || isChatCreator || moderation.permissions.isModerator;
+    const canEditSettings = isGlobalAdmin || isChatCreator || moderation.permissions.canManageMods;
 
     // Message reactions
     const {
         reactions: msgReactions,
         fetchReactions: fetchMsgReactions,
         toggleReaction: toggleMsgReaction,
-    } = useMessageReactions(userAddress, isOpen && chat ? chat.id : null);
+    } = useMessageReactions(userAddress, isOpen && chatData ? chatData.id : null);
+
+    // Sync chat prop changes
+    useEffect(() => {
+        if (chat) {
+            setChatData(chat);
+            setChatIcon(chat.icon_url || null);
+        }
+    }, [chat]);
+
+    // Filter out messages from blocked users
+    const filteredMessages = useMemo(
+        () => messages.filter((msg) => !isUserBlocked(msg.sender_address)),
+        [messages, isUserBlocked],
+    );
 
     // Fetch reactions when messages change
     useEffect(() => {
-        const messageIds = messages.map((msg) => msg.id);
+        const messageIds = filteredMessages.map((msg) => msg.id);
         if (messageIds.length > 0) {
             fetchMsgReactions(messageIds);
         }
-    }, [messages, fetchMsgReactions]);
+    }, [filteredMessages, fetchMsgReactions]);
 
     // Mentionable users from message senders
     const mentionableUsers: MentionUser[] = useMemo(() => {
         const userMap = new Map<string, MentionUser>();
-        messages.forEach((msg) => {
+        filteredMessages.forEach((msg) => {
             const address = msg.sender_address.toLowerCase();
             if (address === userAddress.toLowerCase()) return;
             if (userMap.has(address)) return;
@@ -140,7 +199,7 @@ export function TokenChatModal({
             });
         });
         return Array.from(userMap.values());
-    }, [messages, userAddress, getUserInfo]);
+    }, [filteredMessages, userAddress, getUserInfo]);
 
     // Helpers
     const getDisplayName = useCallback(
@@ -162,7 +221,7 @@ export function TokenChatModal({
     // Fetch messages
     const fetchMessages = useCallback(
         async (before?: string) => {
-            if (!chat) return;
+            if (!chatData) return;
             setIsLoading(true);
             try {
                 const params = new URLSearchParams({
@@ -171,7 +230,7 @@ export function TokenChatModal({
                 if (before) params.set("before", before);
 
                 const res = await fetch(
-                    `/api/token-chats/${chat.id}/messages?${params}`,
+                    `/api/token-chats/${chatData.id}/messages?${params}`,
                 );
                 const data = await res.json();
                 if (res.ok) {
@@ -188,26 +247,25 @@ export function TokenChatModal({
                 setIsLoading(false);
             }
         },
-        [chat, userAddress],
+        [chatData, userAddress],
     );
 
     // Initial load + polling
     useEffect(() => {
-        if (!isOpen || !chat) return;
+        if (!isOpen || !chatData) return;
 
         fetchMessages();
-        setMemberCount(chat.member_count || 0);
+        setMemberCount(chatData.member_count || 0);
 
         pollRef.current = setInterval(async () => {
             try {
                 const res = await fetch(
-                    `/api/token-chats/${chat.id}/messages?userAddress=${userAddress.toLowerCase()}&limit=50`,
+                    `/api/token-chats/${chatData.id}/messages?userAddress=${userAddress.toLowerCase()}&limit=50`,
                 );
                 const data = await res.json();
                 if (res.ok && data.messages?.length > 0) {
                     const latest = data.messages[data.messages.length - 1];
                     if (latest.id !== lastMessageIdRef.current) {
-                        // Count new messages if user has scrolled up
                         if (userScrolledUpRef.current) {
                             const prevIds = new Set(messages.map((m) => m.id));
                             const newCount = data.messages.filter(
@@ -226,22 +284,22 @@ export function TokenChatModal({
         return () => {
             if (pollRef.current) clearInterval(pollRef.current);
         };
-    }, [isOpen, chat, fetchMessages, userAddress, messages]);
+    }, [isOpen, chatData, fetchMessages, userAddress, messages]);
 
     // Track last message ID
     useEffect(() => {
-        if (messages.length > 0) {
-            lastMessageIdRef.current = messages[messages.length - 1].id;
+        if (filteredMessages.length > 0) {
+            lastMessageIdRef.current = filteredMessages[filteredMessages.length - 1].id;
         }
-    }, [messages]);
+    }, [filteredMessages]);
 
-    // Auto-scroll on new messages (if not scrolled up)
+    // Auto-scroll on new messages
     useEffect(() => {
         if (!userScrolledUpRef.current || justSentMessageRef.current) {
             messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             justSentMessageRef.current = false;
         }
-    }, [messages]);
+    }, [filteredMessages]);
 
     // Handle messages scroll
     const handleMessagesScroll = useCallback(() => {
@@ -257,7 +315,14 @@ export function TokenChatModal({
 
     // Send message
     const handleSend = useCallback(async () => {
-        if (!messageInput.trim() || !chat || isSending) return;
+        if (!messageInput.trim() || !chatData || isSending) return;
+
+        // Validate against chat rules
+        const ruleError = validateMessageClientSide(chatRules, messageInput.trim(), "text", canModerateChat);
+        if (ruleError) {
+            toast.error(ruleError);
+            return;
+        }
 
         const content = messageInput.trim();
         setMessageInput("");
@@ -265,7 +330,7 @@ export function TokenChatModal({
         justSentMessageRef.current = true;
 
         try {
-            const res = await fetch(`/api/token-chats/${chat.id}/messages`, {
+            const res = await fetch(`/api/token-chats/${chatData.id}/messages`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -285,16 +350,16 @@ export function TokenChatModal({
         } finally {
             setIsSending(false);
         }
-    }, [messageInput, chat, isSending, userAddress, replyingTo]);
+    }, [messageInput, chatData, isSending, userAddress, replyingTo, chatRules]);
 
     // Send pixel art
     const handleSendPixelArt = useCallback(
         async (dataUrl: string) => {
-            if (!chat) return;
+            if (!chatData) return;
             setIsSending(true);
             justSentMessageRef.current = true;
             try {
-                const res = await fetch(`/api/token-chats/${chat.id}/messages`, {
+                const res = await fetch(`/api/token-chats/${chatData.id}/messages`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -312,17 +377,17 @@ export function TokenChatModal({
                 setIsSending(false);
             }
         },
-        [chat, userAddress],
+        [chatData, userAddress],
     );
 
     // Send GIF
     const handleSendGif = useCallback(
         async (gifUrl: string) => {
-            if (!chat) return;
+            if (!chatData) return;
             setIsSending(true);
             justSentMessageRef.current = true;
             try {
-                const res = await fetch(`/api/token-chats/${chat.id}/messages`, {
+                const res = await fetch(`/api/token-chats/${chatData.id}/messages`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -340,7 +405,7 @@ export function TokenChatModal({
                 setIsSending(false);
             }
         },
-        [chat, userAddress],
+        [chatData, userAddress],
     );
 
     // Cancel reply
@@ -352,19 +417,184 @@ export function TokenChatModal({
     // Delete message
     const handleDeleteMessage = useCallback(
         async (messageId: string) => {
-            if (!chat) return;
+            if (!chatData) return;
             try {
-                const res = await fetch(`/api/token-chats/${chat.id}/messages?messageId=${messageId}&userAddress=${userAddress.toLowerCase()}`, {
-                    method: "DELETE",
-                });
+                const res = await fetch(
+                    `/api/token-chats/${chatData.id}/messages?messageId=${messageId}&userAddress=${userAddress.toLowerCase()}`,
+                    { method: "DELETE" },
+                );
                 if (res.ok) {
                     setMessages((prev) => prev.filter((m) => m.id !== messageId));
+                    toast.success("Message deleted");
+                } else {
+                    const data = await res.json();
+                    toast.error(data.error || "Failed to delete message");
                 }
             } catch (err) {
                 console.error("[TokenChat] Delete error:", err);
             }
         },
-        [chat, userAddress],
+        [chatData, userAddress],
+    );
+
+    // Icon upload
+    const handleIconUpload = useCallback(
+        async (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file || !chatData) return;
+
+            setIsUploadingIcon(true);
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("userAddress", userAddress);
+
+                const res = await fetch(`/api/token-chats/${chatData.id}/icon`, {
+                    method: "POST",
+                    body: formData,
+                });
+                const data = await res.json();
+
+                if (!res.ok) throw new Error(data.error || "Failed to upload icon");
+
+                setChatIcon(data.icon_url);
+                if (chatData) chatData.icon_url = data.icon_url;
+                toast.success("Chat icon updated!");
+            } catch (err) {
+                toast.error(err instanceof Error ? err.message : "Failed to upload icon");
+            } finally {
+                setIsUploadingIcon(false);
+                e.target.value = "";
+            }
+        },
+        [chatData, userAddress],
+    );
+
+    // Remove icon
+    const handleRemoveIcon = useCallback(async () => {
+        if (!chatData) return;
+        try {
+            const res = await fetch(
+                `/api/token-chats/${chatData.id}/icon?userAddress=${userAddress.toLowerCase()}`,
+                { method: "DELETE" },
+            );
+            if (res.ok) {
+                setChatIcon(null);
+                if (chatData) chatData.icon_url = null;
+                toast.success("Chat icon removed");
+            }
+        } catch {
+            toast.error("Failed to remove icon");
+        }
+    }, [chatData, userAddress]);
+
+    // Save settings
+    const handleSaveSettings = useCallback(async () => {
+        if (!chatData) return;
+        setIsSavingSettings(true);
+        try {
+            const res = await fetch(`/api/token-chats/${chatData.id}/settings`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userAddress: userAddress.toLowerCase(),
+                    name: editName,
+                    description: editDescription,
+                    emoji: editEmoji,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok && data.chat) {
+                setChatData(data.chat);
+                setShowSettings(false);
+                toast.success("Settings updated!");
+            } else {
+                toast.error(data.error || "Failed to update settings");
+            }
+        } catch {
+            toast.error("Failed to update settings");
+        } finally {
+            setIsSavingSettings(false);
+        }
+    }, [chatData, userAddress, editName, editDescription, editEmoji]);
+
+    // Leave chat
+    const handleLeaveChat = useCallback(async () => {
+        if (!chatData) return;
+        if (!confirm("Are you sure you want to leave this token chat?")) return;
+
+        try {
+            const res = await fetch(`/api/token-chats/${chatData.id}/leave`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userAddress: userAddress.toLowerCase() }),
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                toast.success("Left token chat");
+                onLeave?.();
+                onClose();
+            } else {
+                toast.error(data.error || "Failed to leave chat");
+            }
+        } catch {
+            toast.error("Failed to leave chat");
+        }
+    }, [chatData, userAddress, onLeave, onClose]);
+
+    // Promote/demote member
+    const handleChangeRole = useCallback(
+        async (targetAddress: string, role: string) => {
+            if (!chatData) return;
+            try {
+                const res = await fetch(`/api/token-chats/${chatData.id}/members`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress: userAddress.toLowerCase(),
+                        targetAddress,
+                        role,
+                    }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    toast.success(`User ${role === "moderator" ? "promoted to moderator" : role === "admin" ? "promoted to admin" : "demoted to member"}`);
+                    setSelectedUser(null);
+                    setUserPopupPosition(null);
+                } else {
+                    toast.error(data.error || "Failed to update role");
+                }
+            } catch {
+                toast.error("Failed to update role");
+            }
+        },
+        [chatData, userAddress],
+    );
+
+    // Kick member
+    const handleKickMember = useCallback(
+        async (targetAddress: string) => {
+            if (!chatData) return;
+            if (!confirm("Remove this member from the chat?")) return;
+            try {
+                const res = await fetch(
+                    `/api/token-chats/${chatData.id}/members?userAddress=${userAddress.toLowerCase()}&targetAddress=${targetAddress.toLowerCase()}`,
+                    { method: "DELETE" },
+                );
+                const data = await res.json();
+                if (res.ok) {
+                    toast.success("Member removed");
+                    setSelectedUser(null);
+                    setUserPopupPosition(null);
+                } else {
+                    toast.error(data.error || "Failed to remove member");
+                }
+            } catch {
+                toast.error("Failed to remove member");
+            }
+        },
+        [chatData, userAddress],
     );
 
     // Track message being acted on for callbacks
@@ -394,6 +624,7 @@ export function TokenChatModal({
                 const msg = actionMessageRef.current;
                 if (msg) {
                     navigator.clipboard.writeText(msg.content);
+                    toast.success("Copied to clipboard");
                 }
                 setShowMessageActions(false);
                 setSelectedMessage(null);
@@ -417,24 +648,59 @@ export function TokenChatModal({
                 messageContent: msg.content,
                 isOwn,
                 canEdit: false,
-                canDelete: isOwn,
+                canDelete: isOwn || canModerateChat,
             };
             setSelectedMessage(config);
             setShowMessageActions(true);
         },
-        [],
+        [canModerateChat],
+    );
+
+    // User avatar click (with moderation popup for admins/mods)
+    const handleUserClick = useCallback(
+        (address: string, event?: React.MouseEvent) => {
+            if (canModerateChat && address.toLowerCase() !== userAddress.toLowerCase()) {
+                if (event) {
+                    setUserPopupPosition({ x: event.clientX, y: event.clientY });
+                }
+                setSelectedUser(address);
+            } else {
+                onOpenUserCard?.(address);
+            }
+        },
+        [canModerateChat, userAddress, onOpenUserCard],
     );
 
     // Copy address helper
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
+        toast.success("Copied!");
     };
 
-    if (!chat) return null;
+    // Open settings with current values
+    const openSettings = useCallback(() => {
+        if (!chatData) return;
+        setEditName(chatData.name);
+        setEditDescription(chatData.description || "");
+        setEditEmoji(chatData.emoji || "🪙");
+        setShowSettings(true);
+        setShowInfo(false);
+    }, [chatData]);
+
+    if (!chatData) return null;
 
     const explorerUrl = chain?.explorerUrl
-        ? `${chain.explorerUrl}/token/${chat.token_address}`
-        : `https://etherscan.io/token/${chat.token_address}`;
+        ? `${chain.explorerUrl}/token/${chatData.token_address}`
+        : `https://etherscan.io/token/${chatData.token_address}`;
+
+    // Determine chat avatar display
+    const chatAvatarContent = chatIcon ? (
+        <img src={chatIcon} alt={chatData.name} className="w-10 h-10 rounded-xl object-cover" />
+    ) : (
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-xl shrink-0">
+            {chatData.emoji || "🪙"}
+        </div>
+    );
 
     return (
         <>
@@ -465,15 +731,13 @@ export function TokenChatModal({
                                     className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
                                     onClick={() => setShowInfo(!showInfo)}
                                 >
-                                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center text-xl shrink-0">
-                                        {chat.emoji || "🪙"}
-                                    </div>
+                                    {chatAvatarContent}
                                     <div className="flex-1 min-w-0 pr-1">
                                         <div className="flex items-center gap-1.5">
                                             <h2 className="font-semibold text-white text-[15px] truncate leading-tight">
-                                                {chat.name}
+                                                {chatData.name}
                                             </h2>
-                                            {chat.is_official && (
+                                            {chatData.is_official && (
                                                 <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold rounded-full border border-emerald-500/30 shrink-0">
                                                     OFFICIAL
                                                 </span>
@@ -487,18 +751,8 @@ export function TokenChatModal({
                                             }}
                                             className="text-zinc-500 text-xs truncate hover:text-zinc-300 transition-colors flex items-center gap-1 text-left w-full"
                                         >
-                                            <svg
-                                                className="w-3.5 h-3.5 shrink-0"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                                                />
+                                            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                             </svg>
                                             {memberCount} {memberCount === 1 ? "member" : "members"}
                                         </button>
@@ -508,8 +762,20 @@ export function TokenChatModal({
                                 <div className="flex items-center gap-1 shrink-0">
                                     {/* Token badge */}
                                     <span className="text-xs text-zinc-500 flex items-center gap-1 px-1.5">
-                                        {chain?.icon} {chat.token_symbol}
+                                        {chain?.icon} {chatData.token_symbol}
                                     </span>
+                                    {/* Rules button (for admins/mods) */}
+                                    {canModerateChat && (
+                                        <button
+                                            onClick={() => setShowRulesPanel(true)}
+                                            className="p-2.5 rounded-xl transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
+                                            title="Chat Rules"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                            </svg>
+                                        </button>
+                                    )}
                                     {/* Info button */}
                                     <button
                                         onClick={() => setShowInfo(!showInfo)}
@@ -548,7 +814,6 @@ export function TokenChatModal({
                                         <div className="bg-gradient-to-b from-zinc-800/80 to-zinc-900/80">
                                             {/* Hero Section */}
                                             <div className="relative h-36 bg-gradient-to-br from-amber-600/20 via-orange-500/10 to-zinc-900">
-                                                {/* Decorative grid pattern */}
                                                 <div className="absolute inset-0 opacity-10">
                                                     <div className="w-full h-full" style={{
                                                         backgroundImage: "radial-gradient(circle, rgba(255,85,0,0.3) 1px, transparent 1px)",
@@ -557,19 +822,47 @@ export function TokenChatModal({
                                                 </div>
                                                 <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-zinc-900/90 to-transparent" />
 
-                                                {/* Token badge overlay */}
                                                 <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between">
                                                     <div className="flex items-center gap-3">
-                                                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-orange-500/20 flex items-center justify-center text-2xl border-2 border-zinc-900">
-                                                            {chat.emoji || "🪙"}
+                                                        {/* Chat icon with upload overlay */}
+                                                        <div className="relative group">
+                                                            {chatIcon ? (
+                                                                <img src={chatIcon} alt={chatData.name} className="w-14 h-14 rounded-2xl border-2 border-zinc-900 object-cover shadow-lg shadow-orange-500/20" />
+                                                            ) : (
+                                                                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 shadow-lg shadow-orange-500/20 flex items-center justify-center text-2xl border-2 border-zinc-900">
+                                                                    {chatData.emoji || "🪙"}
+                                                                </div>
+                                                            )}
+                                                            {canEditSettings && (
+                                                                <button
+                                                                    onClick={() => iconInputRef.current?.click()}
+                                                                    className="absolute inset-0 rounded-2xl bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                                                >
+                                                                    {isUploadingIcon ? (
+                                                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                                    ) : (
+                                                                        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                        </svg>
+                                                                    )}
+                                                                </button>
+                                                            )}
+                                                            <input
+                                                                ref={iconInputRef}
+                                                                type="file"
+                                                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                                                className="hidden"
+                                                                onChange={handleIconUpload}
+                                                            />
                                                         </div>
                                                         <div>
                                                             <h3 className="font-bold text-white text-lg drop-shadow-lg">
-                                                                {chat.token_name} ({chat.token_symbol})
+                                                                {chatData.token_name} ({chatData.token_symbol})
                                                             </h3>
                                                             <span className="text-xs text-zinc-300 flex items-center gap-1">
                                                                 {chain?.icon} {chain?.name}
-                                                                {chat.is_official && (
+                                                                {chatData.is_official && (
                                                                     <span className="ml-1 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold rounded-full border border-emerald-500/30">
                                                                         OFFICIAL
                                                                     </span>
@@ -577,14 +870,14 @@ export function TokenChatModal({
                                                             </span>
                                                         </div>
                                                     </div>
-                                                    {chat.min_balance_display &&
-                                                        parseFloat(chat.min_balance_display) > 0 && (
+                                                    {chatData.min_balance_display &&
+                                                        parseFloat(chatData.min_balance_display) > 0 && (
                                                             <div className="bg-black/60 backdrop-blur-sm rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
                                                                 <svg className="w-3.5 h-3.5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                                                 </svg>
                                                                 <span className="text-white text-xs font-semibold">
-                                                                    {Number(chat.min_balance_display).toLocaleString()} {chat.token_symbol}
+                                                                    {Number(chatData.min_balance_display).toLocaleString()} {chatData.token_symbol}
                                                                 </span>
                                                             </div>
                                                         )}
@@ -606,10 +899,10 @@ export function TokenChatModal({
                                                         </p>
                                                         <div className="flex items-center gap-2">
                                                             <p className="text-sm text-zinc-200 font-mono truncate">
-                                                                {chat.token_address}
+                                                                {chatData.token_address}
                                                             </p>
                                                             <button
-                                                                onClick={() => copyToClipboard(chat.token_address)}
+                                                                onClick={() => copyToClipboard(chatData.token_address)}
                                                                 className="text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
                                                                 title="Copy address"
                                                             >
@@ -643,8 +936,9 @@ export function TokenChatModal({
                                                     </a>
                                                     <button
                                                         onClick={() => {
-                                                            const inviteText = `Join the ${chat.name} token chat on Spritz!`;
+                                                            const inviteText = `Join the ${chatData.name} token chat on Spritz!`;
                                                             navigator.clipboard.writeText(inviteText);
+                                                            toast.success("Invite text copied!");
                                                         }}
                                                         className="py-3 px-4 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-white text-sm font-medium rounded-xl transition-all"
                                                     >
@@ -655,10 +949,10 @@ export function TokenChatModal({
                                                 </div>
 
                                                 {/* Description */}
-                                                {chat.description && (
+                                                {chatData.description && (
                                                     <div className="p-3 bg-zinc-800/30 rounded-xl border border-zinc-700/50">
                                                         <p className="text-sm text-zinc-300 leading-relaxed">
-                                                            {chat.description}
+                                                            {chatData.description}
                                                         </p>
                                                     </div>
                                                 )}
@@ -670,7 +964,7 @@ export function TokenChatModal({
                                                         <p className="text-xs text-zinc-500">Members</p>
                                                     </div>
                                                     <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                        <p className="text-2xl font-bold text-white">{messages.length}</p>
+                                                        <p className="text-2xl font-bold text-white">{filteredMessages.length}</p>
                                                         <p className="text-xs text-zinc-500">Messages</p>
                                                     </div>
                                                     <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
@@ -688,10 +982,63 @@ export function TokenChatModal({
                                                         <span className="text-amber-400 text-xs font-semibold">Token-Gated Access</span>
                                                     </div>
                                                     <p className="text-zinc-400 text-xs leading-relaxed">
-                                                        {chat.min_balance_display && parseFloat(chat.min_balance_display) > 0
-                                                            ? `Members must hold at least ${Number(chat.min_balance_display).toLocaleString()} ${chat.token_symbol} to join. Balance is checked across all connected wallets including EOA, Spritz Wallet, and Vaults.`
-                                                            : `Open to all ${chat.token_symbol} holders. No minimum balance required.`}
+                                                        {chatData.min_balance_display && parseFloat(chatData.min_balance_display) > 0
+                                                            ? `Members must hold at least ${Number(chatData.min_balance_display).toLocaleString()} ${chatData.token_symbol} to join. Balance is checked across all connected wallets including EOA, Spritz Wallet, and Vaults.`
+                                                            : `Open to all ${chatData.token_symbol} holders. No minimum balance required.`}
                                                     </p>
+                                                </div>
+
+                                                {/* Admin Actions */}
+                                                <div className="flex flex-col gap-2">
+                                                    {canEditSettings && (
+                                                        <>
+                                                            <button
+                                                                onClick={openSettings}
+                                                                className="w-full flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors text-left"
+                                                            >
+                                                                <div className="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                                                                    <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                    </svg>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-sm text-white font-medium">Edit Chat Settings</p>
+                                                                    <p className="text-xs text-zinc-500">Name, description, emoji</p>
+                                                                </div>
+                                                            </button>
+                                                            {chatIcon && (
+                                                                <button
+                                                                    onClick={handleRemoveIcon}
+                                                                    className="w-full flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors text-left"
+                                                                >
+                                                                    <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center">
+                                                                        <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                        </svg>
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm text-red-400 font-medium">Remove Custom Icon</p>
+                                                                        <p className="text-xs text-zinc-500">Revert to emoji</p>
+                                                                    </div>
+                                                                </button>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                    {/* Leave chat */}
+                                                    <button
+                                                        onClick={handleLeaveChat}
+                                                        className="w-full flex items-center gap-3 p-3 bg-zinc-800/50 hover:bg-red-500/10 rounded-xl transition-colors text-left group"
+                                                    >
+                                                        <div className="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center">
+                                                            <svg className="w-4 h-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                            </svg>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm text-red-400 font-medium group-hover:text-red-300">Leave Chat</p>
+                                                            <p className="text-xs text-zinc-500">You can rejoin if you still meet requirements</p>
+                                                        </div>
+                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -699,19 +1046,22 @@ export function TokenChatModal({
                                 )}
                             </AnimatePresence>
 
+                            {/* Chat Rules Banner */}
+                            <ChatRulesBanner chatType="token" chatId={chatData.id} />
+
                             {/* Messages */}
                             <div
                                 ref={messagesContainerRef}
                                 onScroll={handleMessagesScroll}
                                 className="flex-1 overflow-y-auto p-4 space-y-4"
                             >
-                                {isLoading && messages.length === 0 ? (
+                                {isLoading && filteredMessages.length === 0 ? (
                                     <ChatSkeleton />
-                                ) : messages.length === 0 ? (
+                                ) : filteredMessages.length === 0 ? (
                                     <ChatEmptyState
                                         title="Start the conversation"
-                                        subtitle={`Be the first to say something in ${chat.name}!`}
-                                        icon={chat.emoji || "🪙"}
+                                        subtitle={`Be the first to say something in ${chatData.name}!`}
+                                        icon={chatData.emoji || "🪙"}
                                     />
                                 ) : (
                                     <>
@@ -719,8 +1069,8 @@ export function TokenChatModal({
                                         {hasMore && (
                                             <button
                                                 onClick={() => {
-                                                    if (messages.length > 0) {
-                                                        fetchMessages(messages[0].created_at);
+                                                    if (filteredMessages.length > 0) {
+                                                        fetchMessages(filteredMessages[0].created_at);
                                                     }
                                                 }}
                                                 disabled={isLoading}
@@ -730,29 +1080,31 @@ export function TokenChatModal({
                                             </button>
                                         )}
 
-                                        {messages.map((msg, idx) => {
+                                        {filteredMessages.map((msg, idx) => {
                                             const isOwn =
                                                 msg.sender_address.toLowerCase() ===
                                                 userAddress.toLowerCase();
                                             const showAvatar =
                                                 idx === 0 ||
-                                                messages[idx - 1].sender_address !== msg.sender_address;
+                                                filteredMessages[idx - 1].sender_address !== msg.sender_address;
                                             const isGif = isGifMessage(msg.content);
                                             const isPixelArt = isPixelArtMessage(msg.content);
                                             const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
                                             const urls = !isGif && !isPixelArt ? detectUrls(msg.content) : [];
                                             const messageReactions = msgReactions[msg.id] || [];
                                             const hasReactions = messageReactions.some((r) => r.count > 0);
+                                            const roleBadge = getRoleBadge(msg.sender_address);
+                                            const isMuted = moderation.isUserMuted?.(msg.sender_address);
 
                                             return (
                                                 <div
                                                     key={msg.id}
-                                                    className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""}`}
+                                                    className={`flex gap-2 ${isOwn ? "flex-row-reverse" : ""} ${isMuted ? "opacity-50" : ""}`}
                                                 >
                                                     {/* Avatar */}
                                                     {showAvatar && !isOwn ? (
                                                         <button
-                                                            onClick={() => onOpenUserCard?.(msg.sender_address)}
+                                                            onClick={(e) => handleUserClick(msg.sender_address, e)}
                                                             className="shrink-0"
                                                         >
                                                             <AvatarWithStatus
@@ -770,10 +1122,11 @@ export function TokenChatModal({
                                                             isOwn ? "items-end" : "items-start"
                                                         } max-w-[75%]`}
                                                     >
-                                                        {/* Sender name */}
+                                                        {/* Sender name + role badge */}
                                                         {showAvatar && !isOwn && (
-                                                            <span className="text-xs text-zinc-500 mb-1 ml-1">
+                                                            <span className="text-xs text-zinc-500 mb-1 ml-1 flex items-center gap-1">
                                                                 {getDisplayName(msg.sender_address)}
+                                                                {roleBadge && <RoleBadgeTag role={roleBadge} />}
                                                             </span>
                                                         )}
 
@@ -941,7 +1294,7 @@ export function TokenChatModal({
                                             placeholder={
                                                 replyingTo
                                                     ? "Type your reply..."
-                                                    : `Message ${chat.name}...`
+                                                    : `Message ${chatData.name}...`
                                             }
                                             users={mentionableUsers}
                                             className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
@@ -967,6 +1320,251 @@ export function TokenChatModal({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Edit Settings Modal */}
+            <AnimatePresence>
+                {showSettings && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4"
+                        onClick={() => setShowSettings(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.95, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.95, opacity: 0 }}
+                            className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md overflow-hidden"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                                <h3 className="font-semibold text-white">Edit Chat Settings</h3>
+                                <button
+                                    onClick={() => setShowSettings(false)}
+                                    className="p-1.5 text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition-colors"
+                                >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div className="p-4 space-y-4">
+                                <div>
+                                    <label className="block text-xs text-zinc-400 mb-1.5">Chat Name</label>
+                                    <input
+                                        type="text"
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        maxLength={50}
+                                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-zinc-400 mb-1.5">Description</label>
+                                    <textarea
+                                        value={editDescription}
+                                        onChange={(e) => setEditDescription(e.target.value)}
+                                        maxLength={500}
+                                        rows={3}
+                                        className="w-full px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500] resize-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-zinc-400 mb-1.5">Emoji</label>
+                                    <input
+                                        type="text"
+                                        value={editEmoji}
+                                        onChange={(e) => setEditEmoji(e.target.value)}
+                                        maxLength={4}
+                                        className="w-20 px-3 py-2.5 bg-zinc-800 border border-zinc-700 rounded-xl text-white text-2xl text-center focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
+                                    />
+                                </div>
+                                <button
+                                    onClick={handleSaveSettings}
+                                    disabled={!editName.trim() || isSavingSettings}
+                                    className="w-full py-3 bg-[#FF5500] hover:bg-[#E64D00] disabled:bg-zinc-700 disabled:text-zinc-500 text-white font-semibold rounded-xl transition-colors"
+                                >
+                                    {isSavingSettings ? "Saving..." : "Save Changes"}
+                                </button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* User Moderation Popup */}
+            <AnimatePresence>
+                {selectedUser && userPopupPosition && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60]"
+                        onClick={() => {
+                            setSelectedUser(null);
+                            setUserPopupPosition(null);
+                        }}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="absolute bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden w-56"
+                            style={{
+                                left: Math.min(userPopupPosition.x, window.innerWidth - 240),
+                                top: Math.min(userPopupPosition.y, window.innerHeight - 350),
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            {/* User Info */}
+                            <div className="p-3 border-b border-zinc-800">
+                                <div className="flex items-center gap-2">
+                                    <AvatarWithStatus
+                                        name={getDisplayName(selectedUser)}
+                                        src={getAvatar(selectedUser)}
+                                        size="sm"
+                                    />
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-white truncate">
+                                            {getDisplayName(selectedUser)}
+                                        </p>
+                                        <p className="text-[10px] text-zinc-500 font-mono truncate">
+                                            {selectedUser.slice(0, 10)}...
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="p-1.5">
+                                <button
+                                    onClick={() => {
+                                        onOpenUserCard?.(selectedUser);
+                                        setSelectedUser(null);
+                                        setUserPopupPosition(null);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    View Profile
+                                </button>
+
+                                {canModerateChat && (
+                                    <>
+                                        <div className="h-px bg-zinc-800 my-1" />
+
+                                        {/* Promote to Moderator */}
+                                        <button
+                                            onClick={() => handleChangeRole(selectedUser, "moderator")}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                            </svg>
+                                            Make Moderator
+                                        </button>
+
+                                        {/* Demote to Member */}
+                                        <button
+                                            onClick={() => handleChangeRole(selectedUser, "member")}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800 rounded-lg transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                            </svg>
+                                            Set as Member
+                                        </button>
+
+                                        <div className="h-px bg-zinc-800 my-1" />
+
+                                        {/* Mute */}
+                                        {moderation.permissions.canMute && !moderation.isUserMuted?.(selectedUser) && (
+                                            <button
+                                                onClick={() => {
+                                                    setMuteTarget({
+                                                        address: selectedUser,
+                                                        name: getDisplayName(selectedUser),
+                                                    });
+                                                    setSelectedUser(null);
+                                                    setUserPopupPosition(null);
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                                </svg>
+                                                Mute User
+                                            </button>
+                                        )}
+
+                                        {moderation.permissions.canMute && moderation.isUserMuted?.(selectedUser) && (
+                                            <button
+                                                onClick={async () => {
+                                                    await moderation.unmuteUser(selectedUser);
+                                                    setSelectedUser(null);
+                                                    setUserPopupPosition(null);
+                                                    toast.success("User unmuted");
+                                                }}
+                                                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                                </svg>
+                                                Unmute User
+                                            </button>
+                                        )}
+
+                                        {/* Kick */}
+                                        <button
+                                            onClick={() => handleKickMember(selectedUser)}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
+                                            </svg>
+                                            Remove from Chat
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Quick Mute Dialog */}
+            {muteTarget && (
+                <QuickMuteDialog
+                    isOpen={!!muteTarget}
+                    onClose={() => setMuteTarget(null)}
+                    targetAddress={muteTarget.address}
+                    targetName={muteTarget.name}
+                    onMute={async (duration, reason) => {
+                        const success = await moderation.muteUser(muteTarget.address, {
+                            duration,
+                            reason: reason || "Muted by moderator",
+                        });
+                        if (success) {
+                            toast.success(`${muteTarget.name} has been muted`);
+                            setMuteTarget(null);
+                        }
+                        return !!success;
+                    }}
+                />
+            )}
+
+            {/* Chat Rules Panel */}
+            <ChatRulesPanel
+                isOpen={showRulesPanel}
+                onClose={() => setShowRulesPanel(false)}
+                chatType="token"
+                chatId={chatData.id}
+                chatName={chatData.name}
+            />
 
             {/* Pixel Art Editor */}
             {showPixelArt && (
@@ -999,8 +1597,8 @@ export function TokenChatModal({
 
             {/* Members List Panel */}
             <ChatMembersList
-                channelId={chat.id}
-                tokenChatId={chat.id}
+                channelId={chatData.id}
+                tokenChatId={chatData.id}
                 isOpen={showMembersList}
                 onClose={() => setShowMembersList(false)}
                 onUserClick={onOpenUserCard}
