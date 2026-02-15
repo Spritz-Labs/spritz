@@ -14,6 +14,16 @@ interface BrowseTokenChatsModalProps {
     onCreateNew: () => void;
 }
 
+type JoinErrorInfo = {
+    chatId: string;
+    message: string;
+    required?: string;
+    actual?: string;
+    symbol?: string;
+    walletsChecked?: number;
+    breakdown?: { label: string; balance: string }[];
+};
+
 export function BrowseTokenChatsModal({
     isOpen,
     onClose,
@@ -27,7 +37,7 @@ export function BrowseTokenChatsModal({
     const [search, setSearch] = useState("");
     const [selectedChainId, setSelectedChainId] = useState<number | null>(null);
     const [joiningId, setJoiningId] = useState<string | null>(null);
-    const [joinError, setJoinError] = useState<string | null>(null);
+    const [joinError, setJoinError] = useState<JoinErrorInfo | null>(null);
     const [tab, setTab] = useState<"browse" | "my">("browse");
 
     const fetchChats = useCallback(async () => {
@@ -55,6 +65,7 @@ export function BrowseTokenChatsModal({
     useEffect(() => {
         if (isOpen) {
             fetchChats();
+            setJoinError(null);
         }
     }, [isOpen, fetchChats]);
 
@@ -90,15 +101,27 @@ export function BrowseTokenChatsModal({
                 onJoinChat(chat);
             } else {
                 if (res.status === 403) {
-                    setJoinError(
-                        `Insufficient balance. Need ${data.required} ${data.symbol}, you have ${data.actual}.`,
-                    );
+                    setJoinError({
+                        chatId: chat.id,
+                        message: `Need ${data.required} ${data.symbol}, you have ${data.actual} total`,
+                        required: data.required,
+                        actual: data.actual,
+                        symbol: data.symbol,
+                        walletsChecked: data.walletsChecked,
+                        breakdown: data.breakdown,
+                    });
                 } else {
-                    setJoinError(data.error || "Failed to join");
+                    setJoinError({
+                        chatId: chat.id,
+                        message: data.error || "Failed to join",
+                    });
                 }
             }
         } catch {
-            setJoinError("Network error");
+            setJoinError({
+                chatId: chat.id,
+                message: "Network error",
+            });
         } finally {
             setJoiningId(null);
         }
@@ -124,7 +147,7 @@ export function BrowseTokenChatsModal({
                         {/* Header */}
                         <div className="p-4 border-b border-zinc-800">
                             <div className="flex items-center justify-between mb-3">
-                                <h2 className="text-xl font-semibold text-white">Token Chats</h2>
+                                <h2 className="text-lg font-semibold text-white">Token Chats</h2>
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={onCreateNew}
@@ -214,19 +237,6 @@ export function BrowseTokenChatsModal({
                             </div>
                         </div>
 
-                        {/* Error */}
-                        {joinError && (
-                            <div className="mx-4 mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
-                                <p className="text-red-400 text-sm">{joinError}</p>
-                                <button
-                                    onClick={() => setJoinError(null)}
-                                    className="text-red-400/70 text-xs mt-1 hover:text-red-400"
-                                >
-                                    Dismiss
-                                </button>
-                            </div>
-                        )}
-
                         {/* Chat List */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-2">
                             {isLoading && chats.length === 0 && (
@@ -259,6 +269,7 @@ export function BrowseTokenChatsModal({
 
                             {chats.map((chat) => {
                                 const chatChain = getChainById(chat.token_chain_id);
+                                const chatJoinError = joinError?.chatId === chat.id ? joinError : null;
                                 return (
                                     <motion.div
                                         key={chat.id}
@@ -330,6 +341,49 @@ export function BrowseTokenChatsModal({
                                                 )}
                                             </div>
                                         </div>
+
+                                        {/* Inline join error with wallet breakdown */}
+                                        {chatJoinError && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: "auto" }}
+                                                className="mt-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg"
+                                            >
+                                                <div className="flex items-start gap-2">
+                                                    <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                    </svg>
+                                                    <div className="flex-1">
+                                                        <p className="text-red-400 text-xs font-medium">
+                                                            {chatJoinError.message}
+                                                        </p>
+                                                        {chatJoinError.walletsChecked && chatJoinError.walletsChecked > 1 && (
+                                                            <p className="text-red-400/60 text-[10px] mt-1">
+                                                                Checked {chatJoinError.walletsChecked} wallets (EOA + Spritz Wallet + Vaults)
+                                                            </p>
+                                                        )}
+                                                        {chatJoinError.breakdown && chatJoinError.breakdown.length > 0 && (
+                                                            <div className="mt-1.5 space-y-0.5">
+                                                                {chatJoinError.breakdown.map((b, i) => (
+                                                                    <div key={i} className="flex items-center justify-between text-[10px]">
+                                                                        <span className="text-red-400/70">{b.label}</span>
+                                                                        <span className="text-red-400/70">{b.balance} {chatJoinError.symbol}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setJoinError(null)}
+                                                        className="text-red-400/50 hover:text-red-400 shrink-0"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </motion.div>
+                                        )}
                                     </motion.div>
                                 );
                             })}

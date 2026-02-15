@@ -29,7 +29,60 @@ function getRpcUrl(chainId: number): string {
     return fallbacks[chainId] || fallbacks[1];
 }
 
-// POST /api/token-chats/[id]/join - Verify balance and join
+// Collect all wallet addresses for a user (EOA, Smart Wallet, Vaults)
+async function getAllWalletAddresses(userAddress: string): Promise<{ address: string; label: string }[]> {
+    const addresses: { address: string; label: string }[] = [
+        { address: userAddress.toLowerCase(), label: "Wallet" },
+    ];
+
+    try {
+        // Get Smart Wallet address
+        const { data: userData } = await supabase
+            .from("shout_users")
+            .select("smart_wallet_address")
+            .eq("wallet_address", userAddress.toLowerCase())
+            .single();
+
+        if (userData?.smart_wallet_address && userData.smart_wallet_address.toLowerCase() !== userAddress.toLowerCase()) {
+            addresses.push({
+                address: userData.smart_wallet_address.toLowerCase(),
+                label: "Spritz Wallet",
+            });
+        }
+
+        // Get Vault addresses
+        const swAddr = userData?.smart_wallet_address?.toLowerCase() || userAddress.toLowerCase();
+        const { data: vaultMembers } = await supabase
+            .from("vault_members")
+            .select("vault_id")
+            .eq("smart_wallet_address", swAddr);
+
+        if (vaultMembers && vaultMembers.length > 0) {
+            const vaultIds = vaultMembers.map((vm) => vm.vault_id);
+            const { data: vaults } = await supabase
+                .from("vaults")
+                .select("name, safe_address")
+                .in("id", vaultIds);
+
+            if (vaults) {
+                for (const vault of vaults) {
+                    if (vault.safe_address) {
+                        addresses.push({
+                            address: vault.safe_address.toLowerCase(),
+                            label: vault.name || "Vault",
+                        });
+                    }
+                }
+            }
+        }
+    } catch {
+        // If vault/smart wallet lookup fails, just use EOA
+    }
+
+    return addresses;
+}
+
+// POST /api/token-chats/[id]/join - Verify balance across all wallets and join
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
@@ -67,37 +120,65 @@ export async function POST(
             return NextResponse.json({ success: true, alreadyMember: true });
         }
 
-        // Verify token balance on-chain
+        // Get all wallet addresses for this user
+        const walletAddresses = await getAllWalletAddresses(userAddress);
+        console.log(`[token-chats/join] Checking balance across ${walletAddresses.length} wallets for ${userAddress}`);
+
+        // Verify token balance on-chain across all wallets
         const chainId = chat.token_chain_id;
         const client = createPublicClient({
             transport: http(getRpcUrl(chainId)),
         });
 
-        let balance: bigint;
-        try {
-            balance = await client.readContract({
-                address: getAddress(chat.token_address),
-                abi: ERC20_ABI,
-                functionName: "balanceOf",
-                args: [getAddress(userAddress)],
-            }) as bigint;
-        } catch {
-            return NextResponse.json(
-                { error: "Could not verify token balance. Try again." },
-                { status: 500 },
-            );
+        let totalBalance = BigInt(0);
+        const balanceBreakdown: { label: string; address: string; balance: bigint }[] = [];
+
+        // Check balance on all wallets in parallel
+        const balanceChecks = walletAddresses.map(async (wallet) => {
+            try {
+                const balance = await client.readContract({
+                    address: getAddress(chat.token_address),
+                    abi: ERC20_ABI,
+                    functionName: "balanceOf",
+                    args: [getAddress(wallet.address)],
+                }) as bigint;
+                return { ...wallet, balance };
+            } catch {
+                return { ...wallet, balance: BigInt(0) };
+            }
+        });
+
+        const results = await Promise.all(balanceChecks);
+        for (const r of results) {
+            totalBalance += r.balance;
+            balanceBreakdown.push({
+                label: r.label,
+                address: r.address,
+                balance: r.balance,
+            });
         }
 
         const minBalance = BigInt(chat.min_balance || "0");
-        if (balance < minBalance) {
+        if (totalBalance < minBalance) {
             const decimals = chat.token_decimals || 18;
             const required = Number(minBalance) / Math.pow(10, decimals);
-            const actual = Number(balance) / Math.pow(10, decimals);
+            const actualTotal = Number(totalBalance) / Math.pow(10, decimals);
+
+            // Build breakdown for the error
+            const breakdown = balanceBreakdown
+                .filter((b) => b.balance > BigInt(0))
+                .map((b) => ({
+                    label: b.label,
+                    balance: (Number(b.balance) / Math.pow(10, decimals)).toLocaleString(),
+                }));
+
             return NextResponse.json({
                 error: "Insufficient token balance",
                 required: required.toLocaleString(),
-                actual: actual.toLocaleString(),
+                actual: actualTotal.toLocaleString(),
                 symbol: chat.token_symbol,
+                breakdown,
+                walletsChecked: walletAddresses.length,
             }, { status: 403 });
         }
 
@@ -108,7 +189,7 @@ export async function POST(
                 chat_id: chatId,
                 member_address: userAddress.toLowerCase(),
                 role: "member",
-                verified_balance: balance.toString(),
+                verified_balance: totalBalance.toString(),
                 verified_at: new Date().toISOString(),
             });
 
@@ -117,7 +198,11 @@ export async function POST(
             return NextResponse.json({ error: "Failed to join" }, { status: 500 });
         }
 
-        return NextResponse.json({ success: true });
+        return NextResponse.json({
+            success: true,
+            walletsChecked: walletAddresses.length,
+            totalBalance: (Number(totalBalance) / Math.pow(10, chat.token_decimals || 18)).toLocaleString(),
+        });
     } catch (err) {
         console.error("[token-chats/join] Error:", err);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

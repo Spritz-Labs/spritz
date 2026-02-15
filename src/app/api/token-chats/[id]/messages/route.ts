@@ -12,6 +12,11 @@ export type TokenChatMessage = {
     sender_address: string;
     content: string;
     reply_to: string | null;
+    reply_to_message?: {
+        id: string;
+        sender_address: string;
+        content: string;
+    } | null;
     edited_at: string | null;
     created_at: string;
 };
@@ -62,8 +67,32 @@ export async function GET(
             return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 });
         }
 
+        // Enrich with reply-to messages
+        const replyToIds = (messages || [])
+            .filter((m) => m.reply_to)
+            .map((m) => m.reply_to!);
+
+        let replyMap = new Map<string, { id: string; sender_address: string; content: string }>();
+        if (replyToIds.length > 0) {
+            const { data: replyMsgs } = await supabase
+                .from("shout_token_chat_messages")
+                .select("id, sender_address, content")
+                .in("id", [...new Set(replyToIds)]);
+
+            if (replyMsgs) {
+                for (const rm of replyMsgs) {
+                    replyMap.set(rm.id, rm);
+                }
+            }
+        }
+
+        const enrichedMessages = (messages || []).map((m) => ({
+            ...m,
+            reply_to_message: m.reply_to ? replyMap.get(m.reply_to) || null : null,
+        }));
+
         return NextResponse.json({
-            messages: (messages || []).reverse(),
+            messages: enrichedMessages.reverse(),
             hasMore: (messages || []).length === limit,
         });
     } catch (err) {

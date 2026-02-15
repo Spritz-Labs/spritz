@@ -6803,6 +6803,7 @@ function DashboardContent({
                 isOpen={isCreateTokenChatOpen}
                 onClose={() => setIsCreateTokenChatOpen(false)}
                 userAddress={userAddress}
+                smartWalletAddress={smartWallet?.smartWalletAddress}
                 onCreate={handleCreateTokenChat}
                 isCreating={isCreatingTokenChat}
             />
@@ -6836,6 +6837,7 @@ function DashboardContent({
                     userAddress={userAddress}
                     chat={selectedTokenChat}
                     getUserInfo={getAlphaUserInfo}
+                    onOpenUserCard={(address) => setUserCardAddress(address)}
                 />
             )}
 
