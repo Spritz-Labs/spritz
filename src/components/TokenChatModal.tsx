@@ -123,6 +123,7 @@ export function TokenChatModal({
     // Icon upload state
     const [chatIcon, setChatIcon] = useState<string | null>(null);
     const [isUploadingIcon, setIsUploadingIcon] = useState(false);
+    const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const iconInputRef = useRef<HTMLInputElement>(null);
 
     // User popup state for moderation
@@ -352,38 +353,76 @@ export function TokenChatModal({
         }
     }, [messageInput, chatData, isSending, userAddress, replyingTo, chatRules]);
 
-    // Send pixel art
+    // Send pixel art (upload to IPFS first, then send URL as message)
     const handleSendPixelArt = useCallback(
-        async (dataUrl: string) => {
+        async (imageData: string) => {
             if (!chatData) return;
-            setIsSending(true);
+
+            // Validate against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", canModerateChat);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
+
+            setIsUploadingPixelArt(true);
             justSentMessageRef.current = true;
             try {
+                // Upload pixel art to IPFS via the pixel-art endpoint
+                const uploadRes = await fetch("/api/pixel-art/upload", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        imageData,
+                        senderAddress: userAddress,
+                    }),
+                });
+
+                const uploadResult = await uploadRes.json();
+                if (!uploadResult.success) {
+                    throw new Error(uploadResult.error || "Failed to upload pixel art");
+                }
+
+                const pixelArtUrl = uploadResult.ipfsUrl;
+
+                // Send the IPFS URL as a pixel art message
                 const res = await fetch(`/api/token-chats/${chatData.id}/messages`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         userAddress: userAddress.toLowerCase(),
-                        content: `[PIXEL_ART]${dataUrl}`,
+                        content: `[PIXEL_ART]${pixelArtUrl}`,
                     }),
                 });
                 const data = await res.json();
                 if (res.ok && data.message) {
                     setMessages((prev) => [...prev, data.message]);
                 }
+
+                // Close the pixel art editor on success
+                setShowPixelArt(false);
             } catch (err) {
                 console.error("[TokenChat] Send pixel art error:", err);
+                toast.error("Failed to send pixel art. Please try again.");
             } finally {
-                setIsSending(false);
+                setIsUploadingPixelArt(false);
             }
         },
-        [chatData, userAddress],
+        [chatData, userAddress, chatRules, canModerateChat],
     );
 
     // Send GIF
     const handleSendGif = useCallback(
         async (gifUrl: string) => {
             if (!chatData) return;
+
+            // Validate against chat rules
+            const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", canModerateChat);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
+
             setIsSending(true);
             justSentMessageRef.current = true;
             try {
@@ -405,7 +444,7 @@ export function TokenChatModal({
                 setIsSending(false);
             }
         },
-        [chatData, userAddress],
+        [chatData, userAddress, chatRules, canModerateChat],
     );
 
     // Cancel reply
@@ -635,6 +674,16 @@ export function TokenChatModal({
                 setShowMessageActions(false);
                 setSelectedMessage(null);
             },
+            onView: () => {
+                const msg = actionMessageRef.current;
+                if (msg) {
+                    const isPixelArt = isPixelArtMessage(msg.content);
+                    const url = isPixelArt ? extractPixelArtUrl(msg.content) : msg.content;
+                    if (url) setPreviewImage(url);
+                }
+                setShowMessageActions(false);
+                setSelectedMessage(null);
+            },
         }),
         [toggleMsgReaction, handleDeleteMessage],
     );
@@ -643,12 +692,21 @@ export function TokenChatModal({
     const handleMessagePress = useCallback(
         (msg: TokenChatMessage, isOwn: boolean) => {
             actionMessageRef.current = msg;
+            const isPixelArt = isPixelArtMessage(msg.content);
+            const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
+            const isGif = isGifMessage(msg.content);
+            const isMedia = isPixelArt || isGif;
+            const mediaUrl = isPixelArt ? pixelArtUrl : isGif ? msg.content : null;
+
             const config: MessageActionConfig = {
                 messageId: msg.id,
                 messageContent: msg.content,
                 isOwn,
                 canEdit: false,
                 canDelete: isOwn || canModerateChat,
+                hasMedia: isMedia,
+                isPixelArt,
+                mediaUrl: mediaUrl || undefined,
             };
             setSelectedMessage(config);
             setShowMessageActions(true);
@@ -764,6 +822,12 @@ export function TokenChatModal({
                                     <span className="text-xs text-zinc-500 flex items-center gap-1 px-1.5">
                                         {chain?.icon} {chatData.token_symbol}
                                     </span>
+                                    {/* Messaging type badge */}
+                                    {chatData.messaging_type === "waku" && (
+                                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 text-[9px] font-bold rounded-full border border-purple-500/30">
+                                            🌐 P2P
+                                        </span>
+                                    )}
                                     {/* Rules button (for admins/mods) */}
                                     {canModerateChat && (
                                         <button
@@ -935,12 +999,27 @@ export function TokenChatModal({
                                                         </div>
                                                     </a>
                                                     <button
-                                                        onClick={() => {
-                                                            const inviteText = `Join the ${chatData.name} token chat on Spritz!`;
-                                                            navigator.clipboard.writeText(inviteText);
-                                                            toast.success("Invite text copied!");
+                                                        onClick={async () => {
+                                                            const inviteUrl = `${window.location.origin}/token-chat/${chatData.id}`;
+                                                            const inviteText = `Join the ${chatData.name} token chat on Spritz!\n\n${inviteUrl}`;
+                                                            if (navigator.share) {
+                                                                try {
+                                                                    await navigator.share({
+                                                                        title: chatData.name,
+                                                                        text: `Join the ${chatData.name} token chat on Spritz!`,
+                                                                        url: inviteUrl,
+                                                                    });
+                                                                } catch {
+                                                                    navigator.clipboard.writeText(inviteText);
+                                                                    toast.success("Invite link copied!");
+                                                                }
+                                                            } else {
+                                                                navigator.clipboard.writeText(inviteText);
+                                                                toast.success("Invite link copied!");
+                                                            }
                                                         }}
                                                         className="py-3 px-4 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-white text-sm font-medium rounded-xl transition-all"
+                                                        title="Share invite link"
                                                     >
                                                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -958,18 +1037,22 @@ export function TokenChatModal({
                                                 )}
 
                                                 {/* Stats */}
-                                                <div className="flex gap-3">
-                                                    <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                        <p className="text-2xl font-bold text-white">{memberCount}</p>
+                                                <div className="grid grid-cols-4 gap-2">
+                                                    <div className="p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                        <p className="text-xl font-bold text-white">{memberCount}</p>
                                                         <p className="text-xs text-zinc-500">Members</p>
                                                     </div>
-                                                    <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                        <p className="text-2xl font-bold text-white">{filteredMessages.length}</p>
+                                                    <div className="p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                        <p className="text-xl font-bold text-white">{filteredMessages.length}</p>
                                                         <p className="text-xs text-zinc-500">Messages</p>
                                                     </div>
-                                                    <div className="flex-1 p-3 bg-zinc-800/30 rounded-xl text-center">
-                                                        <p className="text-2xl">{chain?.icon || "🪙"}</p>
+                                                    <div className="p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                        <p className="text-xl">{chain?.icon || "🪙"}</p>
                                                         <p className="text-xs text-zinc-500">{chain?.name || "Chain"}</p>
+                                                    </div>
+                                                    <div className="p-3 bg-zinc-800/30 rounded-xl text-center">
+                                                        <p className="text-xl">{chatData.messaging_type === "waku" ? "🌐" : "☁️"}</p>
+                                                        <p className="text-xs text-zinc-500">{chatData.messaging_type === "waku" ? "P2P" : "Standard"}</p>
                                                     </div>
                                                 </div>
 
@@ -987,6 +1070,40 @@ export function TokenChatModal({
                                                             : `Open to all ${chatData.token_symbol} holders. No minimum balance required.`}
                                                     </p>
                                                 </div>
+
+                                                {/* Share Invite Link */}
+                                                <button
+                                                    onClick={async () => {
+                                                        const inviteUrl = `${window.location.origin}/token-chat/${chatData.id}`;
+                                                        const inviteText = `Join the ${chatData.name} token chat on Spritz!\n\n${inviteUrl}`;
+                                                        if (navigator.share) {
+                                                            try {
+                                                                await navigator.share({
+                                                                    title: chatData.name,
+                                                                    text: `Join the ${chatData.name} token chat on Spritz!`,
+                                                                    url: inviteUrl,
+                                                                });
+                                                            } catch {
+                                                                navigator.clipboard.writeText(inviteText);
+                                                                toast.success("Invite link copied!");
+                                                            }
+                                                        } else {
+                                                            navigator.clipboard.writeText(inviteText);
+                                                            toast.success("Invite link copied!");
+                                                        }
+                                                    }}
+                                                    className="w-full flex items-center gap-3 p-3 bg-[#FF5500]/10 hover:bg-[#FF5500]/20 border border-[#FF5500]/30 rounded-xl transition-colors text-left group"
+                                                >
+                                                    <div className="w-9 h-9 rounded-xl bg-[#FF5500]/20 flex items-center justify-center">
+                                                        <svg className="w-4 h-4 text-[#FF5500]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm text-[#FF5500] font-medium group-hover:text-orange-400">Share Invite Link</p>
+                                                        <p className="text-xs text-zinc-500">Share on social media or copy link</p>
+                                                    </div>
+                                                </button>
 
                                                 {/* Admin Actions */}
                                                 <div className="flex flex-col gap-2">
@@ -1279,8 +1396,10 @@ export function TokenChatModal({
                                             onPixelArt={() => setShowPixelArt(true)}
                                             onGif={handleSendGif}
                                             showLocation={false}
-                                            isUploading={isUploading}
+                                            isUploading={isUploading || isUploadingPixelArt}
                                             disabled={isSending}
+                                            chatRules={chatRules}
+                                            isModerator={canModerateChat}
                                         />
 
                                         <MentionInput
@@ -1572,6 +1691,7 @@ export function TokenChatModal({
                     isOpen={showPixelArt}
                     onClose={() => setShowPixelArt(false)}
                     onSend={handleSendPixelArt}
+                    isSending={isUploadingPixelArt}
                 />
             )}
 

@@ -1245,7 +1245,6 @@ function DashboardContent({
             const openLocationChatId = localStorage.getItem("spritz_open_location_chat");
             if (openLocationChatId) {
                 localStorage.removeItem("spritz_open_location_chat");
-                // Always fetch full chat details to get the complete LocationChat type
                 try {
                     const res = await fetch(
                         `/api/location-chats/${openLocationChatId}`
@@ -1259,6 +1258,45 @@ function DashboardContent({
                         "[Dashboard] Error opening location chat:",
                         err
                     );
+                }
+            }
+
+            // Check for pending token chat join (from invite link when not logged in)
+            const pendingTokenChatId = localStorage.getItem("spritz_pending_token_chat_join");
+            if (pendingTokenChatId) {
+                localStorage.removeItem("spritz_pending_token_chat_join");
+                try {
+                    const joinRes = await fetch(`/api/token-chats/${pendingTokenChatId}/join`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ userAddress }),
+                    });
+                    if (joinRes.ok) {
+                        const settingsRes = await fetch(`/api/token-chats/${pendingTokenChatId}/settings`);
+                        const settingsData = await settingsRes.json();
+                        if (settingsData.chat) {
+                            setSelectedTokenChat(settingsData.chat);
+                            setIsTokenChatOpen(true);
+                        }
+                    }
+                } catch (err) {
+                    console.error("[Dashboard] Error joining pending token chat:", err);
+                }
+            }
+
+            // Check for token chat to open (from invite link when already logged in)
+            const openTokenChatId = localStorage.getItem("spritz_open_token_chat");
+            if (openTokenChatId) {
+                localStorage.removeItem("spritz_open_token_chat");
+                try {
+                    const res = await fetch(`/api/token-chats/${openTokenChatId}/settings`);
+                    const data = await res.json();
+                    if (data.chat) {
+                        setSelectedTokenChat(data.chat);
+                        setIsTokenChatOpen(true);
+                    }
+                } catch (err) {
+                    console.error("[Dashboard] Error opening token chat:", err);
                 }
             }
         };
@@ -2347,6 +2385,7 @@ function DashboardContent({
         name: string;
         description: string;
         emoji: string;
+        messagingType: "standard" | "waku";
     }): Promise<boolean> => {
         setIsCreatingTokenChat(true);
         try {

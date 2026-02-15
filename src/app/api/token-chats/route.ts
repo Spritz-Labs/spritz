@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { v4 as uuidv4 } from "uuid";
+import crypto from "crypto";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
+
+// Generate a random symmetric key for Waku encryption
+function generateSymmetricKey(): string {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return Buffer.from(array).toString("base64");
+}
+
+// Generate a Waku content topic for this token chat
+function generateContentTopic(chatId: string, chatName: string): string {
+    const sanitized = chatName.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 20);
+    return `/spritz/1/token-chat-${sanitized}-${chatId}/proto`;
+}
 
 export type TokenChat = {
     id: string;
@@ -24,6 +38,9 @@ export type TokenChat = {
     description: string | null;
     emoji: string;
     member_count: number;
+    messaging_type: "standard" | "waku";
+    waku_symmetric_key: string | null;
+    waku_content_topic: string | null;
     created_at: string;
     updated_at: string;
     is_member?: boolean;
@@ -47,6 +64,7 @@ export async function POST(request: NextRequest) {
             name,
             description,
             emoji,
+            messagingType,
         } = body;
 
         if (!userAddress || !tokenAddress || !tokenChainId || !name) {
@@ -54,25 +72,35 @@ export async function POST(request: NextRequest) {
         }
 
         const chatId = `tc_${uuidv4().replace(/-/g, "").slice(0, 16)}`;
+        const isWaku = messagingType === "waku";
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const insertData: Record<string, any> = {
+            id: chatId,
+            name: name.trim(),
+            created_by: userAddress.toLowerCase(),
+            token_address: tokenAddress.toLowerCase(),
+            token_chain_id: tokenChainId,
+            token_name: tokenName || null,
+            token_symbol: tokenSymbol || null,
+            token_decimals: tokenDecimals || 18,
+            token_image: tokenImage || null,
+            min_balance: minBalance || "0",
+            min_balance_display: minBalanceDisplay || null,
+            is_official: isOfficial || false,
+            description: description?.trim() || null,
+            emoji: emoji || "🪙",
+            messaging_type: isWaku ? "waku" : "standard",
+        };
+
+        if (isWaku) {
+            insertData.waku_symmetric_key = generateSymmetricKey();
+            insertData.waku_content_topic = generateContentTopic(chatId, name.trim());
+        }
 
         const { data, error } = await supabase
             .from("shout_token_chats")
-            .insert({
-                id: chatId,
-                name: name.trim(),
-                created_by: userAddress.toLowerCase(),
-                token_address: tokenAddress.toLowerCase(),
-                token_chain_id: tokenChainId,
-                token_name: tokenName || null,
-                token_symbol: tokenSymbol || null,
-                token_decimals: tokenDecimals || 18,
-                token_image: tokenImage || null,
-                min_balance: minBalance || "0",
-                min_balance_display: minBalanceDisplay || null,
-                is_official: isOfficial || false,
-                description: description?.trim() || null,
-                emoji: emoji || "🪙",
-            })
+            .insert(insertData)
             .select()
             .single();
 
