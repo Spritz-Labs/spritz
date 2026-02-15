@@ -315,7 +315,7 @@ export function useChatFolders(userAddress: string | null) {
         async (
             chatId: string,
             folderEmoji: string | null,
-            chatType: "dm" | "group" | "channel" | "global" | "location" = "dm",
+            chatType: "dm" | "group" | "channel" | "global" | "location" | "token" = "dm",
         ) => {
             if (!userAddress) return;
 

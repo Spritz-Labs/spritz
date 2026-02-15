@@ -202,7 +202,7 @@ function CreateFolderModal({
 // Unified chat item that can represent any chat type
 export type UnifiedChatItem = {
     id: string;
-    type: "dm" | "group" | "channel" | "global" | "location";
+    type: "dm" | "group" | "channel" | "global" | "location" | "token";
     name: string;
     avatar: string | null;
     lastMessage: string | null;
@@ -228,6 +228,9 @@ export type UnifiedChatItem = {
         latitude?: number;
         longitude?: number;
         emoji?: string;
+        // For token chats
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tokenChat?: any;
     };
 };
 
@@ -386,7 +389,7 @@ type ChatRowProps = {
     onAssignFolder: (
         chatId: string,
         emoji: string | null,
-        chatType: "dm" | "group" | "channel" | "global" | "location"
+        chatType: "dm" | "group" | "channel" | "global" | "location" | "token"
     ) => void;
     onCloseFolderPicker: () => void;
     allAvailableFolders: ChatFolder[];
@@ -479,6 +482,8 @@ const ChatRow = memo(
                                         ? "bg-gradient-to-br from-purple-500 to-pink-500"
                                         : chat.type === "location"
                                         ? "bg-gradient-to-br from-red-500 to-orange-500"
+                                        : chat.type === "token"
+                                        ? "bg-gradient-to-br from-amber-500 to-yellow-600"
                                         : "bg-gradient-to-br from-[#FB8D22] to-[#FF5500]"
                                 } ${
                                     chat.unreadCount > 0
@@ -487,7 +492,9 @@ const ChatRow = memo(
                                 }`}
                             >
                                 <span className="text-white font-bold text-base sm:text-lg">
-                                    {chat.type === "location" && chat.metadata.emoji
+                                    {chat.type === "token" && chat.metadata.emoji
+                                        ? chat.metadata.emoji
+                                        : chat.type === "location" && chat.metadata.emoji
                                         ? chat.metadata.emoji
                                         : chat.name[0]?.toUpperCase() ?? "?"}
                                 </span>
@@ -534,6 +541,11 @@ const ChatRow = memo(
                                             >
                                                 <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" />
                                             </svg>
+                                        </span>
+                                    )}
+                                    {chat.type === "token" && chat.metadata?.tokenChat?.is_official && (
+                                        <span className="shrink-0 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[9px] font-bold rounded-full border border-emerald-500/30">
+                                            OFFICIAL
                                         </span>
                                     )}
                                     {chat.isPinned && (
@@ -1094,7 +1106,7 @@ function UnifiedChatListInner({
         (
             chatId: string,
             emoji: string | null,
-            chatType: "dm" | "group" | "channel" | "global" | "location" = "dm"
+            chatType: "dm" | "group" | "channel" | "global" | "location" | "token" = "dm"
         ) => {
             if (emoji && emoji !== ARCHIVED_FOLDER_EMOJI) {
                 const folder = allAvailableFolders.find(

@@ -105,6 +105,10 @@ import { LocationChatPicker } from "./LocationChatPicker";
 import { LocationChatModal } from "./LocationChatModal";
 import { type LocationChat } from "@/hooks/useLocationChat";
 import type { JoinedLocationChat } from "@/app/api/location-chats/joined/route";
+import { CreateTokenChatModal } from "./CreateTokenChatModal";
+import { BrowseTokenChatsModal } from "./BrowseTokenChatsModal";
+import { TokenChatModal } from "./TokenChatModal";
+import type { TokenChat } from "@/app/api/token-chats/route";
 
 import { type WalletType } from "@/hooks/useWalletType";
 
@@ -1092,6 +1096,14 @@ function DashboardContent({
         useState(false);
     const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [showLocationChatPicker, setShowLocationChatPicker] = useState(false);
+    // Token chat state
+    const [isCreateTokenChatOpen, setIsCreateTokenChatOpen] = useState(false);
+    const [isBrowseTokenChatsOpen, setIsBrowseTokenChatsOpen] = useState(false);
+    const [isCreatingTokenChat, setIsCreatingTokenChat] = useState(false);
+    const [selectedTokenChat, setSelectedTokenChat] = useState<TokenChat | null>(null);
+    const [isTokenChatOpen, setIsTokenChatOpen] = useState(false);
+    const [joinedTokenChats, setJoinedTokenChats] = useState<TokenChat[]>([]);
+
     const [selectedChannel, setSelectedChannel] =
         useState<PublicChannel | null>(null);
     const [selectedLocationChat, setSelectedLocationChat] =
@@ -2006,6 +2018,33 @@ function DashboardContent({
             });
         });
 
+        // Add joined token chats
+        joinedTokenChats.forEach((tc) => {
+            const tokenKey = `token-${tc.id}`;
+            const lastMsgTime = lastMessageTimes[tokenKey];
+            const lastMessageAt = lastMsgTime
+                ? toValidLastMessageAt(lastMsgTime)
+                : toValidLastMessageAt(tc.created_at);
+            items.push({
+                id: tokenKey,
+                type: "token" as UnifiedChatItem["type"],
+                name: tc.name,
+                avatar: null,
+                lastMessage:
+                    lastMessagePreviews[tokenKey] ||
+                    `${tc.member_count || 0} members · ${tc.token_symbol || "Token"}`,
+                lastMessageAt,
+                unreadCount: 0,
+                isPinned: pinnedIds.has(tokenKey),
+                metadata: {
+                    memberCount: tc.member_count,
+                    isPublic: true,
+                    emoji: tc.emoji || "🪙",
+                    tokenChat: tc,
+                },
+            });
+        });
+
         return items;
     }, [
         friendsListData,
@@ -2015,6 +2054,7 @@ function DashboardContent({
         joinedChannels,
         groups,
         joinedLocationChats,
+        joinedTokenChats,
         pinnedIds,
         alphaUnreadCount,
         isAlphaMember,
@@ -2269,6 +2309,92 @@ function DashboardContent({
             }
         } catch (err) {
             console.error("[Dashboard] Failed to join group:", err);
+        }
+    };
+
+    // ---- Token Chat Handlers ----
+
+    // Fetch joined token chats on mount
+    useEffect(() => {
+        if (!userAddress) return;
+        const fetchTokenChats = async () => {
+            try {
+                const res = await fetch(
+                    `/api/token-chats?userAddress=${userAddress.toLowerCase()}&mode=my`,
+                );
+                const data = await res.json();
+                if (res.ok && data.chats) {
+                    setJoinedTokenChats(data.chats);
+                }
+            } catch (err) {
+                console.error("[Dashboard] Failed to fetch token chats:", err);
+            }
+        };
+        fetchTokenChats();
+    }, [userAddress]);
+
+    // Handler to create a token chat
+    const handleCreateTokenChat = async (chatData: {
+        tokenAddress: string;
+        tokenChainId: number;
+        tokenName: string;
+        tokenSymbol: string;
+        tokenDecimals: number;
+        tokenImage: string | null;
+        minBalance: string;
+        minBalanceDisplay: string;
+        isOfficial: boolean;
+        name: string;
+        description: string;
+        emoji: string;
+    }): Promise<boolean> => {
+        setIsCreatingTokenChat(true);
+        try {
+            const res = await fetch("/api/token-chats", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userAddress,
+                    ...chatData,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok && data.chat) {
+                // Refresh the list
+                const listRes = await fetch(
+                    `/api/token-chats?userAddress=${userAddress?.toLowerCase()}&mode=my`,
+                );
+                const listData = await listRes.json();
+                if (listRes.ok) {
+                    setJoinedTokenChats(listData.chats || []);
+                }
+                // Open the newly created chat
+                setSelectedTokenChat(data.chat);
+                setIsTokenChatOpen(true);
+                return true;
+            }
+            return false;
+        } catch (err) {
+            console.error("[Dashboard] Create token chat error:", err);
+            return false;
+        } finally {
+            setIsCreatingTokenChat(false);
+        }
+    };
+
+    // Handler when user joins a token chat from browse
+    const handleTokenChatJoined = async (chat: TokenChat) => {
+        // Refresh joined list
+        try {
+            const res = await fetch(
+                `/api/token-chats?userAddress=${userAddress?.toLowerCase()}&mode=my`,
+            );
+            const data = await res.json();
+            if (res.ok) {
+                setJoinedTokenChats(data.chats || []);
+            }
+        } catch {
+            // Silent
         }
     };
 
@@ -3194,9 +3320,17 @@ function DashboardContent({
                     }
                     break;
                 }
+                case "token": {
+                    const tokenChat = chat.metadata?.tokenChat as TokenChat | undefined;
+                    if (tokenChat) {
+                        setSelectedTokenChat(tokenChat);
+                        setIsTokenChatOpen(true);
+                    }
+                    break;
+                }
             }
         },
-        [friendsListData, joinedChannels, groups, joinedLocationChats, markAsRead, userAddress]
+        [friendsListData, joinedChannels, groups, joinedLocationChats, joinedTokenChats, markAsRead, userAddress]
     );
 
     const handleUnlockGroupSubmit = async () => {
@@ -5175,6 +5309,26 @@ function DashboardContent({
                                                                             </p>
                                                                         </div>
                                                                     </button>
+                                                                    {/* Token Chat */}
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setShowNewChatMenu(false);
+                                                                            setIsBrowseTokenChatsOpen(true);
+                                                                        }}
+                                                                        className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                                    >
+                                                                        <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                                                            <span className="text-base">🪙</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-white text-sm font-medium">
+                                                                                Token
+                                                                            </p>
+                                                                            <p className="text-zinc-500 text-xs">
+                                                                                Token-gated chat
+                                                                            </p>
+                                                                        </div>
+                                                                    </button>
                                                                 </div>
                                                             </motion.div>
                                                         </>
@@ -6641,6 +6795,47 @@ function DashboardContent({
                     userAddress={userAddress}
                     getUserInfo={getAlphaUserInfo}
                     onOpenUserCard={(address) => setUserCardAddress(address)}
+                />
+            )}
+
+            {/* Create Token Chat Modal */}
+            <CreateTokenChatModal
+                isOpen={isCreateTokenChatOpen}
+                onClose={() => setIsCreateTokenChatOpen(false)}
+                userAddress={userAddress}
+                onCreate={handleCreateTokenChat}
+                isCreating={isCreatingTokenChat}
+            />
+
+            {/* Browse Token Chats Modal */}
+            <BrowseTokenChatsModal
+                isOpen={isBrowseTokenChatsOpen}
+                onClose={() => setIsBrowseTokenChatsOpen(false)}
+                userAddress={userAddress}
+                onJoinChat={handleTokenChatJoined}
+                onOpenChat={(chat) => {
+                    setIsBrowseTokenChatsOpen(false);
+                    setSelectedTokenChat(chat);
+                    setIsTokenChatOpen(true);
+                }}
+                onCreateNew={() => {
+                    setIsBrowseTokenChatsOpen(false);
+                    setIsCreateTokenChatOpen(true);
+                }}
+            />
+
+            {/* Token Chat Modal */}
+            {selectedTokenChat && (
+                <TokenChatModal
+                    key={selectedTokenChat.id}
+                    isOpen={isTokenChatOpen}
+                    onClose={() => {
+                        setIsTokenChatOpen(false);
+                        setSelectedTokenChat(null);
+                    }}
+                    userAddress={userAddress}
+                    chat={selectedTokenChat}
+                    getUserInfo={getAlphaUserInfo}
                 />
             )}
 
