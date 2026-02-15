@@ -1289,16 +1289,11 @@ export function TokenChatModal({
                                                                     loading="lazy"
                                                                 />
                                                             ) : isPixelArt && pixelArtUrl ? (
-                                                                <div
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setPreviewImage(pixelArtUrl);
-                                                                    }}
-                                                                >
+                                                                <div className="rounded-2xl overflow-hidden">
                                                                     <PixelArtImage
                                                                         src={pixelArtUrl}
                                                                         alt="Pixel art"
-                                                                        className="w-[200px] h-[200px] rounded-xl"
+                                                                        className="w-[200px] h-[200px] rounded-xl cursor-pointer hover:opacity-90 transition-opacity"
                                                                     />
                                                                 </div>
                                                             ) : hasMarkdown(msg.content) ? (
