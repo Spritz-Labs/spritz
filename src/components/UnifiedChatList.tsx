@@ -247,6 +247,7 @@ type UnifiedChatListProps = {
     /** When "No chats yet", show CTAs to add friend, browse channels, create group */
     onOpenAddFriend?: () => void;
     onOpenBrowseChannels?: () => void;
+    onOpenBrowseTokenChats?: () => void;
     onOpenCreateGroup?: () => void;
     canCreateGroup?: boolean;
     /** Mark all chats in the current folder as read (called with activeFolder and chats in that folder) */
@@ -885,6 +886,7 @@ function UnifiedChatListInner({
     onSearchToggle,
     onOpenAddFriend,
     onOpenBrowseChannels,
+    onOpenBrowseTokenChats,
     onOpenCreateGroup,
     canCreateGroup = false,
     onMarkFolderAsRead,
@@ -1523,6 +1525,7 @@ function UnifiedChatListInner({
                             !activeFolder &&
                             (onOpenAddFriend ||
                                 onOpenBrowseChannels ||
+                                onOpenBrowseTokenChats ||
                                 onOpenCreateGroup) && (
                                 <div className="flex flex-col gap-2.5 items-center max-w-[240px] mx-auto">
                                     {onOpenAddFriend && (
@@ -1543,6 +1546,16 @@ function UnifiedChatListInner({
                                         >
                                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>
                                             Explore Channels
+                                        </button>
+                                    )}
+                                    {onOpenBrowseTokenChats && (
+                                        <button
+                                            type="button"
+                                            onClick={onOpenBrowseTokenChats}
+                                            className="w-full px-4 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-sm font-semibold transition-colors flex items-center justify-center gap-2 border border-zinc-700/50"
+                                        >
+                                            <span className="text-base">🪙</span>
+                                            Browse Token Chats
                                         </button>
                                     )}
                                     {onOpenCreateGroup && (

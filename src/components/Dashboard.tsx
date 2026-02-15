@@ -5387,6 +5387,9 @@ function DashboardContent({
                                             );
                                             setIsBrowseChannelsOpen(true);
                                         }}
+                                        onOpenBrowseTokenChats={() =>
+                                            setIsBrowseTokenChatsOpen(true)
+                                        }
                                         onOpenCreateGroup={() =>
                                             setIsCreateGroupOpen(true)
                                         }
