@@ -2058,7 +2058,8 @@ export function WakuProvider({
         [userAddress, getDmSymmetricKey]
     );
 
-    // Mark messages as read
+    // Mark messages as read - clears in-memory count AND persists read timestamp
+    // to localStorage (immediate) and Supabase (async) so unreads don't reappear on reload
     const markAsRead = useCallback((peerAddress: string) => {
         const normalizedAddress = peerAddress.toLowerCase();
         setUnreadCounts((prev) => {
@@ -2066,7 +2067,39 @@ export function WakuProvider({
             delete newCounts[normalizedAddress];
             return newCounts;
         });
-    }, []);
+
+        // Persist last-read timestamp to localStorage for instant reload recovery
+        if (userAddress && typeof window !== "undefined") {
+            const userAddrLower = userAddress.toLowerCase();
+            try {
+                const storageKey = `spritz_last_read_${userAddrLower}`;
+                const existing = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                existing[normalizedAddress] = new Date().toISOString();
+                localStorage.setItem(storageKey, JSON.stringify(existing));
+            } catch {
+                // Ignore localStorage errors
+            }
+
+            // Also persist to Supabase (async, fire-and-forget) for cross-device sync
+            if (supabase) {
+                supabase
+                    .from("shout_read_receipts_dm")
+                    .upsert(
+                        {
+                            reader_address: userAddrLower,
+                            peer_address: normalizedAddress,
+                            last_read_at: new Date().toISOString(),
+                        },
+                        { onConflict: "reader_address,peer_address" }
+                    )
+                    .then(({ error }) => {
+                        if (error) {
+                            log.debug("[Waku] Failed to persist DM read state:", error.message);
+                        }
+                    });
+            }
+        }
+    }, [userAddress]);
 
     // Set the active chat peer (to prevent incrementing unread for open chats)
     const setActiveChatPeer = useCallback(
@@ -2103,7 +2136,10 @@ export function WakuProvider({
     }, []);
 
     // Load initial unread counts from database on startup
-    // This ensures unread indicators persist across page refreshes
+    // Uses per-conversation "last_read_at" timestamps (localStorage + Supabase)
+    // as the primary read state, with per-message receipts as fallback.
+    // This prevents "ghost unread" bugs where markAsRead cleared memory but
+    // read receipts weren't persisted before a reload.
     useEffect(() => {
         if (!isInitialized || !userAddress || !supabase) return;
 
@@ -2118,8 +2154,16 @@ export function WakuProvider({
             );
 
             try {
-                // Get all unread messages for this user (messages where they are recipient)
-                // that don't have a read receipt
+                // Step 1: Load last-read timestamps from localStorage (instant)
+                let lastReadByPeer: Record<string, string> = {};
+                try {
+                    const storageKey = `spritz_last_read_${userAddrLower}`;
+                    lastReadByPeer = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                } catch {
+                    // Ignore parse errors
+                }
+
+                // Step 2: Get all messages where user is recipient
                 const { data: unreadMessages, error: msgError } = await client
                     .from("shout_messages")
                     .select("sender_address, message_id, created_at")
@@ -2140,7 +2184,7 @@ export function WakuProvider({
                     return;
                 }
 
-                // Get read receipts for this user
+                // Step 3: Get per-message read receipts as fallback
                 const { data: readReceipts, error: receiptError } = await client
                     .from("shout_read_receipts")
                     .select("message_id")
@@ -2159,19 +2203,24 @@ export function WakuProvider({
                     )
                 );
 
-                // Count unread messages per sender (skip if chat is already open)
+                // Step 4: Count unread - a message is unread if:
+                // - It has no per-message read receipt, AND
+                // - It was sent AFTER the last_read_at timestamp for that peer
                 const counts: Record<string, number> = {};
                 const activePeer = activeChatPeerRef.current;
 
                 for (const msg of unreadMessages) {
-                    if (!readMessageIds.has(msg.message_id)) {
-                        const senderLower = msg.sender_address.toLowerCase();
-                        // Skip counting for the currently open chat
-                        if (senderLower !== activePeer) {
-                            counts[senderLower] =
-                                (counts[senderLower] || 0) + 1;
-                        }
+                    const senderLower = msg.sender_address.toLowerCase();
+                    // Skip if chat is currently open
+                    if (senderLower === activePeer) continue;
+                    // Skip if per-message receipt exists
+                    if (readMessageIds.has(msg.message_id)) continue;
+                    // Skip if message was sent before last_read_at for this peer
+                    const lastRead = lastReadByPeer[senderLower];
+                    if (lastRead && new Date(msg.created_at) <= new Date(lastRead)) {
+                        continue;
                     }
+                    counts[senderLower] = (counts[senderLower] || 0) + 1;
                 }
 
                 log.debug(
