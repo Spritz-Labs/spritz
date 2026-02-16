@@ -53,6 +53,8 @@ export function GoLiveModal({
     const [ingestUrl, setIngestUrl] = useState<string | null>(null);
     const [cameraReady, setCameraReady] = useState(false);
     const [copied, setCopied] = useState(false);
+    /** Only show share URL after backend has marked stream as live (avoids "Stream has ended" race) */
+    const [shareUrlRevealed, setShareUrlRevealed] = useState(false);
 
     // Device selection state
     const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
@@ -442,8 +444,10 @@ export function GoLiveModal({
             // Set the ingest URL to trigger broadcast mode
             setIngestUrl(whipUrl);
 
-            // Mark as going live in the database
-            await onGoLive(stream.id);
+            // Mark as going live in the database before showing the share link,
+            // so viewers never hit the page while status is still "idle" or stale "ended"
+            const goLiveOk = await onGoLive(stream.id);
+            if (goLiveOk) setShareUrlRevealed(true);
             setStatus("live");
             
             // Track stream started and record start time for duration calculation
@@ -528,6 +532,7 @@ export function GoLiveModal({
         // 6. Done - release the UI
         setStatus("preview");
         setDuration(0);
+        setShareUrlRevealed(false);
         isCleaningUpRef.current = false;
     };
 
@@ -585,6 +590,7 @@ export function GoLiveModal({
             setError(null);
             setDuration(0);
             setShowDeviceSettings(false);
+            setShareUrlRevealed(false);
         }
     }, [
         isOpen,
@@ -913,8 +919,8 @@ export function GoLiveModal({
                                             </Broadcast.VideoEnabledTrigger>
                                         </div>
 
-                                        {/* Share URL bar */}
-                                        {shareUrl && (
+                                        {/* Share URL bar - only after backend has marked stream live */}
+                                        {shareUrl && shareUrlRevealed && (
                                             <div className="mt-4 flex items-center gap-2 bg-black/60 rounded-xl p-2 backdrop-blur-sm">
                                                 <div className="flex-1 px-3 py-2 bg-zinc-800/50 rounded-lg text-white/80 text-sm truncate">
                                                     {shareUrl}

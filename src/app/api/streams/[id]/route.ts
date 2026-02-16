@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
     getLivepeerStream,
+    terminateLivepeerStream,
     deleteLivepeerStream,
     getLivepeerStreamAssets,
     getPlaybackUrl,
@@ -102,8 +103,16 @@ export async function PATCH(
             updates.status = "ended";
             updates.ended_at = new Date().toISOString();
 
+            // Tell Livepeer to terminate the active session so it no longer shows as "active"
+            if (stream.stream_id) {
+                try {
+                    await terminateLivepeerStream(stream.stream_id);
+                } catch (e) {
+                    console.warn("[Streams API] Error terminating Livepeer stream:", e);
+                }
+            }
+
             // Only fetch/save recordings if recording was enabled for this stream
-            // Check Livepeer to see if recording was enabled
             if (stream.stream_id) {
                 try {
                     const livepeerStream = await getLivepeerStream(stream.stream_id);

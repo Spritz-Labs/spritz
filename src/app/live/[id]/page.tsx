@@ -210,10 +210,8 @@ export default function PublicLivePage() {
                 setStream(data.stream);
                 setViewerCount(data.stream.viewer_count || 0);
 
-                // Check if stream already ended
-                if (data.stream.status === "ended") {
-                    setStreamEnded(true);
-                }
+                // Only show "Stream has ended" when API explicitly returns ended
+                setStreamEnded(data.stream.status === "ended");
 
                 setIsLoading(false);
             } catch {
@@ -280,17 +278,18 @@ export default function PublicLivePage() {
                     const data = await res.json();
                     setViewerCount(data.stream.viewer_count || 0);
 
-                    // Check if stream has ended
-                    if (data.stream.status === "ended" && !streamEnded) {
+                    // Keep ended state in sync with API (recover if initial load was wrong)
+                    const nowEnded = data.stream.status === "ended";
+                    if (nowEnded && !streamEnded) {
                         setStreamEnded(true);
-                        // Stop the video
-                        if (videoRef.current) {
-                            videoRef.current.pause();
-                        }
+                        if (videoRef.current) videoRef.current.pause();
                         if (hlsRef.current) {
                             hlsRef.current.destroy();
                             hlsRef.current = null;
                         }
+                    } else if (!nowEnded && streamEnded) {
+                        setStreamEnded(false);
+                        setStream(data.stream);
                     }
                 }
             } catch {

@@ -133,7 +133,32 @@ export async function getLivepeerStream(streamId: string): Promise<LivepeerStrea
 }
 
 /**
- * Delete/terminate a stream
+ * Terminate an active stream session (stops broadcast, keeps stream for reuse).
+ * Use this when the user ends a stream so Livepeer no longer shows it as "active".
+ */
+export async function terminateLivepeerStream(streamId: string): Promise<boolean> {
+    if (!LIVEPEER_API_KEY) {
+        console.error("[Livepeer] API key not configured");
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${LIVEPEER_API_URL}/stream/${streamId}/terminate`, {
+            method: "DELETE",
+            headers: {
+                Authorization: `Bearer ${LIVEPEER_API_KEY}`,
+            },
+        });
+
+        return response.status === 204 || response.ok;
+    } catch (error) {
+        console.error("[Livepeer] Error terminating stream:", error);
+        return false;
+    }
+}
+
+/**
+ * Delete a stream entirely (removes from Livepeer; use for cleanup, not for "end stream").
  */
 export async function deleteLivepeerStream(streamId: string): Promise<boolean> {
     if (!LIVEPEER_API_KEY) {

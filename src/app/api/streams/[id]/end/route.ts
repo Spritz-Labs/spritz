@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { terminateLivepeerStream } from "@/lib/livepeer";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,7 +44,7 @@ export async function POST(
         // Verify the stream exists and belongs to this user
         const { data: stream } = await supabase
             .from("shout_streams")
-            .select("id, user_address, status")
+            .select("id, user_address, status, stream_id")
             .eq("id", id)
             .single();
 
@@ -57,6 +58,15 @@ export async function POST(
 
         // Only end if still active
         if (stream.status === "live" || stream.status === "idle") {
+            // Tell Livepeer to terminate the session so it no longer shows as "active"
+            if (stream.stream_id) {
+                try {
+                    await terminateLivepeerStream(stream.stream_id);
+                } catch (e) {
+                    console.warn("[Streams API] Error terminating Livepeer stream on beacon/close:", e);
+                }
+            }
+
             await supabase
                 .from("shout_streams")
                 .update({
