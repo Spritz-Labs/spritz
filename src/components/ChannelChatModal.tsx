@@ -1268,12 +1268,7 @@ export function ChannelChatModal({
         return (now.getTime() - created.getTime()) / (1000 * 60) <= 15;
     };
 
-    const handleImageSelect = async (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
+    const handleImageFile = async (file: File) => {
         // Validate image against chat rules
         const ruleViolation = validateMessageClientSide(chatRules, "", "image", isModerator);
         if (ruleViolation) {
@@ -1325,10 +1320,17 @@ export function ChannelChatModal({
             alert("Failed to upload image. Please try again.");
         } finally {
             setIsUploading(false);
-            // Reset file input
-            if (fileInputRef.current) {
-                fileInputRef.current.value = "";
-            }
+        }
+    };
+
+    const handleImageSelect = async (
+        e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await handleImageFile(file);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
         }
     };
 
@@ -3346,6 +3348,7 @@ export function ChannelChatModal({
                                 placeholder={`Message #${channel.name}`}
                                 users={mentionableUsers}
                                 poaps={userPoaps}
+                                onPasteImage={handleImageFile}
                                 className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all"
                             />
                             <button

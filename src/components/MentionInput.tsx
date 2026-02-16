@@ -169,6 +169,8 @@ type MentionInputProps = {
     multiline?: boolean; // Enable Shift+Enter for new lines
     maxRows?: number; // Max height in rows (default 6)
     onSubmit?: () => void; // Called when Enter is pressed (without Shift)
+    /** When user pastes an image from clipboard, call with the image file (upload/send handled by parent) */
+    onPasteImage?: (file: File) => void;
     "aria-label"?: string;
 };
 
@@ -185,6 +187,7 @@ export function MentionInput({
     multiline = true,
     maxRows = 6,
     onSubmit,
+    onPasteImage,
     "aria-label": ariaLabel,
 }: MentionInputProps) {
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -248,9 +251,24 @@ export function MentionInput({
         return name.startsWith("@") ? name.slice(1) : name;
     };
 
-    // Handle paste to detect code
+    // Handle paste: image from clipboard first, then code detection
     const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-        const pastedText = e.clipboardData.getData('text');
+        // If clipboard contains an image and parent handles it, prevent default and send file
+        if (onPasteImage && e.clipboardData.items) {
+            for (let i = 0; i < e.clipboardData.items.length; i++) {
+                const item = e.clipboardData.items[i];
+                if (item.type.startsWith("image/")) {
+                    const file = item.getAsFile();
+                    if (file) {
+                        e.preventDefault();
+                        onPasteImage(file);
+                        return;
+                    }
+                }
+            }
+        }
+
+        const pastedText = e.clipboardData.getData("text");
         
         // Check if it looks like code (multi-line with code patterns)
         const { isCode, language } = looksLikeCode(pastedText);
@@ -289,7 +307,7 @@ export function MentionInput({
             }, 0);
         }
         // Otherwise, let the default paste behavior happen
-    }, [displayValue, value, onChange, inputRef]);
+    }, [displayValue, value, onChange, inputRef, onPasteImage]);
 
     // Handle input change
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {

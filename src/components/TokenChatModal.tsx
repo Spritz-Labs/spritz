@@ -467,11 +467,10 @@ export function TokenChatModal({
         [chatData, userAddress, chatRules, canModerateChat],
     );
 
-    // Image upload
-    const handleImageSelect = useCallback(
-        async (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            if (!file || !chatData) return;
+    // Image upload (shared by file picker and paste)
+    const handleImageFile = useCallback(
+        async (file: File) => {
+            if (!chatData) return;
 
             const ruleViolation = validateMessageClientSide(chatRules, "", "image", canModerateChat);
             if (ruleViolation) {
@@ -518,10 +517,19 @@ export function TokenChatModal({
                 toast.error("Failed to send image");
             } finally {
                 setIsUploading(false);
-                if (fileInputRef.current) fileInputRef.current.value = "";
             }
         },
         [chatData, userAddress, chatRules, canModerateChat, replyingTo],
+    );
+
+    const handleImageSelect = useCallback(
+        async (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file || !chatData) return;
+            await handleImageFile(file);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+        },
+        [handleImageFile, chatData],
     );
 
     // Share location
@@ -1644,6 +1652,7 @@ export function TokenChatModal({
                                                     : `Message ${chatData.name}...`
                                             }
                                             users={mentionableUsers}
+                                            onPasteImage={handleImageFile}
                                             className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/50 focus:border-[#FF5500]"
                                         />
 
