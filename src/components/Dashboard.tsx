@@ -6056,17 +6056,14 @@ function DashboardContent({
                     }}
                     onPreviewUpdate={(preview) => {
                         if (chatFriend) {
-                            // Set the preview text (already formatted by ChatModal
-                            // with "You: " prefix and special message labels)
+                            // Update only the preview text for the list. Do NOT update
+                            // lastMessageTimes here — that would move the chat to the top
+                            // when just opening it. Order is updated only on send/receive.
                             const key = chatFriend.address.toLowerCase();
                             startTransition(() => {
                                 setLastMessagePreviews((prev) => ({
                                     ...prev,
                                     [key]: preview,
-                                }));
-                                setLastMessageTimes((prev) => ({
-                                    ...prev,
-                                    [key]: Date.now(),
                                 }));
                             });
                         }
