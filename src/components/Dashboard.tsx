@@ -6803,9 +6803,26 @@ function DashboardContent({
                     fetchJoinedLocationChats();
                     setSelectedLocationChat(chat);
                 }}
+                onJoinTokenChat={(chat) => {
+                    setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
+                    setSelectedTokenChat(chat);
+                    setIsTokenChatOpen(true);
+                }}
+                onOpenTokenChat={(chat) => {
+                    setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
+                    setSelectedTokenChat(chat);
+                    setIsTokenChatOpen(true);
+                }}
                 initialShowCreate={browseChannelsInitialCreate}
                 onCreateGroup={isWakuInitialized && friends.length > 0 ? () => setIsCreateGroupOpen(true) : undefined}
                 onCreateLocationChat={() => setShowLocationChatPicker(true)}
+                onCreateTokenChat={() => {
+                    setIsBrowseChannelsOpen(false);
+                    setBrowseChannelsInitialCreate(false);
+                    setIsCreateTokenChatOpen(true);
+                }}
             />
 
             {/* Location Chat Picker */}
@@ -6880,6 +6897,12 @@ function DashboardContent({
                     chat={selectedTokenChat}
                     getUserInfo={getAlphaUserInfo}
                     onOpenUserCard={(address) => setUserCardAddress(address)}
+                    onSettingsUpdated={(updatedChat) => {
+                        setSelectedTokenChat(updatedChat);
+                        setJoinedTokenChats((prev) =>
+                            prev.map((c) => (c.id === updatedChat.id ? updatedChat : c)),
+                        );
+                    }}
                     onLeave={() => {
                         setIsTokenChatOpen(false);
                         setSelectedTokenChat(null);

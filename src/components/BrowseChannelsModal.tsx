@@ -9,6 +9,7 @@ import { ImageViewerModal } from "./ImageViewerModal";
 import type { PoapEventWithChannel } from "@/app/api/poap/events-with-channels/route";
 import type { PoapCollectionForUser } from "@/app/api/poap/collections-for-user/route";
 import type { LocationChat } from "@/hooks/useLocationChat";
+import type { TokenChat } from "@/app/api/token-chats/route";
 
 // Calculate distance between two points using Haversine formula
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -65,9 +66,12 @@ type BrowseChannelsModalProps = {
     poapAddresses?: string[];
     onJoinChannel: (channel: PublicChannel) => void;
     onJoinLocationChat?: (chat: LocationChat) => void;
+    onJoinTokenChat?: (chat: TokenChat) => void;
+    onOpenTokenChat?: (chat: TokenChat) => void;
     initialShowCreate?: boolean; // Auto-open the create form
     onCreateGroup?: () => void; // Handler to open create group modal
     onCreateLocationChat?: () => void; // Handler to open location chat picker
+    onCreateTokenChat?: () => void; // Handler to open create token chat modal
 };
 
 const CATEGORIES = [
@@ -118,9 +122,12 @@ export function BrowseChannelsModal({
     poapAddresses,
     onJoinChannel,
     onJoinLocationChat,
+    onJoinTokenChat,
+    onOpenTokenChat,
     initialShowCreate = false,
     onCreateGroup,
     onCreateLocationChat,
+    onCreateTokenChat,
 }: BrowseChannelsModalProps) {
     const { channels, isLoading, joinChannel, leaveChannel, createChannel } =
         useChannels(userAddress, {
@@ -133,7 +140,7 @@ export function BrowseChannelsModal({
     const [searchQuery, setSearchQuery] = useState("");
     const [joiningChannel, setJoiningChannel] = useState<string | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(initialShowCreate);
-    const [view, setView] = useState<"all" | "poap" | "locations">("all");
+    const [view, setView] = useState<"all" | "poap" | "locations" | "tokens">("all");
     /** When view is "poap": All = both, Collections = only collections, POAPs = only events */
     const [poapSubView, setPoapSubView] = useState<
         "all" | "collections" | "poaps"
@@ -164,6 +171,11 @@ export function BrowseChannelsModal({
     const [isRequestingLocation, setIsRequestingLocation] = useState(false);
     const [locationMethod, setLocationMethod] = useState<string | null>(null);
     const [showCreateMenu, setShowCreateMenu] = useState(false);
+
+    // Token chats state
+    const [tokenChats, setTokenChats] = useState<TokenChat[]>([]);
+    const [tokenChatsLoading, setTokenChatsLoading] = useState(false);
+    const [joiningTokenChat, setJoiningTokenChat] = useState<string | null>(null);
 
     // Debounce search (250ms) for smoother filtering
     useEffect(() => {
@@ -380,6 +392,31 @@ export function BrowseChannelsModal({
             fetchLocationChats();
         }
     }, [isOpen, view, userLocation, fetchLocationChats]);
+
+    // Fetch token chats when tokens tab is selected
+    const fetchTokenChats = useCallback(async () => {
+        setTokenChatsLoading(true);
+        try {
+            const params = new URLSearchParams({
+                userAddress: userAddress.toLowerCase(),
+                mode: "browse",
+            });
+            if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
+            const res = await fetch(`/api/token-chats?${params}`);
+            const data = await res.json();
+            if (res.ok) setTokenChats(data.chats || []);
+        } catch (err) {
+            console.error("[BrowseChannels] Token chats error:", err);
+        } finally {
+            setTokenChatsLoading(false);
+        }
+    }, [userAddress, debouncedSearch]);
+
+    useEffect(() => {
+        if (isOpen && view === "tokens") {
+            fetchTokenChats();
+        }
+    }, [isOpen, view, fetchTokenChats]);
 
     // Filter location chats by search
     const filteredLocationChats = useMemo(() => {
@@ -696,6 +733,26 @@ export function BrowseChannelsModal({
                                                                 </div>
                                                             </button>
                                                         )}
+
+                                                        {/* Create Token Chat */}
+                                                        {onCreateTokenChat && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowCreateMenu(false);
+                                                                    onClose();
+                                                                    onCreateTokenChat();
+                                                                }}
+                                                                className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                            >
+                                                                <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                                                                    <span className="text-lg">🪙</span>
+                                                                </div>
+                                                                <div>
+                                                                    <p className="text-white text-sm font-medium">Token Chat</p>
+                                                                    <p className="text-zinc-500 text-xs">Token-gated community</p>
+                                                                </div>
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </motion.div>
                                             </>
@@ -745,6 +802,8 @@ export function BrowseChannelsModal({
                                     placeholder={
                                         view === "poap"
                                             ? "Search POAPs..."
+                                            : view === "tokens"
+                                            ? "Search token chats..."
                                             : "Search channels..."
                                     }
                                     value={searchQuery}
@@ -816,6 +875,19 @@ export function BrowseChannelsModal({
                                 <span aria-hidden>📍</span>
                                 <span>Locations</span>
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setView("tokens")}
+                                className={`flex-1 px-2 sm:px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                                    view === "tokens"
+                                        ? "bg-zinc-700 text-white"
+                                        : "text-zinc-400 hover:text-white"
+                                }`}
+                            >
+                                <span aria-hidden>🪙</span>
+                                <span className="hidden sm:inline">Tokens</span>
+                                <span className="sm:hidden">Tokens</span>
+                            </button>
                         </div>
                         {/* POAP sub-tabs: All | Collections | POAPs (only when "From my POAPs" is selected) */}
                         {view === "poap" && (
@@ -881,7 +953,11 @@ export function BrowseChannelsModal({
                     {/* Channel List or POAP List or Locations */}
                     <div className="flex flex-col min-h-0 flex-1">
                         <p className="px-3 py-1.5 text-xs text-zinc-500 border-b border-zinc-800/50 shrink-0">
-                            {view === "locations"
+                            {view === "tokens"
+                                ? tokenChatsLoading
+                                    ? "Loading token chats..."
+                                    : `${tokenChats.length} token chat${tokenChats.length === 1 ? "" : "s"}`
+                                : view === "locations"
                                 ? locationChatsLoading
                                     ? "Finding nearby location chats..."
                                     : locationChatsError
@@ -1529,6 +1605,106 @@ export function BrowseChannelsModal({
                                                 </motion.div>
                                             );
                                             })}
+                                        </div>
+                                    )}
+                                </>
+                            ) : view === "tokens" ? (
+                                /* Token Chats View */
+                                <>
+                                    {tokenChatsLoading ? (
+                                        <div className="flex items-center justify-center py-12">
+                                            <div className="animate-spin rounded-full h-8 w-8 border-2 border-zinc-600 border-t-orange-500" />
+                                        </div>
+                                    ) : tokenChats.length === 0 ? (
+                                        <div className="text-center py-12 px-4">
+                                            <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
+                                                <span className="text-3xl">🪙</span>
+                                            </div>
+                                            <p className="text-zinc-400 text-sm mb-2">No token chats found</p>
+                                            <p className="text-zinc-600 text-xs">
+                                                Create a token chat from the Create menu above
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-3 min-w-0">
+                                            {tokenChats.map((chat) => (
+                                                <motion.div
+                                                    key={chat.id}
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    className="p-2.5 sm:p-4 bg-zinc-800/50 hover:bg-zinc-800 rounded-xl transition-colors min-w-0 overflow-hidden"
+                                                >
+                                                    <div className="flex flex-row items-start gap-2 sm:gap-3 min-w-0">
+                                                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0 overflow-hidden">
+                                                            {chat.icon_url ? (
+                                                                <img src={chat.icon_url} alt="" className="w-full h-full object-cover" />
+                                                            ) : (
+                                                                <span className="text-xl sm:text-2xl">{chat.emoji || "🪙"}</span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0 pr-2">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <p className="text-white font-medium truncate text-sm sm:text-base">
+                                                                    {chat.name}
+                                                                </p>
+                                                                {chat.is_official && (
+                                                                    <span className="shrink-0 px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] rounded">
+                                                                        Official
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <p className="text-zinc-500 text-xs sm:text-sm line-clamp-1 truncate">
+                                                                {chat.description || `${chat.token_symbol} holders`}
+                                                            </p>
+                                                            <p className="text-zinc-600 text-[10px] sm:text-xs mt-0.5">
+                                                                {chat.member_count} members • min {chat.min_balance_display || chat.min_balance} {chat.token_symbol}
+                                                            </p>
+                                                        </div>
+                                                        <div className="shrink-0 flex items-center gap-1.5">
+                                                            {chat.is_member ? (
+                                                                <button
+                                                                    onClick={() => onOpenTokenChat?.(chat)}
+                                                                    className="px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-white transition-colors"
+                                                                >
+                                                                    Open
+                                                                </button>
+                                                            ) : (
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        setJoiningTokenChat(chat.id);
+                                                                        try {
+                                                                            const res = await fetch(`/api/token-chats/${chat.id}/join`, {
+                                                                                method: "POST",
+                                                                                headers: { "Content-Type": "application/json" },
+                                                                                body: JSON.stringify({ userAddress }),
+                                                                            });
+                                                                            const data = await res.json();
+                                                                            if (res.ok) {
+                                                                                setTokenChats((prev) =>
+                                                                                    prev.map((c) =>
+                                                                                        c.id === chat.id
+                                                                                            ? { ...c, is_member: true, member_count: c.member_count + 1 }
+                                                                                            : c,
+                                                                                    ),
+                                                                                );
+                                                                                onJoinTokenChat?.(chat);
+                                                                            }
+                                                                        } catch {
+                                                                            showToast("Failed to join", "error");
+                                                                        } finally {
+                                                                            setJoiningTokenChat(null);
+                                                                        }
+                                                                    }}
+                                                                    disabled={joiningTokenChat === chat.id}
+                                                                    className="px-2.5 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all disabled:opacity-50 bg-[#FF5500] text-white hover:bg-[#FF6600]"
+                                                                >
+                                                                    {joiningTokenChat === chat.id ? "..." : "Join"}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            ))}
                                         </div>
                                     )}
                                 </>

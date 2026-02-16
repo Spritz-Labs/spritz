@@ -79,6 +79,8 @@ interface TokenChatModalProps {
     } | null;
     onOpenUserCard?: (address: string) => void;
     onLeave?: () => void;
+    /** Called after room settings are saved so parent can update list/selection */
+    onSettingsUpdated?: (updatedChat: TokenChat) => void;
 }
 
 export function TokenChatModal({
@@ -89,6 +91,7 @@ export function TokenChatModal({
     getUserInfo,
     onOpenUserCard,
     onLeave,
+    onSettingsUpdated,
 }: TokenChatModalProps) {
     // Messages state
     const [messages, setMessages] = useState<TokenChatMessage[]>([]);
@@ -107,6 +110,7 @@ export function TokenChatModal({
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [showRulesPanel, setShowRulesPanel] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showHeaderMenu, setShowHeaderMenu] = useState(false);
     const [replyingTo, setReplyingTo] = useState<TokenChatMessage | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<MessageActionConfig | null>(null);
     const [showMessageActions, setShowMessageActions] = useState(false);
@@ -530,6 +534,11 @@ export function TokenChatModal({
     // Save settings
     const handleSaveSettings = useCallback(async () => {
         if (!chatData) return;
+        const trimmedName = editName.trim();
+        if (!trimmedName) {
+            toast.error("Chat name is required");
+            return;
+        }
         setIsSavingSettings(true);
         try {
             const res = await fetch(`/api/token-chats/${chatData.id}/settings`, {
@@ -537,16 +546,17 @@ export function TokenChatModal({
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     userAddress: userAddress.toLowerCase(),
-                    name: editName,
-                    description: editDescription,
-                    emoji: editEmoji,
+                    name: trimmedName,
+                    description: editDescription?.trim() || null,
+                    emoji: (editEmoji?.trim() || "🪙").slice(0, 4),
                 }),
             });
             const data = await res.json();
             if (res.ok && data.chat) {
                 setChatData(data.chat);
                 setShowSettings(false);
-                toast.success("Settings updated!");
+                toast.success("Room settings updated!");
+                onSettingsUpdated?.(data.chat);
             } else {
                 toast.error(data.error || "Failed to update settings");
             }
@@ -555,7 +565,7 @@ export function TokenChatModal({
         } finally {
             setIsSavingSettings(false);
         }
-    }, [chatData, userAddress, editName, editDescription, editEmoji]);
+    }, [chatData, userAddress, editName, editDescription, editEmoji, onSettingsUpdated]);
 
     // Leave chat
     const handleLeaveChat = useCallback(async () => {
@@ -828,18 +838,79 @@ export function TokenChatModal({
                                             🌐 P2P
                                         </span>
                                     )}
-                                    {/* Rules button (for admins/mods) */}
-                                    {canModerateChat && (
+                                    {/* Room menu (...): Room Settings, Room Rules, Leave */}
+                                    <div className="relative">
                                         <button
-                                            onClick={() => setShowRulesPanel(true)}
+                                            onClick={() => setShowHeaderMenu(!showHeaderMenu)}
                                             className="p-2.5 rounded-xl transition-colors text-zinc-400 hover:text-white hover:bg-zinc-800"
-                                            title="Chat Rules"
+                                            aria-label="Room options"
+                                            title="Room options"
                                         >
                                             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                                             </svg>
                                         </button>
-                                    )}
+                                        <AnimatePresence>
+                                            {showHeaderMenu && (
+                                                <>
+                                                    <motion.div
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                        className="fixed inset-0 z-40"
+                                                        onClick={() => setShowHeaderMenu(false)}
+                                                    />
+                                                    <motion.div
+                                                        initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                        exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                                                        className="absolute right-0 top-full mt-1 w-52 bg-zinc-800 border border-zinc-700 rounded-xl shadow-xl overflow-hidden z-50"
+                                                    >
+                                                        {canEditSettings && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowHeaderMenu(false);
+                                                                    openSettings();
+                                                                }}
+                                                                className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                            >
+                                                                <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                                </svg>
+                                                                Room Settings
+                                                            </button>
+                                                        )}
+                                                        {canModerateChat && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setShowHeaderMenu(false);
+                                                                    setShowRulesPanel(true);
+                                                                }}
+                                                                className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                            >
+                                                                <svg className="w-5 h-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                                                </svg>
+                                                                Room Rules
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => {
+                                                                setShowHeaderMenu(false);
+                                                                handleLeaveChat();
+                                                            }}
+                                                            className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-zinc-700 transition-colors flex items-center gap-3"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                                            </svg>
+                                                            Leave Chat
+                                                        </button>
+                                                    </motion.div>
+                                                </>
+                                            )}
+                                        </AnimatePresence>
+                                    </div>
                                     {/* Info button */}
                                     <button
                                         onClick={() => setShowInfo(!showInfo)}
@@ -852,6 +923,17 @@ export function TokenChatModal({
                                     >
                                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </button>
+                                    {/* Open in new tab */}
+                                    <button
+                                        onClick={() => chatData && window.open(`/token-chat/${chatData.id}`, "_blank", "noopener,noreferrer")}
+                                        className="p-2.5 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                                        aria-label="Open chat in new tab"
+                                        title="Open in new tab"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                         </svg>
                                     </button>
                                     {/* Close */}
