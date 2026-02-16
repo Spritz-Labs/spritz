@@ -39,8 +39,23 @@ import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
+import {
+    LocationMessage,
+    isLocationMessage,
+    parseLocationMessage,
+    formatLocationMessage,
+    type LocationData,
+} from "./LocationMessage";
 
 // Helpers
+function isImageMessage(content: string): boolean {
+    return content.startsWith("[IMAGE]");
+}
+function extractImageUrl(content: string): string | null {
+    if (!content.startsWith("[IMAGE]")) return null;
+    return content.replace(/^\[IMAGE\]/, "").trim() || null;
+}
+
 function isGifMessage(content: string): boolean {
     return (
         content.startsWith("https://") &&
@@ -129,6 +144,7 @@ export function TokenChatModal({
     const [isUploadingIcon, setIsUploadingIcon] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const iconInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // User popup state for moderation
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
@@ -451,6 +467,96 @@ export function TokenChatModal({
         [chatData, userAddress, chatRules, canModerateChat],
     );
 
+    // Image upload
+    const handleImageSelect = useCallback(
+        async (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file || !chatData) return;
+
+            const ruleViolation = validateMessageClientSide(chatRules, "", "image", canModerateChat);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
+            if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+                toast.error("Only JPEG, PNG, GIF, and WebP images are allowed");
+                return;
+            }
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("Image must be less than 5MB");
+                return;
+            }
+
+            setIsUploading(true);
+            justSentMessageRef.current = true;
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("userAddress", userAddress);
+                formData.append("context", "token_chat");
+
+                const uploadRes = await fetch("/api/upload", { method: "POST", body: formData });
+                const uploadData = await uploadRes.json();
+                if (!uploadRes.ok) throw new Error(uploadData.error || "Failed to upload image");
+
+                const res = await fetch(`/api/token-chats/${chatData.id}/messages`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        userAddress: userAddress.toLowerCase(),
+                        content: `[IMAGE]${uploadData.url}`,
+                        replyTo: replyingTo?.id || null,
+                    }),
+                });
+                const data = await res.json();
+                if (res.ok && data.message) {
+                    setMessages((prev) => [...prev, data.message]);
+                    setReplyingTo(null);
+                }
+            } catch (err) {
+                console.error("[TokenChat] Image upload error:", err);
+                toast.error("Failed to send image");
+            } finally {
+                setIsUploading(false);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+            }
+        },
+        [chatData, userAddress, chatRules, canModerateChat, replyingTo],
+    );
+
+    // Share location
+    const handleShareLocation = useCallback(
+        (location: LocationData) => {
+            if (!chatData) return;
+            const ruleViolation = validateMessageClientSide(chatRules, "", "location", canModerateChat);
+            if (ruleViolation) {
+                toast.error(ruleViolation);
+                return;
+            }
+            const content = formatLocationMessage(location);
+            setIsSending(true);
+            justSentMessageRef.current = true;
+            fetch(`/api/token-chats/${chatData.id}/messages`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    userAddress: userAddress.toLowerCase(),
+                    content,
+                }),
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    if (data.message) setMessages((prev) => [...prev, data.message]);
+                })
+                .catch((err) => {
+                    console.error("[TokenChat] Location send error:", err);
+                    toast.error("Failed to share location");
+                })
+                .finally(() => setIsSending(false));
+        },
+        [chatData, userAddress, chatRules, canModerateChat],
+    );
+
     // Cancel reply
     const cancelReply = useCallback(() => {
         setReplyingTo(null);
@@ -688,7 +794,12 @@ export function TokenChatModal({
                 const msg = actionMessageRef.current;
                 if (msg) {
                     const isPixelArt = isPixelArtMessage(msg.content);
-                    const url = isPixelArt ? extractPixelArtUrl(msg.content) : msg.content;
+                    const isImage = isImageMessage(msg.content);
+                    const url = isPixelArt
+                        ? extractPixelArtUrl(msg.content)
+                        : isImage
+                        ? extractImageUrl(msg.content)
+                        : msg.content;
                     if (url) setPreviewImage(url);
                 }
                 setShowMessageActions(false);
@@ -705,8 +816,10 @@ export function TokenChatModal({
             const isPixelArt = isPixelArtMessage(msg.content);
             const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
             const isGif = isGifMessage(msg.content);
-            const isMedia = isPixelArt || isGif;
-            const mediaUrl = isPixelArt ? pixelArtUrl : isGif ? msg.content : null;
+            const isImage = isImageMessage(msg.content);
+            const imageUrl = isImage ? extractImageUrl(msg.content) : null;
+            const isMedia = isPixelArt || isGif || isImage;
+            const mediaUrl = isPixelArt ? pixelArtUrl : isGif ? msg.content : isImage ? imageUrl : null;
 
             const config: MessageActionConfig = {
                 messageId: msg.id,
@@ -1289,7 +1402,11 @@ export function TokenChatModal({
                                             const isGif = isGifMessage(msg.content);
                                             const isPixelArt = isPixelArtMessage(msg.content);
                                             const pixelArtUrl = isPixelArt ? extractPixelArtUrl(msg.content) : null;
-                                            const urls = !isGif && !isPixelArt ? detectUrls(msg.content) : [];
+                                            const isImage = isImageMessage(msg.content);
+                                            const imageUrl = isImage ? extractImageUrl(msg.content) : null;
+                                            const isLocation = isLocationMessage(msg.content);
+                                            const locationData = isLocation ? parseLocationMessage(msg.content) : null;
+                                            const urls = !isGif && !isPixelArt && !isImage && !isLocation ? detectUrls(msg.content) : [];
                                             const messageReactions = msgReactions[msg.id] || [];
                                             const hasReactions = messageReactions.some((r) => r.count > 0);
                                             const roleBadge = getRoleBadge(msg.sender_address);
@@ -1356,14 +1473,31 @@ export function TokenChatModal({
                                                         <div
                                                             onClick={() => handleMessagePress(msg, isOwn)}
                                                             className={`rounded-2xl cursor-pointer transition-colors ${
-                                                                isGif || isPixelArt
+                                                                isGif || isPixelArt || isImage || (isLocation && locationData)
                                                                     ? "p-0 bg-transparent"
                                                                     : isOwn
                                                                         ? "px-4 py-2.5 bg-[#FF5500] text-white rounded-br-md hover:bg-[#E64D00]"
                                                                         : "px-4 py-2.5 bg-zinc-800 text-zinc-100 rounded-bl-md hover:bg-zinc-750"
                                                             }`}
                                                         >
-                                                            {isGif ? (
+                                                            {isLocation && locationData ? (
+                                                                <LocationMessage location={locationData} isOwn={isOwn} />
+                                                            ) : isImage && imageUrl ? (
+                                                                <div
+                                                                    className="rounded-2xl overflow-hidden max-w-[280px]"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setPreviewImage(imageUrl);
+                                                                    }}
+                                                                >
+                                                                    <img
+                                                                        src={imageUrl}
+                                                                        alt="Shared"
+                                                                        className="max-w-full max-h-[280px] object-contain rounded-xl"
+                                                                        loading="lazy"
+                                                                    />
+                                                                </div>
+                                                            ) : isGif ? (
                                                                 <img
                                                                     src={msg.content}
                                                                     alt="GIF"
@@ -1451,6 +1585,10 @@ export function TokenChatModal({
                                                         ? "GIF"
                                                         : isPixelArtMessage(replyingTo.content)
                                                             ? "Pixel Art"
+                                                            : isImageMessage(replyingTo.content)
+                                                            ? "Photo"
+                                                            : isLocationMessage(replyingTo.content)
+                                                            ? "Location"
                                                             : replyingTo.content}
                                                 </p>
                                             </div>
@@ -1469,10 +1607,23 @@ export function TokenChatModal({
                                 <div className="p-4">
                                     <div className="flex items-end gap-2">
                                         {/* Attachment menu */}
+                                        <input
+                                            ref={fileInputRef}
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/gif,image/webp"
+                                            onChange={handleImageSelect}
+                                            className="hidden"
+                                        />
                                         <ChatAttachmentMenu
+                                            onImageUpload={() => fileInputRef.current?.click()}
                                             onPixelArt={() => setShowPixelArt(true)}
                                             onGif={handleSendGif}
-                                            showLocation={false}
+                                            onPoll={() => toast.info("Polls for token chats coming soon")}
+                                            onLocation={handleShareLocation}
+                                            onVoice={() => toast.info("Voice messages for token chats coming soon")}
+                                            showLocation={true}
+                                            showPoll={true}
+                                            showVoice={true}
                                             isUploading={isUploading || isUploadingPixelArt}
                                             disabled={isSending}
                                             chatRules={chatRules}
