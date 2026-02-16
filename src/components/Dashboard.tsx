@@ -54,6 +54,7 @@ import { QRCodeModal } from "./QRCodeModal";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { SocialsModal } from "./SocialsModal";
 import { useSocials } from "@/hooks/useSocials";
+import { toast as sonnerToast } from "sonner";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { GroupChatModal } from "./GroupChatModal";
 import { GroupsList } from "./GroupsList";
@@ -1264,23 +1265,32 @@ function DashboardContent({
             // Check for pending token chat join (from invite link when not logged in)
             const pendingTokenChatId = localStorage.getItem("spritz_pending_token_chat_join");
             if (pendingTokenChatId) {
-                localStorage.removeItem("spritz_pending_token_chat_join");
                 try {
                     const joinRes = await fetch(`/api/token-chats/${pendingTokenChatId}/join`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ userAddress }),
                     });
-                    if (joinRes.ok) {
+                    const joinData = joinRes.ok ? await joinRes.json().catch(() => ({})) : await joinRes.json().catch(() => ({}));
+                    if (joinRes.ok || joinData.alreadyMember) {
                         const settingsRes = await fetch(`/api/token-chats/${pendingTokenChatId}/settings`);
                         const settingsData = await settingsRes.json();
                         if (settingsData.chat) {
+                            setJoinedTokenChats((prev) =>
+                                prev.some((c) => c.id === settingsData.chat.id) ? prev : [...prev, settingsData.chat]
+                            );
                             setSelectedTokenChat(settingsData.chat);
                             setIsTokenChatOpen(true);
+                            localStorage.removeItem("spritz_pending_token_chat_join");
                         }
+                    } else {
+                        localStorage.removeItem("spritz_pending_token_chat_join");
+                        const msg = joinData.error || joinData.message || "Couldn't join (e.g. token balance requirement). Try again from the invite link.";
+                        sonnerToast.error(msg);
                     }
                 } catch (err) {
                     console.error("[Dashboard] Error joining pending token chat:", err);
+                    // Keep key so we can retry on next load (e.g. network error)
                 }
             }
 

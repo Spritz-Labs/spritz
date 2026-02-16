@@ -1678,7 +1678,7 @@ export function BrowseChannelsModal({
                                                                                 headers: { "Content-Type": "application/json" },
                                                                                 body: JSON.stringify({ userAddress }),
                                                                             });
-                                                                            const data = await res.json();
+                                                                            const data = await res.json().catch(() => ({}));
                                                                             if (res.ok) {
                                                                                 setTokenChats((prev) =>
                                                                                     prev.map((c) =>
@@ -1688,6 +1688,14 @@ export function BrowseChannelsModal({
                                                                                     ),
                                                                                 );
                                                                                 onJoinTokenChat?.(chat);
+                                                                            } else {
+                                                                                const msg =
+                                                                                    data?.error === "Insufficient token balance" &&
+                                                                                    data?.required != null &&
+                                                                                    data?.symbol
+                                                                                        ? `You need at least ${data.required} ${data.symbol} to join. You have ${data.actual ?? "0"}.`
+                                                                                        : (data?.error || data?.message || "Failed to join token chat.");
+                                                                                showToast(msg, "error");
                                                                             }
                                                                         } catch {
                                                                             showToast("Failed to join", "error");
