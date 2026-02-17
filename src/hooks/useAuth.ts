@@ -354,13 +354,19 @@ export function useAuthImplementation() {
                 errorMessage.toLowerCase().includes("no provider") ||
                 errorMessage.toLowerCase().includes("user rejected") ||
                 errorMessage.includes("connector not connected");
-            
+            // Chain mismatch: wallet is on a different chain than app connection (e.g. Optimism vs Base)
+            const isChainMismatchError = errorMessage.includes("does not match the connection's chain") ||
+                errorMessage.includes("ConnectorChainMismatchError");
+            const friendlyError = isChainMismatchError
+                ? "Your wallet's network doesn't match. Try switching your wallet to the same network as the app (e.g. Base), or disconnect and reconnect your wallet."
+                : isDisconnectError
+                    ? "Wallet connection lost. Please reconnect your wallet."
+                    : errorMessage;
+
             setState((prev) => ({
                 ...prev,
                 isLoading: false,
-                error: isDisconnectError 
-                    ? "Wallet connection lost. Please reconnect your wallet."
-                    : errorMessage,
+                error: friendlyError,
             }));
             return false;
         }

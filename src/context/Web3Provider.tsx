@@ -4,6 +4,7 @@ import React, { type ReactNode } from "react";
 import { QueryClient, QueryClientProvider, QueryCache } from "@tanstack/react-query";
 import { WagmiProvider, type State } from "wagmi";
 import { mainnet, sepolia, baseSepolia, base } from "@reown/appkit/networks";
+import { arbitrum, optimism, polygon, avalanche } from "wagmi/chains";
 import { createAppKit } from "@reown/appkit/react";
 import { SolanaAdapter } from "@reown/appkit-adapter-solana/react";
 import { wagmiAdapter, projectId } from "@/config/wagmi";
@@ -191,12 +192,17 @@ if (typeof window !== "undefined") {
         createAppKit({
             adapters: [wagmiAdapter, solanaAdapter],
             projectId: projectId!,
+            // Include all EVM chains that Wagmi uses so connection chain stays in sync (avoids "connector chain does not match connection's chain" when wallet is on e.g. Optimism)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             networks: [
                 mainnet,
                 sepolia,
                 base,
                 baseSepolia,
+                arbitrum,
+                optimism,
+                polygon,
+                avalanche,
                 solanaMainnet,
                 solanaDevnet,
             ] as any,
