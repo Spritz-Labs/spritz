@@ -43,6 +43,23 @@ async function loadHuddle01SDK(): Promise<void> {
     HuddleClient = module.HuddleClient;
 }
 
+/** Renders call duration and ticks every second without re-rendering the parent (avoids video flicker). */
+function CallDurationDisplay({ inCall, joinedAt }: { inCall: boolean; joinedAt: number | null }) {
+    const [duration, setDuration] = useState(0);
+    useEffect(() => {
+        if (!inCall || joinedAt == null) return;
+        setDuration(Math.floor((Date.now() - joinedAt) / 1000));
+        const id = setInterval(() => {
+            setDuration(Math.floor((Date.now() - joinedAt) / 1000));
+        }, 1000);
+        return () => clearInterval(id);
+    }, [inCall, joinedAt]);
+    if (!inCall) return <span className="text-zinc-500 text-xs">0:00</span>;
+    const m = Math.floor(duration / 60);
+    const sec = duration % 60;
+    return <span className="text-zinc-500 text-xs">{`${m}:${sec < 10 ? "0" : ""}${sec}`}</span>;
+}
+
 export default function RoomPage({
     params,
 }: {
@@ -62,7 +79,7 @@ export default function RoomPage({
     const [joiningRoom, setJoiningRoom] = useState(false);
     const [inCall, setInCall] = useState(false);
     const [isHost, setIsHost] = useState(false);
-    const [callDuration, setCallDuration] = useState(0);
+    const [joinedAt, setJoinedAt] = useState<number | null>(null);
     const [isMuted, setIsMuted] = useState(false);
     const [isVideoOff, setIsVideoOff] = useState(false);
     const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -154,8 +171,6 @@ export default function RoomPage({
         new Map()
     );
     const remoteAudioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
-    const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
     useEffect(() => {
         if (code) {
             fetchRoom();
@@ -990,11 +1005,7 @@ export default function RoomPage({
                 }
             }
 
-            // Start duration timer
-            durationIntervalRef.current = setInterval(() => {
-                setCallDuration((d) => d + 1);
-            }, 1000);
-
+            setJoinedAt(Date.now());
             setInCall(true);
             setJoiningRoom(false);
         } catch (err) {
@@ -1168,9 +1179,7 @@ export default function RoomPage({
     }, []);
 
     const handleLeave = useCallback(async () => {
-        if (durationIntervalRef.current) {
-            clearInterval(durationIntervalRef.current);
-        }
+        setJoinedAt(null);
 
         // Stop screen share if active
         if (isScreenSharing && clientRef.current) {
@@ -1225,7 +1234,7 @@ export default function RoomPage({
         }, 2000);
 
         setInCall(false);
-        setCallDuration(0);
+        setJoinedAt(null);
         setIsScreenSharing(false);
     }, [isScreenSharing, stopAllMediaTracks]);
 
@@ -1890,14 +1899,6 @@ export default function RoomPage({
         console.log("[Room] Switched to speaker:", deviceId);
     }, []);
 
-    const formatDuration = (seconds: number): string => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins.toString().padStart(2, "0")}:${secs
-            .toString()
-            .padStart(2, "0")}`;
-    };
-
     // Kick/remove a participant (host only)
     const handleKickPeer = useCallback(
         async (peerId: string) => {
@@ -2048,9 +2049,6 @@ export default function RoomPage({
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (durationIntervalRef.current) {
-                clearInterval(durationIntervalRef.current);
-            }
             if (clientRef.current) {
                 clientRef.current.leaveRoom().catch(() => {});
             }
@@ -2183,9 +2181,7 @@ export default function RoomPage({
                         <span className="text-white font-medium text-sm truncate max-w-[150px]">
                             {room.title}
                         </span>
-                        <span className="text-zinc-500 text-xs">
-                            {formatDuration(callDuration)}
-                        </span>
+                        <CallDurationDisplay inCall={inCall} joinedAt={joinedAt} />
                     </div>
                     <div className="flex items-center gap-2 text-xs text-zinc-400">
                         <span>👥 {totalParticipants}</span>
@@ -2401,20 +2397,7 @@ export default function RoomPage({
                                                                     peer.peerId,
                                                                     el
                                                                 );
-                                                                if (
-                                                                    peer.videoTrack &&
-                                                                    !el.srcObject
-                                                                ) {
-                                                                    el.srcObject =
-                                                                        new MediaStream(
-                                                                            [
-                                                                                peer.videoTrack,
-                                                                            ]
-                                                                        );
-                                                                    el.play().catch(
-                                                                        () => {}
-                                                                    );
-                                                                }
+                                                                // Attachment is handled by the useEffect (track sync) to avoid flicker on re-renders
                                                             }
                                                         }}
                                                         autoPlay
@@ -2585,14 +2568,9 @@ export default function RoomPage({
                                                                 peer.peerId,
                                                                 el
                                                             );
-                                                            // Always update srcObject for Safari compatibility
-                                                            if (peer.videoTrack) {
-                                                                const stream = new MediaStream([peer.videoTrack]);
-                                                                el.srcObject = stream;
-                                                                el.play().catch((e) => {
-                                                                    console.warn("[Room] Video play failed:", e);
-                                                                });
-                                                            }
+                                                            // Do NOT set srcObject here - the useEffect (Safari/track sync) handles attachment.
+                                                            // Setting srcObject in the ref callback runs every time the parent re-renders
+                                                            // (e.g. every 1s from the duration timer), causing a black flicker.
                                                         }
                                                     }}
                                                     autoPlay
