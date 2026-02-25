@@ -206,33 +206,38 @@ export function MentionInput({
     const isComposingRef = useRef(false);
     const compositionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    // Touch/mobile detection: on Android Chrome (and similar), composition events
-    // are unreliable and skipping input during composition blocks typing entirely.
+    // Touch/mobile detection: on Android Chrome/Brave (and similar), composition
+    // and controlled input are unreliable — use uncontrolled input and skip resize.
     const isTouchOrMobileRef = useRef(false);
+    const [useUncontrolledMobile, setUseUncontrolledMobile] = useState(false);
     useEffect(() => {
         if (typeof window === "undefined") return;
         const touch = "ontouchstart" in window;
         const mobile = /\bAndroid\b|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        isTouchOrMobileRef.current = touch || mobile;
+        const isMobile = touch || mobile;
+        isTouchOrMobileRef.current = isMobile;
+        if (isMobile) setUseUncontrolledMobile(true);
     }, []);
 
-    // Auto-resize textarea based on content.
-    // On touch/mobile (e.g. Android Chrome), avoid height=0px reset — it causes
-    // layout thrash and can dismiss the keyboard or drop keystrokes. Use a single
-    // scrollHeight read instead. On desktop, keep the 0px trick for accurate height.
+    // On mobile: sync from parent when value changes (e.g. emoji picker, or after send).
+    // Only write when different so we don't overwrite the user's in-progress typing.
+    useEffect(() => {
+        if (!useUncontrolledMobile || !inputRef.current) return;
+        const el = inputRef.current;
+        if (el.value !== displayValue) el.value = displayValue;
+    }, [displayValue, useUncontrolledMobile]);
+
+    // Auto-resize textarea based on content. Skip entirely on mobile — mutating
+    // height on every keystroke causes reflow and can break focus/typing in Chrome/Brave Android.
     useLayoutEffect(() => {
+        if (isTouchOrMobileRef.current) return;
         const textarea = inputRef.current;
         if (!textarea || !multiline) return;
         const lineHeight = 24;
         const maxHeight = lineHeight * maxRows;
-        if (isTouchOrMobileRef.current) {
-            const newHeight = Math.max(lineHeight, Math.min(textarea.scrollHeight, maxHeight));
-            textarea.style.height = `${newHeight}px`;
-        } else {
-            textarea.style.height = "0px";
-            const newHeight = Math.max(lineHeight, Math.min(textarea.scrollHeight, maxHeight));
-            textarea.style.height = `${newHeight}px`;
-        }
+        textarea.style.height = "0px";
+        const newHeight = Math.max(lineHeight, Math.min(textarea.scrollHeight, maxHeight));
+        textarea.style.height = `${newHeight}px`;
     }, [displayValue, multiline, maxRows, inputRef]);
 
     // Filter users based on input
@@ -636,7 +641,8 @@ export function MentionInput({
                 autoComplete="off"
                 autoCorrect="on"
                 autoCapitalize="sentences"
-                value={displayValue}
+                value={useUncontrolledMobile ? undefined : displayValue}
+                defaultValue={useUncontrolledMobile ? displayValue : undefined}
                 onChange={handleChange}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
