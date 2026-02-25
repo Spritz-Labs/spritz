@@ -797,9 +797,13 @@ export function GroupChatModal({
                 onMessageSent?.();
             } else {
                 setError(result.error || "Failed to send");
+                setNewMessage(newMessage.trim());
+                setReplyingTo(replyingTo ?? null);
             }
         } catch (err) {
             setError("Failed to send message");
+            setNewMessage(newMessage.trim());
+            setReplyingTo(replyingTo ?? null);
         } finally {
             setIsSending(false);
         }

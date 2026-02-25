@@ -1190,12 +1190,12 @@ export function ChatModal({
             const prevReplyingTo = replyingTo;
             if (!overrideMessage) setNewMessage("");
             setReplyingTo(null);
-            clearDraft();
             stopTyping();
 
             try {
                 const result = await sendMessage(peerAddress, messageContent);
                 if (result.success) {
+                    clearDraft();
                     trackMessageSent();
                     const preview = messageContent.startsWith("[GIF]")
                         ? "🎬 GIF"

@@ -206,18 +206,30 @@ export function MentionInput({
     const isComposingRef = useRef(false);
     const compositionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // Touch/mobile detection: on Android Chrome (and similar), composition events
+    // are unreliable and skipping input during composition blocks typing entirely.
+    const isTouchOrMobileRef = useRef(false);
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const touch = "ontouchstart" in window;
+        const mobile = /\bAndroid\b|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        isTouchOrMobileRef.current = touch || mobile;
+    }, []);
+
     // Auto-resize textarea based on content.
-    // useLayoutEffect runs synchronously *before* the browser paints, so the
-    // height never visually collapses to "auto" (which was causing layout
-    // thrashing, keyboard flicker, and lost keystrokes on mobile).
+    // On touch/mobile (e.g. Android Chrome), avoid height=0px reset — it causes
+    // layout thrash and can dismiss the keyboard or drop keystrokes. Use a single
+    // scrollHeight read instead. On desktop, keep the 0px trick for accurate height.
     useLayoutEffect(() => {
         const textarea = inputRef.current;
-        if (textarea && multiline) {
-            // Temporarily force a single-row height so scrollHeight recalculates
-            // to the *content* height instead of the previously-set explicit height.
-            textarea.style.height = '0px';
-            const lineHeight = 24;
-            const maxHeight = lineHeight * maxRows;
+        if (!textarea || !multiline) return;
+        const lineHeight = 24;
+        const maxHeight = lineHeight * maxRows;
+        if (isTouchOrMobileRef.current) {
+            const newHeight = Math.max(lineHeight, Math.min(textarea.scrollHeight, maxHeight));
+            textarea.style.height = `${newHeight}px`;
+        } else {
+            textarea.style.height = "0px";
             const newHeight = Math.max(lineHeight, Math.min(textarea.scrollHeight, maxHeight));
             textarea.style.height = `${newHeight}px`;
         }
@@ -312,12 +324,10 @@ export function MentionInput({
 
     // Handle input change
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        // While the mobile keyboard is composing (swipe, autocorrect, IME),
-        // let the browser own the textarea value; we sync in onCompositionEnd.
-        // Only skip when we've seen compositionStart (isComposingRef). Do NOT
-        // skip based on e.nativeEvent.isComposing alone — some devices set it
-        // for every keypress (e.g. voice input, broken IMEs), which blocks typing entirely.
-        if (isComposingRef.current) return;
+        // On touch/mobile (e.g. Android Chrome), never skip input: composition
+        // events are unreliable and would block typing. On desktop, skip only
+        // when we've seen compositionStart so IME (CJK etc.) works.
+        if (!isTouchOrMobileRef.current && isComposingRef.current) return;
 
         const newDisplayValue = e.target.value;
         const displayCursorPos = e.target.selectionStart || 0;

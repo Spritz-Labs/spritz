@@ -365,9 +365,14 @@ export function TokenChatModal({
             if (res.ok && data.message) {
                 setMessages((prev) => [...prev, data.message]);
                 setReplyingTo(null);
+            } else {
+                setMessageInput(content);
+                toast.error(data?.error || "Failed to send. Try again.");
             }
         } catch (err) {
             console.error("[TokenChat] Send error:", err);
+            setMessageInput(content);
+            toast.error("Failed to send. Check connection and try again.");
         } finally {
             setIsSending(false);
         }
