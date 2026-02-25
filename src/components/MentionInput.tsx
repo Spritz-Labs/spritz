@@ -650,7 +650,7 @@ export function MentionInput({
                         isComposingRef.current = false;
                         const el = inputRef.current;
                         if (el) {
-                            const synthetic = { target: el, nativeEvent: { isComposing: false } } as React.ChangeEvent<HTMLTextAreaElement>;
+                            const synthetic = { target: el, nativeEvent: { isComposing: false } } as unknown as React.ChangeEvent<HTMLTextAreaElement>;
                             handleChange(synthetic);
                         }
                     }, 2000);
@@ -667,7 +667,7 @@ export function MentionInput({
                     const el = e.target as HTMLTextAreaElement;
                     setTimeout(() => {
                         if (el && inputRef.current === el) {
-                            const synthetic = { target: el, nativeEvent: { isComposing: false } } as React.ChangeEvent<HTMLTextAreaElement>;
+                            const synthetic = { target: el, nativeEvent: { isComposing: false } } as unknown as React.ChangeEvent<HTMLTextAreaElement>;
                             handleChange(synthetic);
                         }
                     }, 0);
