@@ -204,6 +204,7 @@ export function MentionInput({
     
     // Track IME / mobile-keyboard composition to avoid fighting the browser
     const isComposingRef = useRef(false);
+    const compositionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Auto-resize textarea based on content.
     // useLayoutEffect runs synchronously *before* the browser paints, so the
@@ -311,15 +312,12 @@ export function MentionInput({
 
     // Handle input change
     const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        // While the mobile keyboard is composing (swipe, autocorrect,
-        // predictive text), let the browser own the textarea value.
-        // We'll sync once compositionEnd fires.
-        // Belt-and-suspenders: also check the native event's isComposing flag
-        // (covers Chrome Android where input fires before compositionEnd).
-        if (
-            isComposingRef.current ||
-            (e.nativeEvent && (e.nativeEvent as InputEvent).isComposing)
-        ) return;
+        // While the mobile keyboard is composing (swipe, autocorrect, IME),
+        // let the browser own the textarea value; we sync in onCompositionEnd.
+        // Only skip when we've seen compositionStart (isComposingRef). Do NOT
+        // skip based on e.nativeEvent.isComposing alone — some devices set it
+        // for every keypress (e.g. voice input, broken IMEs), which blocks typing entirely.
+        if (isComposingRef.current) return;
 
         const newDisplayValue = e.target.value;
         const displayCursorPos = e.target.selectionStart || 0;
@@ -590,6 +588,16 @@ export function MentionInput({
         onKeyDown?.(e);
     };
 
+    // Clear composition safety timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (compositionTimeoutRef.current) {
+                clearTimeout(compositionTimeoutRef.current);
+                compositionTimeoutRef.current = null;
+            }
+        };
+    }, []);
+
     // Close suggestions on click outside
     useEffect(() => {
         const handleClickOutside = (e: MouseEvent) => {
@@ -624,12 +632,35 @@ export function MentionInput({
                 onPaste={handlePaste}
                 onCompositionStart={() => {
                     isComposingRef.current = true;
+                    // Safety: if compositionEnd never fires (blur, browser bug, voice input),
+                    // stop ignoring input after 2s and sync from DOM so typing isn't permanently blocked.
+                    if (compositionTimeoutRef.current) clearTimeout(compositionTimeoutRef.current);
+                    compositionTimeoutRef.current = setTimeout(() => {
+                        compositionTimeoutRef.current = null;
+                        isComposingRef.current = false;
+                        const el = inputRef.current;
+                        if (el) {
+                            const synthetic = { target: el, nativeEvent: { isComposing: false } } as React.ChangeEvent<HTMLTextAreaElement>;
+                            handleChange(synthetic);
+                        }
+                    }, 2000);
                 }}
                 onCompositionEnd={(e) => {
+                    if (compositionTimeoutRef.current) {
+                        clearTimeout(compositionTimeoutRef.current);
+                        compositionTimeoutRef.current = null;
+                    }
                     isComposingRef.current = false;
-                    // Composition finished (autocorrect, swipe, etc.) – sync the
-                    // final value to parent by re-running handleChange.
-                    handleChange(e as unknown as React.ChangeEvent<HTMLTextAreaElement>);
+                    // Defer sync to next tick: some browsers (especially mobile) update the
+                    // textarea value after compositionEnd. Reading now can miss the final value
+                    // and leave the user unable to type.
+                    const el = e.target as HTMLTextAreaElement;
+                    setTimeout(() => {
+                        if (el && inputRef.current === el) {
+                            const synthetic = { target: el, nativeEvent: { isComposing: false } } as React.ChangeEvent<HTMLTextAreaElement>;
+                            handleChange(synthetic);
+                        }
+                    }, 0);
                 }}
                 placeholder={placeholder}
                 disabled={disabled}

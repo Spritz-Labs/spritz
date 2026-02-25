@@ -65,5 +65,5 @@ supabase/.temp/
 **/public/worker-*.js.map
 
 # Security Audits
-audits/
-audits/*
+audit/*
+audit*
