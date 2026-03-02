@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
         .from("shout_developer_keys")
-        .select("id, name, scopes, rate_limit_per_minute, is_active, last_used_at, created_at, revoked_at")
+        .select("id, name, scopes, rate_limit_per_minute, is_active, last_used_at, created_at, revoked_at, approved_at")
         .eq("developer_address", session.userAddress)
         .order("created_at", { ascending: false });
 
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
 
     const masked = (data || []).map((key) => ({
         ...key,
+        status: key.revoked_at ? "revoked" : key.approved_at ? "approved" : "pending",
         api_key_preview: "sk_live_****" + (key.id?.slice(-4) || ""),
     }));
 
@@ -64,7 +65,8 @@ export async function POST(request: NextRequest) {
         key: {
             ...data,
             api_key: apiKey,
+            status: "pending",
         },
-        warning: "Store this API key securely. It will not be shown again.",
+        warning: "Store this API key securely. It will not be shown again. Your key is pending admin approval and will not work until approved.",
     });
 }
