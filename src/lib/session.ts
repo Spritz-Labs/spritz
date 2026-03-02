@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { hasApiKey, validateApiKey, type DeveloperKeyInfo } from "./apiKey";
 
 // SECURITY: No fallback secrets - must be explicitly set
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET;
@@ -104,7 +105,8 @@ export function clearSessionCookie(response: NextResponse): NextResponse {
 
 /**
  * Get authenticated user from request (for API routes)
- * Returns the verified user address or null if not authenticated
+ * Returns the verified user address or null if not authenticated.
+ * Supports cookie auth, Bearer token auth, and API key + Bearer for SDK clients.
  */
 export async function getAuthenticatedUser(request: NextRequest): Promise<SessionPayload | null> {
     // Try cookie first
@@ -114,15 +116,30 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<Sessio
         if (payload) return payload;
     }
     
-    // Fallback: Check Authorization header (for API clients)
+    // Fallback: Check Authorization header (for API clients / SDK)
     const authHeader = request.headers.get("Authorization");
     if (authHeader?.startsWith("Bearer ")) {
         const token = authHeader.slice(7);
         const payload = await verifySessionToken(token);
-        if (payload) return payload;
+        if (payload) {
+            // If X-API-Key is present, validate it as well
+            if (hasApiKey(request)) {
+                const keyInfo = await validateApiKey(request);
+                if (!keyInfo) return null;
+            }
+            return payload;
+        }
     }
     
     return null;
+}
+
+/**
+ * Validate API key from request without requiring user auth.
+ * Used by SDK endpoints that only need app-level authentication.
+ */
+export async function getValidatedApiKey(request: NextRequest): Promise<DeveloperKeyInfo | null> {
+    return validateApiKey(request);
 }
 
 /**
@@ -130,6 +147,11 @@ export async function getAuthenticatedUser(request: NextRequest): Promise<Sessio
  * Returns true if request is from an allowed origin
  */
 export function validateCsrf(request: NextRequest): boolean {
+    // SDK requests with API key bypass CSRF (server-to-server, no browser origin)
+    if (hasApiKey(request)) {
+        return true;
+    }
+
     const origin = request.headers.get("origin");
     const referer = request.headers.get("referer");
     

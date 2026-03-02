@@ -1,0 +1,3 @@
+[submodule "spritz-typescript-sdk"]
+	path = spritz-typescript-sdk
+	url = https://github.com/Spritz-Labs/spritz-typescript-sdk.git

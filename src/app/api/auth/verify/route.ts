@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyMessage } from "viem";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
-import { createAuthResponse } from "@/lib/session";
+import { createAuthResponse, createFrontendSessionToken } from "@/lib/session";
 import { generateSecureNonce, storeNonce, verifyAndConsumeNonce, extractNonceFromMessage } from "@/lib/nonce";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -150,12 +150,15 @@ export async function POST(request: NextRequest) {
                 .eq("wallet_address", normalizedAddress);
         }
 
+        const sessionToken = await createFrontendSessionToken(normalizedAddress, "wallet");
+
         // Return user data with verification status and set session cookie
         return createAuthResponse(
             normalizedAddress,
             "wallet",
             {
                 verified: true,
+                sessionToken,
                 user: {
                     id: user.id,
                     wallet_address: user.wallet_address,
