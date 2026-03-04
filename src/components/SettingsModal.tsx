@@ -219,7 +219,7 @@ export function SettingsModal({
             .then((res) => res.json())
             .then((data) => {
                 if (data.keys) setDeveloperKeys(data.keys);
-                if (data.error) setDeveloperKeysError(data.error);
+                if (data.error) setDeveloperKeysError(data.details ? `${data.error}: ${data.details}` : data.error);
             })
             .catch(() => setDeveloperKeysError("Failed to load API keys"))
             .finally(() => setDeveloperKeysLoading(false));

@@ -23,13 +23,21 @@ export async function GET(request: NextRequest) {
         .order("created_at", { ascending: false });
 
     if (error) {
-        return NextResponse.json({ error: "Failed to fetch API keys" }, { status: 500 });
+        console.error("[GET /api/developer/keys] Supabase error:", error.message, error.code);
+        const msg = error.message ?? "";
+        if (msg.includes("does not exist") || msg.includes("relation") || error.code === "PGRST301") {
+            return NextResponse.json({ keys: [] });
+        }
+        return NextResponse.json(
+            { error: "Failed to fetch API keys", details: error.message },
+            { status: 500 }
+        );
     }
 
-    const masked = (data || []).map((key) => ({
+    const masked = (data || []).map((key: Record<string, unknown>) => ({
         ...key,
         status: key.revoked_at ? "revoked" : key.approved_at ? "approved" : "pending",
-        api_key_preview: "sk_live_****" + (key.id?.slice(-4) || ""),
+        api_key_preview: "sk_live_****" + (typeof key.id === "string" ? key.id.slice(-4) : ""),
     }));
 
     return NextResponse.json({ keys: masked });
