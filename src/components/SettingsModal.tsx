@@ -63,6 +63,8 @@ type SettingsModalProps = {
     ensAvatar: string | null;
     onToggleUseCustomAvatar: () => void;
     onSetCustomAvatar: (url: string | null) => void;
+    // Developers (API keys)
+    isAdmin?: boolean;
 };
 
 export function SettingsModal({
@@ -94,6 +96,7 @@ export function SettingsModal({
     ensAvatar,
     onToggleUseCustomAvatar,
     onSetCustomAvatar,
+    isAdmin = false,
 }: SettingsModalProps) {
     const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
     const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -102,6 +105,14 @@ export function SettingsModal({
     const [showPasskeyManager, setShowPasskeyManager] = useState(false);
     const [showAddressBook, setShowAddressBook] = useState(false);
     const [showRegistrationPrefs, setShowRegistrationPrefs] = useState(false);
+
+    // Developer API keys
+    type DevKey = { id: string; name: string; status: string; api_key_preview: string; created_at: string };
+    const [developerKeys, setDeveloperKeys] = useState<DevKey[]>([]);
+    const [developerKeysLoading, setDeveloperKeysLoading] = useState(false);
+    const [developerKeysCreating, setDeveloperKeysCreating] = useState(false);
+    const [developerKeysError, setDeveloperKeysError] = useState<string | null>(null);
+    const [newlyCreatedKey, setNewlyCreatedKey] = useState<string | null>(null);
 
     // Address book
     const {
@@ -197,6 +208,64 @@ export function SettingsModal({
         },
         [deleteEntry]
     );
+
+    // Fetch developer API keys when modal opens
+    useEffect(() => {
+        if (!isOpen || !userAddress) return;
+        setNewlyCreatedKey(null);
+        setDeveloperKeysLoading(true);
+        setDeveloperKeysError(null);
+        fetch("/api/developer/keys", { credentials: "include" })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.keys) setDeveloperKeys(data.keys);
+                if (data.error) setDeveloperKeysError(data.error);
+            })
+            .catch(() => setDeveloperKeysError("Failed to load API keys"))
+            .finally(() => setDeveloperKeysLoading(false));
+    }, [isOpen, userAddress]);
+
+    const handleApplyForApiKey = useCallback(async () => {
+        setDeveloperKeysCreating(true);
+        setDeveloperKeysError(null);
+        setNewlyCreatedKey(null);
+        try {
+            const res = await fetch("/api/developer/keys", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ name: "My app" }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to create key");
+            setNewlyCreatedKey(data.key.api_key);
+            setDeveloperKeys((prev) => [
+                {
+                    id: data.key.id,
+                    name: data.key.name,
+                    status: data.key.status,
+                    api_key_preview: "sk_live_****" + (data.key.id?.slice(-4) ?? ""),
+                    created_at: data.key.created_at,
+                },
+                ...prev,
+            ]);
+        } catch (e) {
+            setDeveloperKeysError(e instanceof Error ? e.message : "Failed to create key");
+        } finally {
+            setDeveloperKeysCreating(false);
+        }
+    }, []);
+
+    const handleRevokeApiKey = useCallback(async (id: string) => {
+        if (!confirm("Revoke this API key? It will stop working immediately.")) return;
+        try {
+            const res = await fetch(`/api/developer/keys/${id}`, { method: "DELETE", credentials: "include" });
+            if (!res.ok) throw new Error("Failed to revoke");
+            setDeveloperKeys((prev) => prev.map((k) => (k.id === id ? { ...k, status: "revoked" } : k)));
+        } catch {
+            setDeveloperKeysError("Failed to revoke key");
+        }
+    }, []);
 
     // Resize image for avatar (ensure high quality)
     // Increased to 1024px and 95% quality for sharper profile photos
@@ -2204,6 +2273,75 @@ export function SettingsModal({
                                                     )}
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* Developers Section */}
+                                    <div className="mb-4">
+                                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 px-1">
+                                            Developers
+                                        </h3>
+                                        <div className="px-4 py-3 rounded-xl bg-zinc-800/50 space-y-3">
+                                            <p className="text-zinc-400 text-sm">
+                                                Use API keys with the Spritz TypeScript SDK. {isAdmin ? "As an admin, new keys work immediately." : "New keys require admin approval before they work."}
+                                            </p>
+                                            {developerKeysLoading ? (
+                                                <p className="text-zinc-500 text-sm">Loading…</p>
+                                            ) : (
+                                                <>
+                                                    {newlyCreatedKey && (
+                                                        <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 space-y-2">
+                                                            <p className="text-emerald-400 text-xs font-medium">Copy your key now — it won’t be shown again.</p>
+                                                            <div className="flex items-center gap-2">
+                                                                <code className="flex-1 text-xs text-zinc-300 font-mono truncate">{newlyCreatedKey}</code>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        navigator.clipboard.writeText(newlyCreatedKey);
+                                                                        setNewlyCreatedKey(null);
+                                                                    }}
+                                                                    className="shrink-0 px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-white text-xs"
+                                                                >
+                                                                    Copy &amp; dismiss
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    <ul className="space-y-2">
+                                                        {developerKeys.map((k) => (
+                                                            <li key={k.id} className="flex items-center justify-between gap-2 py-2 border-b border-zinc-700/50 last:border-0">
+                                                                <div className="min-w-0">
+                                                                    <p className="text-white text-sm font-medium truncate">{k.name}</p>
+                                                                    <p className="text-zinc-500 text-xs font-mono truncate">{k.api_key_preview}</p>
+                                                                    <span className={`inline-block mt-0.5 text-xs px-1.5 py-0.5 rounded ${k.status === "approved" ? "bg-emerald-500/20 text-emerald-400" : k.status === "revoked" ? "bg-zinc-600 text-zinc-400" : "bg-amber-500/20 text-amber-400"}`}>
+                                                                        {k.status}
+                                                                    </span>
+                                                                </div>
+                                                                {k.status !== "revoked" && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleRevokeApiKey(k.id)}
+                                                                        className="shrink-0 text-red-400 hover:text-red-300 text-xs"
+                                                                    >
+                                                                        Revoke
+                                                                    </button>
+                                                                )}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleApplyForApiKey}
+                                                        disabled={developerKeysCreating}
+                                                        className="w-full py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium disabled:opacity-50"
+                                                    >
+                                                        {developerKeysCreating ? "Creating…" : isAdmin ? "Create API key" : "Apply for API key"}
+                                                    </button>
+                                                    {developerKeysError && (
+                                                        <p className="text-red-400 text-xs">{developerKeysError}</p>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* App Info */}

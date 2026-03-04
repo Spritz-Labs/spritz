@@ -6203,6 +6203,7 @@ function DashboardContent({
                 ensAvatar={userENS.avatar}
                 onToggleUseCustomAvatar={toggleUseCustomAvatar}
                 onSetCustomAvatar={setCustomAvatar}
+                isAdmin={isAdmin}
             />
 
             {/* Registration Preferences Modal */}

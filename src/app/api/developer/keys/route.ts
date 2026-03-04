@@ -43,30 +43,43 @@ export async function POST(request: NextRequest) {
     const name = typeof body.name === "string" ? body.name.trim().slice(0, 100) : "Default";
     const scopes = Array.isArray(body.scopes) ? body.scopes.filter((s: unknown) => typeof s === "string") : ["read", "write"];
 
-    const apiKey = generateApiKey();
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const { data: adminRow } = await supabase
+        .from("shout_admins")
+        .select("id")
+        .eq("wallet_address", session.userAddress)
+        .maybeSingle();
+    const isAdmin = !!adminRow;
+
+    const apiKey = generateApiKey();
+    const insertPayload: Record<string, unknown> = {
+        developer_address: session.userAddress,
+        api_key: apiKey,
+        name,
+        scopes,
+    };
+    if (isAdmin) {
+        insertPayload.approved_at = new Date().toISOString();
+    }
 
     const { data, error } = await supabase
         .from("shout_developer_keys")
-        .insert({
-            developer_address: session.userAddress,
-            api_key: apiKey,
-            name,
-            scopes,
-        })
-        .select("id, name, scopes, rate_limit_per_minute, created_at")
+        .insert(insertPayload)
+        .select("id, name, scopes, rate_limit_per_minute, created_at, approved_at")
         .single();
 
     if (error) {
         return NextResponse.json({ error: "Failed to create API key" }, { status: 500 });
     }
 
+    const approved = !!data?.approved_at;
     return NextResponse.json({
         key: {
             ...data,
             api_key: apiKey,
-            status: "pending",
+            status: approved ? "approved" : "pending",
         },
-        warning: "Store this API key securely. It will not be shown again. Your key is pending admin approval and will not work until approved.",
+        warning: "Store this API key securely. It will not be shown again." + (approved ? "" : " Your key is pending admin approval and will not work until approved."),
     });
 }
