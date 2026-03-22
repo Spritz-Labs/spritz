@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,7 +14,6 @@ export type SearchResult = {
     sender_address: string;
     sender_name?: string;
     created_at: string;
-    // Context info
     channel_id?: string;
     channel_name?: string;
     channel_emoji?: string;
@@ -28,14 +28,17 @@ export type SearchResult = {
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim();
-    const userAddress = searchParams.get("userAddress")?.toLowerCase();
     const type = searchParams.get("type"); // "all", "channels", "dms", "groups"
     const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
 
+    const session = await getAuthenticatedUser(request);
+    const userAddress = session?.userAddress?.toLowerCase()
+        ?? searchParams.get("userAddress")?.toLowerCase();
+
     if (!userAddress) {
         return NextResponse.json(
-            { error: "User address is required" },
-            { status: 400 }
+            { error: "Authentication required" },
+            { status: 401 }
         );
     }
 

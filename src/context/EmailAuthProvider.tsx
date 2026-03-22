@@ -366,36 +366,23 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
                 return false;
             }
 
-            // Send verification code via API
-            console.log("[EmailAuthProvider] Sending code request for:", email);
             const response = await fetch("/api/email/login/send-code", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email }),
-                credentials: "include", // Required for session cookies
+                credentials: "include",
             });
 
-            console.log("[EmailAuthProvider] Response status:", response.status);
-            
             let data;
             try {
                 data = await response.json();
-            } catch (parseError) {
-                console.error("[EmailAuthProvider] Failed to parse response:", parseError);
-                const text = await response.text();
-                console.error("[EmailAuthProvider] Response text:", text);
+            } catch {
                 throw new Error("Invalid response from server");
             }
-            
-            console.log("[EmailAuthProvider] Response data:", data);
 
             if (!response.ok) {
-                const errorMsg = data?.error || `Server error: ${response.status}`;
-                console.error("[EmailAuthProvider] API error:", errorMsg);
-                throw new Error(errorMsg);
+                throw new Error(data?.error || `Server error: ${response.status}`);
             }
-
-            console.log("[EmailAuthProvider] Code sent successfully");
             setState((prev) => ({ ...prev, isLoading: false, step: "code" }));
             return true;
         } catch (error) {

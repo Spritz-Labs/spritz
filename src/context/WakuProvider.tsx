@@ -195,24 +195,15 @@ async function tryRestoreKeypairFromCloud(
     userAddress: string,
     encryptionKey: Uint8Array
 ): Promise<MessagingKeypair | null> {
-    if (!supabase) return null;
-
     try {
-        const { data, error } = await supabase
-            .from("shout_user_settings")
-            .select("messaging_public_key, messaging_private_key_encrypted")
-            .eq("wallet_address", userAddress.toLowerCase())
-            .single();
+        const res = await fetch("/api/user/messaging-keys", { credentials: "include" });
+        if (!res.ok) return null;
+        const data = await res.json();
 
-        if (
-            error ||
-            !data?.messaging_public_key ||
-            !data?.messaging_private_key_encrypted
-        ) {
+        if (!data?.messaging_public_key || !data?.messaging_private_key_encrypted) {
             return null;
         }
 
-        // Try to decrypt the private key
         const privateKey = await decryptPrivateKeyFromBackup(
             data.messaging_private_key_encrypted,
             encryptionKey

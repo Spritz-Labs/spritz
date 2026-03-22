@@ -27,30 +27,22 @@ export function usePhoneVerification(userAddress: string | null) {
     const [error, setError] = useState<string | null>(null);
     const [codeExpiresAt, setCodeExpiresAt] = useState<Date | null>(null);
 
-    // Fetch current user's phone verification status
     const fetchPhoneStatus = useCallback(async () => {
-        if (!userAddress || !isSupabaseConfigured || !supabase) return;
-        
-        const client = supabase; // TypeScript narrowing
-        if (!client) return;
+        if (!userAddress) return;
 
-        const { data, error: fetchError } = await client
-            .from("shout_phone_numbers")
-            .select("phone_number, verified")
-            .eq("wallet_address", normalizeAddress(userAddress))
-            .maybeSingle();
-
-        if (fetchError) {
-            console.error(
-                "[usePhoneVerification] Error fetching status:",
-                fetchError
-            );
-        } else if (data) {
-            setPhoneNumber(data.phone_number);
-            setIsVerified(data.verified);
-            if (data.verified) {
-                setState("verified");
+        try {
+            const res = await fetch("/api/phone/status", { credentials: "include" });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.phoneNumber) {
+                setPhoneNumber(data.phoneNumber);
+                setIsVerified(data.verified);
+                if (data.verified) {
+                    setState("verified");
+                }
             }
+        } catch {
+            // Phone status unavailable — non-critical
         }
     }, [userAddress]);
 

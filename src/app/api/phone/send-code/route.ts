@@ -305,8 +305,7 @@ export async function POST(request: NextRequest) {
                 "[send-code] Twilio error:",
                 JSON.stringify(twilioResult, null, 2)
             );
-            console.error("[send-code] Attempted to send to:", normalizedPhone);
-            console.error("[send-code] From number:", twilio.phoneNumber);
+            console.error("[send-code] SMS delivery failed");
 
             // Provide more specific error messages
             let errorMessage =

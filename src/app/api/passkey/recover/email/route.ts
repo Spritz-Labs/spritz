@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
         if (userError || !user) {
             // Don't reveal if email exists - return generic message
-            console.log("[PasskeyRecovery] Email not found:", normalizedEmail);
+            console.log("[PasskeyRecovery] Email not found");
             return NextResponse.json({
                 success: true,
                 message: "If this email is associated with a passkey account, you will receive a recovery code.",
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
 
         if (!user.email_verified) {
             // Email exists but not verified
-            console.log("[PasskeyRecovery] Email not verified:", normalizedEmail);
+            console.log("[PasskeyRecovery] Email not verified");
             return NextResponse.json({
                 success: true,
                 message: "If this email is associated with a passkey account, you will receive a recovery code.",
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
             .gte("created_at", oneHourAgo);
 
         if (recentCodes && recentCodes >= 3) {
-            console.log("[PasskeyRecovery] Rate limit exceeded for email:", normalizedEmail);
+            console.log("[PasskeyRecovery] Rate limit exceeded");
             return NextResponse.json(
                 { error: "Too many recovery attempts. Please try again later." },
                 { status: 429 }
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log("[PasskeyRecovery] Recovery code sent to:", normalizedEmail);
+        console.log("[PasskeyRecovery] Recovery code sent");
 
         return NextResponse.json({
             success: true,

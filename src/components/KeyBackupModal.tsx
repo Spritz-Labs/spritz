@@ -281,31 +281,25 @@ export function KeyBackupModal({ isOpen, onClose, userAddress, onKeyRestored }: 
         throw new Error("PIN must be exactly 6 digits");
       }
       
-      // Fetch encrypted backup from Supabase
-      if (!supabase || !userAddress) {
+      if (!userAddress) {
         throw new Error("Not connected");
       }
-      
-      const { data, error } = await supabase
-        .from("shout_user_settings")
-        .select("messaging_backup_encrypted, messaging_backup_salt")
-        .eq("wallet_address", userAddress.toLowerCase())
-        .single();
-      
-      if (error || !data?.messaging_backup_encrypted || !data?.messaging_backup_salt) {
+
+      const res = await fetch("/api/user/messaging-keys", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch backup");
+      const data = await res.json();
+
+      if (!data?.messaging_backup_encrypted || !data?.messaging_backup_salt) {
         throw new Error("No backup found for this account");
       }
-      
-      // Get salt
+
       const salt = Uint8Array.from(atob(data.messaging_backup_salt), c => c.charCodeAt(0));
-      
-      // Derive key
+
       const derived = await deriveKeyFromPhraseAndPin(restorePhrase, restorePin, salt);
       if (!derived) {
         throw new Error("Failed to derive key");
       }
-      
-      // Decrypt
+
       const decrypted = await decryptWithDerivedKey(data.messaging_backup_encrypted, derived.key);
       if (!decrypted) {
         throw new Error("Decryption failed. Check your recovery phrase and PIN.");

@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") ?? "all";
 
+    const empty: { data: never[]; error: null } = { data: [], error: null };
     const incoming =
         type === "incoming" || type === "all"
             ? await supabase
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
                   .select("*")
                   .eq("to_address", userAddress)
                   .eq("status", "pending")
-            : { data: [] };
+            : empty;
     const outgoing =
         type === "outgoing" || type === "all"
             ? await supabase
@@ -33,9 +34,10 @@ export async function GET(request: NextRequest) {
                   .select("*")
                   .eq("from_address", userAddress)
                   .eq("status", "pending")
-            : { data: [] };
+            : empty;
 
-    if (incoming.error || outgoing.error) {
+    const hasError = (r: { error?: unknown }) => r.error != null;
+    if (hasError(incoming) || hasError(outgoing)) {
         return NextResponse.json({ error: "Failed to fetch friend requests" }, { status: 500 });
     }
 

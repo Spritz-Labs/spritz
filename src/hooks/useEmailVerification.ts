@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { supabase } from "@/config/supabase";
 
 type EmailState = {
     email: string | null;
@@ -26,34 +25,28 @@ export function useEmailVerification(walletAddress: string | null) {
         codeSent: false,
     });
 
-    // Load email status
     const loadEmailStatus = useCallback(async () => {
-        if (!walletAddress || !supabase) {
+        if (!walletAddress) {
             setState(prev => ({ ...prev, isLoading: false }));
             return;
         }
 
         try {
-            const { data, error } = await supabase
-                .from("shout_users")
-                .select("email, email_verified, email_updates_opt_in")
-                .eq("wallet_address", walletAddress.toLowerCase())
-                .single();
-
-            if (error) {
+            const res = await fetch("/api/auth/session", { credentials: "include" });
+            if (!res.ok) {
                 setState(prev => ({ ...prev, isLoading: false }));
                 return;
             }
-
+            const data = await res.json();
+            const user = data.user;
             setState(prev => ({
                 ...prev,
-                email: data.email,
-                isVerified: data.email_verified || false,
-                emailUpdatesOptIn: data.email_updates_opt_in ?? false,
+                email: user?.email ?? null,
+                isVerified: user?.email_verified || false,
+                emailUpdatesOptIn: user?.email_updates_opt_in ?? false,
                 isLoading: false,
             }));
-        } catch (err) {
-            console.error("[Email] Load error:", err);
+        } catch {
             setState(prev => ({ ...prev, isLoading: false }));
         }
     }, [walletAddress]);
@@ -166,24 +159,21 @@ export function useEmailVerification(walletAddress: string | null) {
         }));
     }, []);
 
-    // Remove email
     const removeEmail = useCallback(async () => {
-        if (!walletAddress || !supabase) {
+        if (!walletAddress) {
             setState(prev => ({ ...prev, error: "Wallet not connected" }));
             return false;
         }
 
         try {
-            const { error } = await supabase
-                .from("shout_users")
-                .update({
-                    email: null,
-                    email_verified: false,
-                })
-                .eq("wallet_address", walletAddress.toLowerCase());
+            const res = await fetch("/api/email/remove", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ walletAddress }),
+            });
 
-            if (error) {
-                console.error("[Email] Remove error:", error);
+            if (!res.ok) {
                 setState(prev => ({ ...prev, error: "Failed to remove email" }));
                 return false;
             }
@@ -196,8 +186,7 @@ export function useEmailVerification(walletAddress: string | null) {
                 error: null,
             }));
             return true;
-        } catch (err) {
-            console.error("[Email] Remove error:", err);
+        } catch {
             setState(prev => ({ ...prev, error: "Failed to remove email" }));
             return false;
         }

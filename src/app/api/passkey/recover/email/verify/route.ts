@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (findError || !recovery) {
-            console.log("[PasskeyRecovery] Invalid code for:", normalizedEmail);
+            console.log("[PasskeyRecovery] Invalid code attempt");
             
             // Increment attempts counter for security tracking
             await supabase
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
         // Check if expired
         if (new Date(recovery.expires_at) < new Date()) {
-            console.log("[PasskeyRecovery] Expired code for:", normalizedEmail);
+            console.log("[PasskeyRecovery] Expired code attempt");
             return NextResponse.json(
                 { error: "Recovery code has expired. Please request a new one." },
                 { status: 400 }
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
 
         // Check attempts (max 5)
         if (recovery.attempts >= 5) {
-            console.log("[PasskeyRecovery] Too many attempts for:", normalizedEmail);
+            console.log("[PasskeyRecovery] Too many attempts");
             return NextResponse.json(
                 { error: "Too many incorrect attempts. Please request a new code." },
                 { status: 400 }
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
                 recovery_code: recoveryToken,
                 expires_at: tokenExpires.toISOString(),
                 created_by: "email_recovery",
-                notes: `Email recovery for ${normalizedEmail}`,
+                notes: "Email recovery",
             });
 
         if (tokenError) {

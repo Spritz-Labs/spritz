@@ -48,18 +48,14 @@ export function EmailAuth() {
 
         clearError();
 
-        console.log("[EmailAuth] Sending code to:", email);
         try {
             const success = await sendCode(email);
-            console.log("[EmailAuth] Send code result:", success);
             if (success) {
-                console.log("[EmailAuth] Setting step to 'code'");
                 setCodeSent(true);
                 setStep("code");
-                console.log("[EmailAuth] Step set to 'code'");
             }
-        } catch (error) {
-            console.error("[EmailAuth] Error in handleSendCode:", error);
+        } catch {
+            // Error handled by sendCode
         }
     };
 
@@ -68,9 +64,7 @@ export function EmailAuth() {
         clearError();
 
         const emailToUse = contextEmail || localEmail;
-        console.log("[EmailAuth] Logging in with email:", emailToUse, "code:", code);
         if (!emailToUse || !code) {
-            console.error("[EmailAuth] Missing email or code:", { emailToUse, code });
             return;
         }
         const success = await login(emailToUse, code);
