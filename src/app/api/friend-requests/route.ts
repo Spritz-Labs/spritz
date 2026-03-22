@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
+import { logAccess } from "@/lib/auditLog";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -17,6 +18,12 @@ export async function GET(request: NextRequest) {
     const userAddress = session.userAddress.toLowerCase();
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") ?? "all";
+
+    logAccess(request, "friend_requests.list", {
+        userAddress,
+        resourceTable: "shout_friend_requests",
+        metadata: { type },
+    });
 
     const empty: { data: never[]; error: null } = { data: [], error: null };
     const incoming =

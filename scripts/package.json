@@ -1,0 +1,27 @@
+{
+    "name": "spritz-e2e-tests",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "test": "tsx run-all.ts",
+        "test:auth": "tsx tests/01-auth.ts",
+        "test:account": "tsx tests/02-account.ts",
+        "test:channels": "tsx tests/03-channels.ts",
+        "test:friends": "tsx tests/04-friends.ts",
+        "test:search": "tsx tests/05-search.ts",
+        "test:devkeys": "tsx tests/06-developer-keys.ts",
+        "test:phone": "tsx tests/07-phone.ts",
+        "test:msgkeys": "tsx tests/08-messaging-keys.ts",
+        "test:security": "tsx tests/09-security.ts",
+        "test:agents": "tsx tests/10-agents.ts"
+    },
+    "dependencies": {
+        "jose": "^5.0.0",
+        "viem": "^2.0.0"
+    },
+    "devDependencies": {
+        "tsx": "^4.0.0",
+        "typescript": "^5.4.0"
+    }
+}

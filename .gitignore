@@ -1,3 +1,6 @@
+# Test scripts secrets
+scripts/.env
+
 # Dependencies
 node_modules/
 .pnp/
@@ -65,5 +68,5 @@ supabase/.temp/
 **/public/worker-*.js.map
 
 # Security Audits
-audit/*
-audit*
+/audit/*
+/audit-*

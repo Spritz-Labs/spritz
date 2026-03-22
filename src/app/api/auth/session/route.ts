@@ -6,6 +6,7 @@ import {
 } from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { logAccess } from "@/lib/auditLog";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -58,6 +59,13 @@ export async function GET(request: NextRequest) {
                 );
             }
         }
+    }
+
+    if (userData?.email) {
+        logAccess(request, "email.read", {
+            userAddress: session.userAddress,
+            resourceTable: "shout_users",
+        });
     }
 
     return NextResponse.json({
