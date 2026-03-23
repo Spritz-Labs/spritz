@@ -56,7 +56,9 @@ supabase/.temp/
 
 # Misc
 *.pem
-.vercel
+# Vercel: keep project link so `npm run vercel` targets production (shout → app.spritz.chat)
+.vercel/*
+!.vercel/project.json
 .turbo
 
 # PWA files
