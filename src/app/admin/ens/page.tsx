@@ -102,6 +102,8 @@ export default function AdminEnsPage() {
     const [testResult, setTestResult] = useState<ResolveResult | null>(null);
     const [testing, setTesting] = useState(false);
     const [gatewayPing, setGatewayPing] = useState<"idle" | "loading" | "ok" | "disabled" | "fail">("idle");
+    /** Why ping says "disabled": server off vs form not saved */
+    const [pingDisabledWhy, setPingDisabledWhy] = useState<"off" | "unsaved" | null>(null);
 
     const [editEnabled, setEditEnabled] = useState(false);
     const [editGateway, setEditGateway] = useState("");
@@ -202,6 +204,7 @@ export default function AdminEnsPage() {
         const base = setupMeta?.appOrigin || (typeof window !== "undefined" ? window.location.origin : "");
         if (!base) return;
         setGatewayPing("loading");
+        setPingDisabledWhy(null);
         try {
             const url = `${base}/api/ens/ccip-gateway?health=1`;
             const res = await fetch(url, { method: "GET" });
@@ -214,7 +217,13 @@ export default function AdminEnsPage() {
                 setGatewayPing("fail");
                 return;
             }
-            setGatewayPing(json.enabled ? "ok" : "disabled");
+            if (json.enabled) {
+                setGatewayPing("ok");
+                return;
+            }
+            setGatewayPing("disabled");
+            // Ping reads Supabase — toggle is local until "Save step 1"
+            setPingDisabledWhy(editEnabled ? "unsaved" : "off");
         } catch {
             setGatewayPing("fail");
         }
@@ -227,8 +236,17 @@ export default function AdminEnsPage() {
           : '["https://YOUR_APP/api/ens/ccip-gateway?sender={sender}&data={data}"]';
 
     const gatewayOk = gatewayHasCcipPlaceholders(editGateway.trim());
-    const step1Done = editEnabled && !!editGateway.trim() && gatewayOk;
-    const step2Done = !!editResolver.trim();
+    const savedGatewayOk =
+        !!config?.gateway_url?.trim() && gatewayHasCcipPlaceholders(config.gateway_url.trim());
+    // Checklist = what’s live in the DB (ping uses the same)
+    const step1Done = !!config?.enabled && savedGatewayOk;
+    const step1Dirty =
+        config != null &&
+        (editEnabled !== !!config.enabled ||
+            editGateway.trim() !== (config.gateway_url || "").trim());
+    const step2Done = !!config?.resolver_address?.trim();
+    const step2Dirty =
+        config != null && editResolver.trim() !== (config.resolver_address || "").trim();
     const step3Note = "Set in ENS Manager (wallet that controls the name)";
 
     if (isLoading) return <AdminLoading />;
@@ -360,9 +378,16 @@ export default function AdminEnsPage() {
                                         <span className={`text-sm ${saveMsg.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>{saveMsg}</span>
                                     )}
                                 </div>
+                                {step1Dirty && (
+                                    <p className="text-xs text-amber-400/90 pl-11">
+                                        Unsaved changes — ping and user claims use the{" "}
+                                        <span className="font-medium">saved</span> database value. Click{" "}
+                                        <span className="font-medium">Save step 1</span>.
+                                    </p>
+                                )}
                             </div>
                         </div>
-                        <CheckRow done={step1Done} label="Gateway saved with CCIP placeholders + enabled" />
+                        <CheckRow done={step1Done} label="Gateway URL + Subnames enabled saved to database" />
                     </div>
 
                     {/* Step 2 */}
@@ -404,10 +429,15 @@ export default function AdminEnsPage() {
                                     >
                                         Save resolver address
                                     </button>
+                                    {step2Dirty && (
+                                        <p className="text-xs text-amber-400/90 mt-2">
+                                            Resolver field changed — click Save (or use Save step 1 above; same save action updates all fields).
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         </div>
-                        <CheckRow done={step2Done} label="Resolver address saved (after deploy)" />
+                        <CheckRow done={step2Done} label="Resolver address saved in Spritz (reference)" />
                     </div>
 
                     {/* Step 3 */}
@@ -451,9 +481,22 @@ export default function AdminEnsPage() {
                         {gatewayPing === "ok" && (
                             <span className="text-sm text-green-400 self-center">Gateway up — ENS subnames enabled</span>
                         )}
-                        {gatewayPing === "disabled" && (
+                        {gatewayPing === "disabled" && pingDisabledWhy === "unsaved" && (
+                            <span className="text-sm text-amber-400 self-center max-w-xl">
+                                Gateway reachable — <span className="font-medium">Subnames</span> are still{" "}
+                                <span className="font-medium">off in the database</span>. Click{" "}
+                                <span className="font-medium">Save step 1</span> to apply your toggle.
+                            </span>
+                        )}
+                        {gatewayPing === "disabled" && pingDisabledWhy === "off" && (
+                            <span className="text-sm text-amber-400 self-center max-w-xl">
+                                Gateway reachable — turn <span className="font-medium">Subnames enabled</span> on and
+                                click <span className="font-medium">Save step 1</span> so CCIP returns records.
+                            </span>
+                        )}
+                        {gatewayPing === "disabled" && !pingDisabledWhy && (
                             <span className="text-sm text-amber-400 self-center">
-                                Gateway up — turn on &quot;Subnames enabled&quot; in Step 1 so CCIP returns records
+                                Gateway reachable — subnames disabled on server (save Step 1 or enable toggle).
                             </span>
                         )}
                         {gatewayPing === "fail" && (
