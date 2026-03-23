@@ -11,6 +11,7 @@ import {
     backfillShoutUserUsernameIfMissing,
     resolveSpritzUsername,
 } from "@/lib/ensUserUsername";
+import { tryAutoClaimEnsSubnameForEoa } from "@/lib/ensAutoClaimForEoa";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -50,19 +51,43 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const resolvedUsername = await resolveSpritzUsername(supabase, userAddress, user.username);
+    const wasClaimedBeforeRequest = !!user.ens_subname_claimed_at;
+
+    let resolvedUsername = await resolveSpritzUsername(supabase, userAddress, user.username);
     await backfillShoutUserUsernameIfMissing(supabase, userAddress, user.username, resolvedUsername);
 
+    await tryAutoClaimEnsSubnameForEoa(supabase, userAddress);
+
+    const { data: userAfterAuto } = await supabase
+        .from("shout_users")
+        .select(
+            "wallet_address, smart_wallet_address, username, wallet_type, is_banned, ens_subname_claimed_at, ens_resolve_address"
+        )
+        .eq("wallet_address", userAddress)
+        .maybeSingle();
+
+    const row = userAfterAuto ?? user;
+
+    resolvedUsername = await resolveSpritzUsername(supabase, userAddress, row.username);
+    await backfillShoutUserUsernameIfMissing(supabase, userAddress, row.username, resolvedUsername);
+
     const userForEns: UserRow = {
-        ...(user as UserRow),
-        username: resolvedUsername ?? user.username ?? null,
+        ...(row as UserRow),
+        username: resolvedUsername ?? row.username ?? null,
     };
 
-    if (user.ens_subname_claimed_at) {
-        return NextResponse.json(
-            { error: "Already claimed", subname: `${userForEns.username}.spritz.eth` },
-            { status: 409 }
-        );
+    if (row.ens_subname_claimed_at) {
+        if (wasClaimedBeforeRequest) {
+            return NextResponse.json(
+                { error: "Already claimed", subname: `${userForEns.username}.spritz.eth` },
+                { status: 409 }
+            );
+        }
+        return NextResponse.json({
+            success: true,
+            subname: `${userForEns.username}.spritz.eth`,
+            resolveAddress: row.ens_resolve_address,
+        });
     }
 
     if (!userForEns.username || !isValidSubname(userForEns.username)) {
@@ -81,7 +106,7 @@ export async function POST(request: NextRequest) {
         .update({
             ens_subname_claimed_at: new Date().toISOString(),
             ens_resolve_address: eligibility.resolveAddress,
-            ...(user.username?.trim() ? {} : { username: userForEns.username }),
+            ...(row.username?.trim() ? {} : { username: userForEns.username }),
         })
         .eq("wallet_address", userAddress);
 
@@ -122,12 +147,27 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const resolvedUsername = await resolveSpritzUsername(supabase, userAddress, user.username);
+    let resolvedUsername = await resolveSpritzUsername(supabase, userAddress, user.username);
     await backfillShoutUserUsernameIfMissing(supabase, userAddress, user.username, resolvedUsername);
 
+    await tryAutoClaimEnsSubnameForEoa(supabase, userAddress);
+
+    const { data: userFresh } = await supabase
+        .from("shout_users")
+        .select(
+            "wallet_address, smart_wallet_address, username, wallet_type, is_banned, ens_subname_claimed_at, ens_resolve_address"
+        )
+        .eq("wallet_address", userAddress)
+        .maybeSingle();
+
+    const row = userFresh ?? user;
+
+    resolvedUsername = await resolveSpritzUsername(supabase, userAddress, row.username);
+    await backfillShoutUserUsernameIfMissing(supabase, userAddress, row.username, resolvedUsername);
+
     const userForEns: UserRow = {
-        ...(user as UserRow),
-        username: resolvedUsername ?? user.username ?? null,
+        ...(row as UserRow),
+        username: resolvedUsername ?? row.username ?? null,
     };
 
     const eoaOnly = eoaOnlyClaimsEnabled();
@@ -135,7 +175,7 @@ export async function GET(request: NextRequest) {
     const { resolveTarget, fundsNotice } = getEnsFundsCopy(userForEns);
     const parentName = config?.parent_name || "spritz.eth";
 
-    const claimed = !!user.ens_subname_claimed_at;
+    const claimed = !!row.ens_subname_claimed_at;
     const displayUsername = userForEns.username;
     return NextResponse.json({
         enabled: config?.enabled || false,
@@ -146,7 +186,7 @@ export async function GET(request: NextRequest) {
         subname: claimed && displayUsername ? `${displayUsername}.${parentName}` : null,
         suggestedSubname:
             !claimed && displayUsername ? `${displayUsername}.${parentName}` : null,
-        resolveAddress: user.ens_resolve_address || eligibility.resolveAddress,
+        resolveAddress: row.ens_resolve_address || eligibility.resolveAddress,
         username: displayUsername,
         walletType: user.wallet_type,
         resolveTarget,
