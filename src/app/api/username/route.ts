@@ -93,19 +93,17 @@ async function syncUsernameToShoutUser(
     walletAddress: string,
     username: string | null
 ) {
-    const patch =
+    const { error } =
         username === null
-            ? {
-                  username: null as string | null,
-                  ens_subname_claimed_at: null as string | null,
-                  ens_resolve_address: null as string | null,
-              }
-            : { username };
-
-    const { error } = await supabase
-        .from("shout_users")
-        .update(patch)
-        .eq("wallet_address", walletAddress);
+            ? await supabase
+                  .from("shout_users")
+                  .update({
+                      username: null,
+                      ens_subname_claimed_at: null,
+                      ens_resolve_address: null,
+                  })
+                  .eq("wallet_address", walletAddress)
+            : await supabase.from("shout_users").update({ username }).eq("wallet_address", walletAddress);
 
     if (error) {
         console.error("[Username] shout_users sync error:", error);
