@@ -154,15 +154,33 @@ export default function AdminEnsPage() {
     };
 
     if (isLoading) return <AdminLoading />;
-    if (!isAuthenticated || !isAdmin) {
+
+    if (!isAuthenticated) {
         return (
-            <AdminAuthWrapper
-                isConnected={isConnected}
-                isAuthenticated={isAuthenticated}
-                isAdmin={isAdmin}
-                error={error}
-                onSignIn={signIn}
-            />
+            <AdminAuthWrapper title="ENS Subnames">
+                {!isConnected ? (
+                    <>
+                        <p className="text-zinc-400 mb-6">Connect your wallet to manage ENS subnames.</p>
+                        <div className="mb-4"><appkit-button /></div>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-zinc-400 mb-6">Sign in to verify admin access.</p>
+                        <button onClick={signIn} className="px-6 py-2.5 bg-[#FF5500] text-white rounded-xl font-medium hover:bg-[#FF5500]/90 transition-colors">
+                            Sign In with Ethereum
+                        </button>
+                    </>
+                )}
+            </AdminAuthWrapper>
+        );
+    }
+
+    if (!isReady || !isAdmin) {
+        return (
+            <AdminAuthWrapper title={!isAdmin ? "Access Denied" : "Loading..."}>
+                <p className="text-zinc-400 mb-6">{!isAdmin ? "You do not have permission." : "Please wait..."}</p>
+                {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
+            </AdminAuthWrapper>
         );
     }
 
