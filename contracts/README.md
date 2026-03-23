@@ -15,7 +15,7 @@
 
 ```bash
 cd contracts
-forge install foundry-rs/forge-std --no-commit
+forge install foundry-rs/forge-std@v1.9.4
 forge build
 ```
 
@@ -23,12 +23,27 @@ forge build
 
 ```bash
 cp .env.example .env
-# Edit .env: MAINNET_RPC_URL, SPRITZ_ENS_GATEWAY_URL, and your key method (see below)
+# Edit .env: RPC, SPRITZ_ENS_GATEWAY_URL, and signer (see below)
 ```
 
 `SPRITZ_ENS_GATEWAY_URL` **must** include the literals `{sender}` and `{data}` (ENS substitutes them). Example:
 
 `https://app.spritz.chat/api/ens/ccip-gateway?sender={sender}&data={data}`
+
+### Where is the deployment private key configured?
+
+**Not in `foundry.toml`** — that file only references the RPC URL. Foundry signs broadcasts using:
+
+| Method | Where |
+|--------|--------|
+| **Hot wallet** | Environment variable **`ETH_PRIVATE_KEY`** (or **`PRIVATE_KEY`**) — usually in **`contracts/.env`** (create from `.env.example`). You must **export** it in the shell before `forge script`, e.g. `cd contracts && set -a && source .env && set +a && forge script ... --broadcast` |
+| **CLI once** | `ETH_PRIVATE_KEY=0xabc... forge script ... --broadcast` (nothing stored in a file) |
+| **Flag** | `--private-key 0x...` on `forge script` (same secret, different surface) |
+| **Ledger / keystore** | No private key in env — use **`--ledger`** or **`cast wallet import`** then **`--account <name>`** ([Foundry wallets](https://book.getfoundry.sh/reference/cli/cast/wallet)) |
+
+The deployer address becomes **`owner`** on `SpritzENSResolver` (can call `setGatewayUrls`).
+
+**Security:** Never commit `contracts/.env`. Your repo `.gitignore` already ignores `.env` files.
 
 ## Deploy to mainnet
 
