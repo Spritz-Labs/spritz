@@ -7,6 +7,9 @@
 - [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`)
 - ETH on **Ethereum mainnet** for gas (ENS for `.eth` is on mainnet)
 - Spritz admin: enable ENS + correct gateway URL on `/admin/ens`
+- An Ethereum mainnet RPC — we recommend **[dRPC](https://drpc.org/docs/ethereum-api)**:
+  - **Public:** `https://eth.drpc.org/`
+  - **With API key** (dashboard): `https://lb.drpc.live/ethereum/YOUR_DRPC_API_KEY`
 
 ## One-time setup
 
@@ -28,6 +31,17 @@ cp .env.example .env
 `https://app.spritz.chat/api/ens/ccip-gateway?sender={sender}&data={data}`
 
 ## Deploy to mainnet
+
+Set `MAINNET_RPC_URL` to dRPC (see `.env.example`) or use the built-in alias:
+
+```bash
+forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver \
+  --rpc-url drpc \
+  --broadcast \
+  -vvvv
+```
+
+(Requires `drpc` in `foundry.toml` — defaults to `https://eth.drpc.org/`.)
 
 **Option A — private key in env (hot wallet)**
 

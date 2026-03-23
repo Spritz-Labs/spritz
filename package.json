@@ -14,7 +14,8 @@
         "vercel": "vercel --prod",
         "vercel:preview": "vercel",
         "contracts:build": "cd contracts && forge build",
-        "contracts:deploy:ens-resolver": "cd contracts && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url \"$MAINNET_RPC_URL\" --broadcast -vvvv"
+        "contracts:deploy:ens-resolver": "cd contracts && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url \"$MAINNET_RPC_URL\" --broadcast -vvvv",
+        "contracts:deploy:ens-resolver:drpc": "cd contracts && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url drpc --broadcast -vvvv"
     },
     "dependencies": {
         "@alien_org/bridge": "^0.2.2",

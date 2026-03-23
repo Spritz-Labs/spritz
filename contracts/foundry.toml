@@ -6,6 +6,7 @@ solc_version = "0.8.20"
 optimizer = true
 optimizer_runs = 200
 
-# Optional: forge script --rpc-url mainnet
+# Optional: forge script --rpc-url mainnet  (set MAINNET_RPC_URL, e.g. dRPC)
 [rpc_endpoints]
 mainnet = "${MAINNET_RPC_URL}"
+drpc = "https://eth.drpc.org/"
