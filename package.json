@@ -12,7 +12,9 @@
         "update-cryptonomads": "node scripts/update-cryptonomads.mjs",
         "cleanup-split-events": "npx tsx scripts/cleanup-split-multiday-events.ts",
         "vercel": "vercel --prod",
-        "vercel:preview": "vercel"
+        "vercel:preview": "vercel",
+        "contracts:build": "cd contracts && forge build",
+        "contracts:deploy:ens-resolver": "cd contracts && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url \"$MAINNET_RPC_URL\" --broadcast -vvvv"
     },
     "dependencies": {
         "@alien_org/bridge": "^0.2.2",

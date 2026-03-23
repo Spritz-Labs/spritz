@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
             recommendedGatewayUrl,
             ensManagerUrl: `https://app.ens.domains/${encodeURIComponent((config?.parent_name as string) || "spritz.eth")}`,
             docsUrl: "https://docs.ens.domains/resolvers/ccip-read",
-            contractPath: "contracts/SpritzENSResolver.sol",
+            contractPath: "contracts/src/SpritzENSResolver.sol",
         },
     });
 }

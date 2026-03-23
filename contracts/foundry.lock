@@ -1,0 +1,11 @@
+{
+  "../spritz-typescript-sdk": {
+    "rev": "75e44b71a3e263e42472dabb32b41c909b31714a"
+  },
+  "lib/forge-std": {
+    "tag": {
+      "name": "v1.9.4",
+      "rev": "1eea5bae12ae557d589f9f0f0edae2faa47cb262"
+    }
+  }
+}

@@ -364,7 +364,7 @@ export default function AdminEnsPage() {
                             <div className="flex-1 min-w-0 space-y-2">
                                 <div className="text-white font-medium">Deploy resolver on Ethereum mainnet</div>
                                 <p className="text-xs text-zinc-500">
-                                    Contract: <code className="text-zinc-400">{setupMeta?.contractPath ?? "contracts/SpritzENSResolver.sol"}</code> in the Spritz repo.
+                                    Contract: <code className="text-zinc-400">{setupMeta?.contractPath ?? "contracts/src/SpritzENSResolver.sol"}</code> in the Spritz repo.
                                     Constructor takes one argument: <code className="text-zinc-400">string[] gatewayUrls</code> — pass a single-element array with the same URL as above.
                                 </p>
                                 <pre className="text-[11px] leading-relaxed bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-zinc-300 overflow-x-auto whitespace-pre-wrap break-all">
