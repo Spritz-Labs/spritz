@@ -93,15 +93,17 @@ async function syncUsernameToShoutUser(
     walletAddress: string,
     username: string | null
 ) {
+    // shout_users Row type in repo may lag migrations (ENS columns).
     const { error } =
         username === null
             ? await supabase
                   .from("shout_users")
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DB types omit ENS columns
                   .update({
                       username: null,
                       ens_subname_claimed_at: null,
                       ens_resolve_address: null,
-                  })
+                  } as any)
                   .eq("wallet_address", walletAddress)
             : await supabase.from("shout_users").update({ username }).eq("wallet_address", walletAddress);
 
