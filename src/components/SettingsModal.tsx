@@ -267,6 +267,49 @@ export function SettingsModal({
         }
     }, []);
 
+    // ENS subname state
+    const [ensStatus, setEnsStatus] = useState<{
+        enabled: boolean; eligible: boolean; reason?: string;
+        claimed: boolean; subname: string | null; resolveAddress?: string;
+        username?: string; walletType?: string;
+    } | null>(null);
+    const [ensLoading, setEnsLoading] = useState(false);
+    const [ensClaiming, setEnsClaiming] = useState(false);
+    const [ensError, setEnsError] = useState<string | null>(null);
+    const [ensSuccess, setEnsSuccess] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!isOpen || !userAddress) return;
+        setEnsLoading(true);
+        fetch("/api/ens/claim", { credentials: "include" })
+            .then((res) => res.json())
+            .then((data) => {
+                if (!data.error) setEnsStatus(data);
+            })
+            .catch(() => {})
+            .finally(() => setEnsLoading(false));
+    }, [isOpen, userAddress]);
+
+    const handleClaimEns = useCallback(async () => {
+        setEnsClaiming(true);
+        setEnsError(null);
+        setEnsSuccess(null);
+        try {
+            const res = await fetch("/api/ens/claim", {
+                method: "POST",
+                credentials: "include",
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to claim");
+            setEnsSuccess(`Claimed ${data.subname}`);
+            setEnsStatus((prev) => prev ? { ...prev, claimed: true, subname: data.subname, resolveAddress: data.resolveAddress } : prev);
+        } catch (e) {
+            setEnsError(e instanceof Error ? e.message : "Failed to claim subname");
+        } finally {
+            setEnsClaiming(false);
+        }
+    }, []);
+
     // Resize image for avatar (ensure high quality)
     // Increased to 1024px and 95% quality for sharper profile photos
     const resizeImageForAvatar = (
@@ -2273,6 +2316,47 @@ export function SettingsModal({
                                                     )}
                                             </div>
                                         )}
+                                    </div>
+
+                                    {/* ENS Subname Section */}
+                                    <div className="mb-4">
+                                        <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2 px-1">
+                                            ENS Subname
+                                        </h3>
+                                        <div className="px-4 py-3 rounded-xl bg-zinc-800/50 space-y-3">
+                                            {ensLoading ? (
+                                                <p className="text-zinc-500 text-sm">Loading...</p>
+                                            ) : ensStatus?.claimed ? (
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-green-400 text-lg">🔗</span>
+                                                        <span className="text-white font-medium">{ensStatus.subname}</span>
+                                                    </div>
+                                                    {ensStatus.resolveAddress && (
+                                                        <p className="text-zinc-500 text-xs font-mono break-all">Resolves to: {ensStatus.resolveAddress}</p>
+                                                    )}
+                                                </div>
+                                            ) : ensStatus?.eligible ? (
+                                                <div className="space-y-2">
+                                                    <p className="text-zinc-400 text-sm">
+                                                        Claim <span className="text-white font-medium">{ensStatus.username}.spritz.eth</span> as your ENS subname.
+                                                    </p>
+                                                    <button
+                                                        onClick={handleClaimEns}
+                                                        disabled={ensClaiming || !ensStatus.enabled}
+                                                        className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg font-medium"
+                                                    >
+                                                        {ensClaiming ? "Claiming..." : !ensStatus.enabled ? "Coming Soon" : "Claim Subname"}
+                                                    </button>
+                                                    {ensError && <p className="text-red-400 text-xs">{ensError}</p>}
+                                                    {ensSuccess && <p className="text-green-400 text-xs">{ensSuccess}</p>}
+                                                </div>
+                                            ) : ensStatus ? (
+                                                <p className="text-zinc-500 text-sm">{ensStatus.reason || "Not eligible for an ENS subname"}</p>
+                                            ) : (
+                                                <p className="text-zinc-500 text-sm">ENS subname info unavailable</p>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Developers Section */}

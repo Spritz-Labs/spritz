@@ -59,6 +59,12 @@ const NAV_ITEMS = [
         icon: "🐛",
         mobileLabel: "Bugs",
     },
+    {
+        href: "/admin/ens",
+        label: "ENS Subnames",
+        icon: "🔗",
+        mobileLabel: "ENS",
+    },
 ];
 
 export function AdminLayout({
