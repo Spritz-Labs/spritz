@@ -87,6 +87,31 @@ function normalizeAddress(address: string): string {
     return address; // Solana addresses are case-sensitive
 }
 
+/** Keep shout_users.username in sync for ENS /api/ens/claim (reads shout_users, not shout_usernames). */
+async function syncUsernameToShoutUser(
+    supabase: ReturnType<typeof createClient>,
+    walletAddress: string,
+    username: string | null
+) {
+    const patch =
+        username === null
+            ? {
+                  username: null as string | null,
+                  ens_subname_claimed_at: null as string | null,
+                  ens_resolve_address: null as string | null,
+              }
+            : { username };
+
+    const { error } = await supabase
+        .from("shout_users")
+        .update(patch)
+        .eq("wallet_address", walletAddress);
+
+    if (error) {
+        console.error("[Username] shout_users sync error:", error);
+    }
+}
+
 // GET - Fetch username for an address
 export async function GET(request: NextRequest) {
     try {
@@ -232,6 +257,7 @@ export async function POST(request: NextRequest) {
             }
 
             console.log("[Username] Updated:", walletAddress, "->", normalizedName);
+            await syncUsernameToShoutUser(supabase, walletAddress, normalizedName);
             return NextResponse.json({ 
                 success: true, 
                 username: normalizedName,
@@ -261,6 +287,7 @@ export async function POST(request: NextRequest) {
             }
 
             console.log("[Username] Created:", walletAddress, "->", normalizedName);
+            await syncUsernameToShoutUser(supabase, walletAddress, normalizedName);
             return NextResponse.json({ 
                 success: true, 
                 username: normalizedName,
@@ -304,6 +331,7 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
+        await syncUsernameToShoutUser(supabase, walletAddress, null);
         console.log("[Username] Deleted for:", walletAddress);
         return NextResponse.json({ success: true });
     } catch (error) {
