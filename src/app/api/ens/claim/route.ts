@@ -43,7 +43,9 @@ export async function POST(request: NextRequest) {
 
     const { data: user } = await supabase
         .from("shout_users")
-        .select("wallet_address, smart_wallet_address, username, wallet_type, is_banned, ens_subname_claimed_at")
+        .select(
+            "wallet_address, smart_wallet_address, username, wallet_type, is_banned, ens_subname_claimed_at, ens_resolve_address"
+        )
         .eq("wallet_address", userAddress)
         .maybeSingle();
 
