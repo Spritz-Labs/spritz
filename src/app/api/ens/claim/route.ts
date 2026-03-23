@@ -1,44 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
-import { checkEnsEligibility, isValidSubname, type UserRow } from "@/lib/ensEligibility";
+import {
+    checkEnsEligibility,
+    getEnsFundsCopy,
+    isValidSubname,
+    type UserRow,
+} from "@/lib/ensEligibility";
+import {
+    backfillShoutUserUsernameIfMissing,
+    resolveSpritzUsername,
+} from "@/lib/ensUserUsername";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-/**
- * Spritz username lives in shout_usernames; ENS eligibility historically read shout_users.username only.
- * Merge so existing accounts work, and backfill shout_users when missing.
- */
-async function resolveSpritzUsername(
-    supabase: SupabaseClient,
-    walletAddress: string,
-    rowUsername: string | null
-): Promise<string | null> {
-    const trimmed = rowUsername?.trim();
-    if (trimmed) return trimmed;
-    const { data } = await supabase
-        .from("shout_usernames")
-        .select("username")
-        .eq("wallet_address", walletAddress)
-        .maybeSingle();
-    return data?.username?.trim() || null;
-}
-
-async function backfillShoutUserUsernameIfMissing(
-    supabase: SupabaseClient,
-    walletAddress: string,
-    rowUsername: string | null,
-    resolved: string | null
-) {
-    if (!resolved || rowUsername?.trim()) return;
-    const { error } = await supabase
-        .from("shout_users")
-        .update({ username: resolved })
-        .eq("wallet_address", walletAddress);
-    if (error) {
-        console.error("[ENS claim] shout_users username backfill error:", error);
-    }
+function eoaOnlyClaimsEnabled(): boolean {
+    return process.env.ENS_SUBNAME_EOA_ONLY === "true";
 }
 
 /**
@@ -91,7 +69,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Set a valid username first (2-32 chars, a-z, 0-9, underscore)" }, { status: 400 });
     }
 
-    const eligibility = checkEnsEligibility(userForEns);
+    const eligibility = checkEnsEligibility(userForEns, {
+        eoaOnlyClaims: eoaOnlyClaimsEnabled(),
+    });
     if (!eligibility.eligible) {
         return NextResponse.json({ error: eligibility.reason }, { status: 403 });
     }
@@ -150,7 +130,9 @@ export async function GET(request: NextRequest) {
         username: resolvedUsername ?? user.username ?? null,
     };
 
-    const eligibility = checkEnsEligibility(userForEns);
+    const eoaOnly = eoaOnlyClaimsEnabled();
+    const eligibility = checkEnsEligibility(userForEns, { eoaOnlyClaims: eoaOnly });
+    const { resolveTarget, fundsNotice } = getEnsFundsCopy(userForEns);
     const parentName = config?.parent_name || "spritz.eth";
 
     const claimed = !!user.ens_subname_claimed_at;
@@ -167,5 +149,8 @@ export async function GET(request: NextRequest) {
         resolveAddress: user.ens_resolve_address || eligibility.resolveAddress,
         username: displayUsername,
         walletType: user.wallet_type,
+        resolveTarget,
+        fundsNotice,
+        eoaOnlyMode: eoaOnly,
     });
 }

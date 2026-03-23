@@ -105,6 +105,9 @@ export default function AdminEnsPage() {
     /** Why ping says "disabled": server off vs form not saved */
     const [pingDisabledWhy, setPingDisabledWhy] = useState<"off" | "unsaved" | null>(null);
 
+    const [bulkLoading, setBulkLoading] = useState(false);
+    const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+
     const [editEnabled, setEditEnabled] = useState(false);
     const [editGateway, setEditGateway] = useState("");
     const [editResolver, setEditResolver] = useState("");
@@ -144,6 +147,47 @@ export default function AdminEnsPage() {
     useEffect(() => {
         if (isReady && isAdmin) fetchData();
     }, [isReady, isAdmin, fetchData]);
+
+    const runBulkEoa = async (dryRun: boolean) => {
+        const authHeaders = getAuthHeaders();
+        if (!authHeaders) return;
+        if (
+            !dryRun &&
+            !confirm(
+                "Grant ENS subname claims in the database for all eligible EOA users (wallet/evm) who have a Spritz username and have not claimed yet? This does not touch chain — only Spritz + CCIP."
+            )
+        ) {
+            return;
+        }
+        setBulkLoading(true);
+        setBulkMsg(null);
+        try {
+            const res = await fetch("/api/admin/ens/bulk-claim-eoa", {
+                method: "POST",
+                headers: { ...authHeaders, "Content-Type": "application/json" },
+                body: JSON.stringify({ dryRun }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                setBulkMsg(`Error: ${data.error || res.statusText}`);
+                return;
+            }
+            if (dryRun) {
+                setBulkMsg(
+                    `Preview: ${data.wouldClaim} EOA users would be marked claimed (${data.examined} rows examined).`
+                );
+            } else {
+                setBulkMsg(
+                    `Done: marked ${data.claimed} EOA subnames as claimed (${data.examined} user rows examined).${data.errorCount ? ` ${data.errorCount} update(s) failed.` : ""}`
+                );
+                fetchData();
+            }
+        } catch {
+            setBulkMsg("Network error");
+        } finally {
+            setBulkLoading(false);
+        }
+    };
 
     const saveConfig = async () => {
         const authHeaders = getAuthHeaders();
@@ -303,6 +347,40 @@ export default function AdminEnsPage() {
                         <div className="text-2xl font-bold text-white">{stats.eligibleCount}</div>
                         <div className="text-sm text-zinc-400">Eligible profiles (sample)</div>
                     </div>
+                </div>
+
+                {/* Bulk EOA claims */}
+                <div className="rounded-2xl border border-zinc-700 bg-zinc-900/80 p-5 space-y-3">
+                    <h2 className="text-lg font-semibold text-white">Bulk: EOA subname claims</h2>
+                    <p className="text-sm text-zinc-400">
+                        Mark <span className="text-zinc-300">username.spritz.eth</span> as claimed in Spritz for every{" "}
+                        <span className="text-zinc-300">wallet</span> / <span className="text-zinc-300">evm</span> user who
+                        already has a Spritz username, is not banned, and hasn&apos;t claimed. Resolution stays the EOA
+                        <span className="text-zinc-500"> — </span>does not include passkey/email smart accounts.
+                        Requires <span className="text-zinc-300">Subnames enabled</span> in the database.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            disabled={bulkLoading}
+                            onClick={() => runBulkEoa(true)}
+                            className="text-sm px-4 py-2 rounded-lg bg-zinc-800 text-white hover:bg-zinc-700 border border-zinc-700 disabled:opacity-50"
+                        >
+                            {bulkLoading ? "…" : "Preview count (dry run)"}
+                        </button>
+                        <button
+                            type="button"
+                            disabled={bulkLoading || !config?.enabled}
+                            onClick={() => runBulkEoa(false)}
+                            className="text-sm px-4 py-2 rounded-lg bg-orange-500/90 text-white hover:bg-orange-500 disabled:opacity-50"
+                        >
+                            {bulkLoading ? "…" : "Run bulk claim"}
+                        </button>
+                    </div>
+                    {!config?.enabled && (
+                        <p className="text-xs text-amber-400/90">Enable subnames (Step 1) before running bulk claim.</p>
+                    )}
+                    {bulkMsg && <p className="text-sm text-zinc-300">{bulkMsg}</p>}
                 </div>
 
                 {/* Quick setup */}

@@ -19,6 +19,10 @@ type EnsClaimStatus = {
     resolveAddress?: string;
     username?: string;
     walletType?: string;
+    /** "eoa" | "smart_account" — where funds are sent */
+    resolveTarget?: string;
+    fundsNotice?: string;
+    eoaOnlyMode?: boolean;
 };
 
 type UsernameClaimModalProps = {
@@ -69,6 +73,9 @@ export function UsernameClaimModal({
                     resolveAddress: data.resolveAddress,
                     username: data.username,
                     walletType: data.walletType,
+                    resolveTarget: data.resolveTarget,
+                    fundsNotice: data.fundsNotice,
+                    eoaOnlyMode: !!data.eoaOnlyMode,
                 });
             } else {
                 setEnsStatus(null);
@@ -385,8 +392,16 @@ export function UsernameClaimModal({
                                                     *.
                                                     {ensStatus?.parentName || "spritz.eth"}
                                                 </span>{" "}
-                                                so wallets can send you funds by name.
+                                                so wallets can send assets to the address this name
+                                                resolves to.
                                             </p>
+                                            {ensStatus?.eoaOnlyMode && (
+                                                <p className="text-amber-400/90 text-xs mt-1">
+                                                    While Spritz Wallet is in beta, only external wallets
+                                                    (EOA) can claim a subname — smart accounts will be
+                                                    supported later.
+                                                </p>
+                                            )}
                                         </div>
 
                                         {!currentUsername ? (
@@ -443,9 +458,19 @@ export function UsernameClaimModal({
                                                         Resolves to: {ensStatus.resolveAddress}
                                                     </p>
                                                 )}
+                                                {ensStatus.fundsNotice && (
+                                                    <p className="text-amber-200/80 text-xs border border-amber-500/25 bg-amber-500/5 rounded-lg p-2">
+                                                        {ensStatus.fundsNotice}
+                                                    </p>
+                                                )}
                                             </div>
                                         ) : ensStatus?.eligible ? (
                                             <div className="space-y-2">
+                                                {ensStatus.fundsNotice && (
+                                                    <p className="text-amber-200/80 text-xs border border-amber-500/25 bg-amber-500/5 rounded-lg p-2">
+                                                        {ensStatus.fundsNotice}
+                                                    </p>
+                                                )}
                                                 <p className="text-zinc-400 text-sm">
                                                     Claim{" "}
                                                     <span className="text-white font-medium">

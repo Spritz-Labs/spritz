@@ -272,6 +272,8 @@ export function SettingsModal({
         enabled: boolean; eligible: boolean; reason?: string;
         claimed: boolean; subname: string | null; resolveAddress?: string;
         username?: string; walletType?: string;
+        fundsNotice?: string;
+        eoaOnlyMode?: boolean;
     } | null>(null);
     const [ensLoading, setEnsLoading] = useState(false);
     const [ensClaiming, setEnsClaiming] = useState(false);
@@ -2335,9 +2337,24 @@ export function SettingsModal({
                                                     {ensStatus.resolveAddress && (
                                                         <p className="text-zinc-500 text-xs font-mono break-all">Resolves to: {ensStatus.resolveAddress}</p>
                                                     )}
+                                                    {ensStatus.fundsNotice && (
+                                                        <p className="text-amber-200/80 text-xs border border-amber-500/25 bg-amber-500/5 rounded-lg p-2">
+                                                            {ensStatus.fundsNotice}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             ) : ensStatus?.eligible ? (
                                                 <div className="space-y-2">
+                                                    {ensStatus.eoaOnlyMode && (
+                                                        <p className="text-amber-400/90 text-xs">
+                                                            External wallets (EOA) only while Spritz Wallet is in beta.
+                                                        </p>
+                                                    )}
+                                                    {ensStatus.fundsNotice && (
+                                                        <p className="text-amber-200/80 text-xs border border-amber-500/25 bg-amber-500/5 rounded-lg p-2">
+                                                            {ensStatus.fundsNotice}
+                                                        </p>
+                                                    )}
                                                     <p className="text-zinc-400 text-sm">
                                                         Claim <span className="text-white font-medium">{ensStatus.username}.spritz.eth</span> as your ENS subname.
                                                     </p>
