@@ -92,6 +92,45 @@ Copy the printed **SpritzENSResolver** address.
 2. Set **Resolver** to your new contract address.
 3. In Spritz **Admin → ENS**, paste the resolver address (reference) and save.
 
+## Verify on Etherscan (recommended)
+
+Verification makes the source public and unlocks **Read / Write contract** on Etherscan (handy for `setGatewayUrls`, `owner`, etc.).
+
+1. Create an API key: [etherscan.io → API Keys](https://etherscan.io/myapikey).
+2. Add to `contracts/.env`: `ETHERSCAN_API_KEY=...`
+3. From `contracts/`:
+
+```bash
+set -a && source .env && set +a
+forge verify-contract YOUR_DEPLOYED_ADDRESS \
+  src/SpritzENSResolver.sol:SpritzENSResolver \
+  --chain mainnet \
+  --rpc-url drpc \
+  --guess-constructor-args \
+  --num-of-optimizations 200 \
+  --compiler-version 0.8.20 \
+  --etherscan-api-key "$ETHERSCAN_API_KEY" \
+  --watch
+```
+
+`--guess-constructor-args` pulls constructor inputs from the creation tx (needs `--rpc-url`).  
+If guessing fails, pass encoded args explicitly:
+
+```bash
+CONSTRUCTOR_ARGS=$(cast abi-encode "constructor(string[])" \
+  '["https://app.spritz.chat/api/ens/ccip-gateway?sender={sender}&data={data}"]')
+forge verify-contract YOUR_DEPLOYED_ADDRESS \
+  src/SpritzENSResolver.sol:SpritzENSResolver \
+  --chain mainnet \
+  --constructor-args "$CONSTRUCTOR_ARGS" \
+  --num-of-optimizations 200 \
+  --compiler-version 0.8.20 \
+  --etherscan-api-key "$ETHERSCAN_API_KEY" \
+  --watch
+```
+
+**Sourcify:** Without an Etherscan key, `forge verify-contract` may submit to [Sourcify](https://sourcify.dev/) instead. Etherscan also ingests some Sourcify data over time, but an explicit Etherscan verification is clearest for users.
+
 ## Update gateway URL later
 
 Owner can call `setGatewayUrls(string[] memory _urls)` (e.g. via Etherscan “Write contract” or `cast send`).

@@ -15,7 +15,8 @@
         "vercel:preview": "vercel",
         "contracts:build": "cd contracts && forge build",
         "contracts:deploy:ens-resolver": "bash -lc 'cd contracts && set -a && [ -f .env ] && source .env && set +a && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url \"${MAINNET_RPC_URL:-https://eth.drpc.org/}\" --broadcast --private-key \"$ETH_PRIVATE_KEY\" -vvvv'",
-        "contracts:deploy:ens-resolver:drpc": "bash -lc 'cd contracts && set -a && [ -f .env ] && source .env && set +a && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url drpc --broadcast --private-key \"$ETH_PRIVATE_KEY\" -vvvv'"
+        "contracts:deploy:ens-resolver:drpc": "bash -lc 'cd contracts && set -a && [ -f .env ] && source .env && set +a && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url drpc --broadcast --private-key \"$ETH_PRIVATE_KEY\" -vvvv'",
+        "contracts:verify:ens-resolver": "bash -lc 'cd contracts && set -a && [ -f .env ] && source .env && set +a && test -n \"$ENS_RESOLVER_ADDR\" || { echo \"Set ENS_RESOLVER_ADDR=0x... in contracts/.env (and ETHERSCAN_API_KEY)\"; exit 1; }; forge verify-contract \"$ENS_RESOLVER_ADDR\" src/SpritzENSResolver.sol:SpritzENSResolver --chain mainnet --rpc-url drpc --guess-constructor-args --num-of-optimizations 200 --compiler-version 0.8.20 --etherscan-api-key \"$ETHERSCAN_API_KEY\" --watch'"
     },
     "dependencies": {
         "@alien_org/bridge": "^0.2.2",
