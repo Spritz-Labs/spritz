@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
+import { tryAutoClaimEnsSubnameForEoa } from "@/lib/ensAutoClaimForEoa";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -266,6 +267,7 @@ export async function POST(request: NextRequest) {
 
             console.log("[Username] Updated:", walletAddress, "->", normalizedName);
             await syncUsernameToShoutUser(supabase, walletAddress, normalizedName);
+            await tryAutoClaimEnsSubnameForEoa(supabase, walletAddress);
             return NextResponse.json({ 
                 success: true, 
                 username: normalizedName,
@@ -296,6 +298,7 @@ export async function POST(request: NextRequest) {
 
             console.log("[Username] Created:", walletAddress, "->", normalizedName);
             await syncUsernameToShoutUser(supabase, walletAddress, normalizedName);
+            await tryAutoClaimEnsSubnameForEoa(supabase, walletAddress);
             return NextResponse.json({ 
                 success: true, 
                 username: normalizedName,
