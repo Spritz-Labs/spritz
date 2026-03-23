@@ -50,6 +50,17 @@ export async function GET(request: NextRequest) {
         .order("ens_subname_claimed_at", { ascending: false })
         .limit(20);
 
+    const host = request.headers.get("host") || "";
+    const xfProto = request.headers.get("x-forwarded-proto");
+    const isLocal =
+        host.includes("localhost") || host.startsWith("127.");
+    const proto =
+        xfProto || (isLocal ? "http" : "https");
+    const appOrigin = host
+        ? `${proto}://${host}`
+        : process.env.NEXT_PUBLIC_APP_URL || "https://app.spritz.chat";
+    const recommendedGatewayUrl = `${appOrigin.replace(/\/$/, "")}/api/ens/ccip-gateway?sender={sender}&data={data}`;
+
     return NextResponse.json({
         config: config || null,
         stats: {
@@ -57,6 +68,13 @@ export async function GET(request: NextRequest) {
             eligibleCount: eligibleCount || 0,
         },
         recentClaims: recentClaims || [],
+        setup: {
+            appOrigin,
+            recommendedGatewayUrl,
+            ensManagerUrl: `https://app.ens.domains/${encodeURIComponent((config?.parent_name as string) || "spritz.eth")}`,
+            docsUrl: "https://docs.ens.domains/resolvers/ccip-read",
+            contractPath: "contracts/SpritzENSResolver.sol",
+        },
     });
 }
 
