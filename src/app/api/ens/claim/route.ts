@@ -98,12 +98,18 @@ export async function GET(request: NextRequest) {
     const eligibility = checkEnsEligibility(user as UserRow);
     const parentName = config?.parent_name || "spritz.eth";
 
+    const claimed = !!user.ens_subname_claimed_at;
     return NextResponse.json({
         enabled: config?.enabled || false,
         eligible: eligibility.eligible,
         reason: eligibility.reason,
-        claimed: !!user.ens_subname_claimed_at,
-        subname: user.ens_subname_claimed_at ? `${user.username}.${parentName}` : null,
+        claimed,
+        parentName,
+        subname: claimed && user.username ? `${user.username}.${parentName}` : null,
+        suggestedSubname:
+            !claimed && user.username
+                ? `${user.username}.${parentName}`
+                : null,
         resolveAddress: user.ens_resolve_address || eligibility.resolveAddress,
         username: user.username,
         walletType: user.wallet_type,

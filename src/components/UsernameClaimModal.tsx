@@ -4,6 +4,23 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useUsername } from "@/hooks/useUsername";
 
+function isEvmAddress(address: string): boolean {
+    return /^0x[a-fA-F0-9]{40}$/.test(address.trim());
+}
+
+type EnsClaimStatus = {
+    enabled: boolean;
+    eligible: boolean;
+    reason?: string;
+    claimed: boolean;
+    subname: string | null;
+    suggestedSubname: string | null;
+    parentName?: string;
+    resolveAddress?: string;
+    username?: string;
+    walletType?: string;
+};
+
 type UsernameClaimModalProps = {
     isOpen: boolean;
     onClose: () => void;
@@ -24,8 +41,64 @@ export function UsernameClaimModal({
     const [isChecking, setIsChecking] = useState(false);
     const [isRemoving, setIsRemoving] = useState(false);
 
+    const [ensStatus, setEnsStatus] = useState<EnsClaimStatus | null>(null);
+    const [ensLoading, setEnsLoading] = useState(false);
+    const [ensClaiming, setEnsClaiming] = useState(false);
+    const [ensError, setEnsError] = useState<string | null>(null);
+    const [ensSuccess, setEnsSuccess] = useState<string | null>(null);
+
     const { claimUsername, removeUsername, checkAvailability, isLoading, error, clearError } =
         useUsername(userAddress);
+
+    const refreshEns = useCallback(async () => {
+        if (!isEvmAddress(userAddress)) return;
+        setEnsLoading(true);
+        setEnsError(null);
+        try {
+            const res = await fetch("/api/ens/claim", { credentials: "include" });
+            const data = await res.json();
+            if (!data.error) {
+                setEnsStatus({
+                    enabled: !!data.enabled,
+                    eligible: !!data.eligible,
+                    reason: data.reason,
+                    claimed: !!data.claimed,
+                    subname: data.subname ?? null,
+                    suggestedSubname: data.suggestedSubname ?? null,
+                    parentName: data.parentName,
+                    resolveAddress: data.resolveAddress,
+                    username: data.username,
+                    walletType: data.walletType,
+                });
+            } else {
+                setEnsStatus(null);
+            }
+        } catch {
+            setEnsStatus(null);
+        } finally {
+            setEnsLoading(false);
+        }
+    }, [userAddress]);
+
+    const handleClaimEns = useCallback(async () => {
+        setEnsClaiming(true);
+        setEnsError(null);
+        setEnsSuccess(null);
+        try {
+            const res = await fetch("/api/ens/claim", {
+                method: "POST",
+                credentials: "include",
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to claim");
+            setEnsSuccess(`Linked ${data.subname}`);
+            await refreshEns();
+        } catch (e) {
+            setEnsError(e instanceof Error ? e.message : "Failed to claim");
+        } finally {
+            setEnsClaiming(false);
+        }
+    }, [refreshEns]);
 
     // Sync input with currentUsername when modal opens
     useEffect(() => {
@@ -58,6 +131,16 @@ export function UsernameClaimModal({
         return () => clearTimeout(timer);
     }, [inputValue, checkAvailability, currentUsername]);
 
+    useEffect(() => {
+        if (!isOpen || !isEvmAddress(userAddress)) {
+            setEnsStatus(null);
+            setEnsSuccess(null);
+            setEnsError(null);
+            return;
+        }
+        refreshEns();
+    }, [isOpen, userAddress, currentUsername, refreshEns]);
+
     const handleSubmit = useCallback(async () => {
         if (!inputValue || isLoading) return;
 
@@ -86,6 +169,8 @@ export function UsernameClaimModal({
 
     const handleClose = useCallback(() => {
         clearError();
+        setEnsSuccess(null);
+        setEnsError(null);
         onClose();
     }, [clearError, onClose]);
 
@@ -93,6 +178,12 @@ export function UsernameClaimModal({
         inputValue.length >= 3 &&
         inputValue.length <= 20 &&
         /^[a-zA-Z0-9_]+$/.test(inputValue);
+
+    const usernameDirty =
+        !!currentUsername &&
+        inputValue.toLowerCase() !== currentUsername.toLowerCase();
+
+    const showEnsBlock = isEvmAddress(userAddress);
 
     return (
         <AnimatePresence>
@@ -112,7 +203,7 @@ export function UsernameClaimModal({
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md z-50"
+                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-md z-50 max-h-[min(90vh,calc(100vh-2rem))] overflow-y-auto overscroll-contain"
                     >
                         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden">
                             {/* Header */}
@@ -278,6 +369,100 @@ export function UsernameClaimModal({
                                         <p className="text-red-400 text-sm">
                                             {error}
                                         </p>
+                                    </div>
+                                )}
+
+                                {/* ENS subname — same flow as Settings; EVM only */}
+                                {showEnsBlock && (
+                                    <div className="rounded-xl border border-zinc-700/80 bg-zinc-800/40 p-4 space-y-3">
+                                        <div>
+                                            <p className="text-zinc-500 text-xs uppercase tracking-wide font-semibold mb-1">
+                                                Ethereum name
+                                            </p>
+                                            <p className="text-zinc-400 text-xs">
+                                                Link your Spritz username on ENS as{" "}
+                                                <span className="text-zinc-300">
+                                                    *.
+                                                    {ensStatus?.parentName || "spritz.eth"}
+                                                </span>{" "}
+                                                so wallets can send you funds by name.
+                                            </p>
+                                        </div>
+
+                                        {!currentUsername ? (
+                                            <p className="text-zinc-500 text-sm">
+                                                Save a username above first. After this screen
+                                                refreshes, you can claim your subname here or in
+                                                Settings.
+                                            </p>
+                                        ) : ensLoading ? (
+                                            <p className="text-zinc-500 text-sm">Loading…</p>
+                                        ) : usernameDirty ? (
+                                            <p className="text-amber-400/90 text-sm">
+                                                Save your new username first — ENS uses your{" "}
+                                                <span className="font-medium">saved</span>{" "}
+                                                Spritz name ({currentUsername} until you update).
+                                            </p>
+                                        ) : ensStatus?.claimed ? (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-lg" aria-hidden>
+                                                        🔗
+                                                    </span>
+                                                    <span className="text-white font-medium text-sm">
+                                                        {ensStatus.subname}
+                                                    </span>
+                                                </div>
+                                                {ensStatus.resolveAddress && (
+                                                    <p className="text-zinc-500 text-xs font-mono break-all">
+                                                        Resolves to: {ensStatus.resolveAddress}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : ensStatus?.eligible ? (
+                                            <div className="space-y-2">
+                                                <p className="text-zinc-400 text-sm">
+                                                    Claim{" "}
+                                                    <span className="text-white font-medium">
+                                                        {ensStatus.suggestedSubname ||
+                                                            `${ensStatus.username}.${ensStatus.parentName || "spritz.eth"}`}
+                                                    </span>
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleClaimEns}
+                                                    disabled={
+                                                        ensClaiming || !ensStatus.enabled
+                                                    }
+                                                    className="w-full py-2.5 px-4 rounded-xl bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 text-white text-sm font-medium border border-zinc-600"
+                                                >
+                                                    {ensClaiming
+                                                        ? "Claiming…"
+                                                        : !ensStatus.enabled
+                                                          ? "ENS not enabled yet"
+                                                          : "Claim ENS subname"}
+                                                </button>
+                                                {ensError && (
+                                                    <p className="text-red-400 text-xs">
+                                                        {ensError}
+                                                    </p>
+                                                )}
+                                                {ensSuccess && (
+                                                    <p className="text-emerald-400 text-xs">
+                                                        {ensSuccess}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        ) : ensStatus ? (
+                                            <p className="text-zinc-500 text-sm">
+                                                {ensStatus.reason ||
+                                                    "Not eligible for an ENS subname on this account."}
+                                            </p>
+                                        ) : (
+                                            <p className="text-zinc-500 text-sm">
+                                                Could not load ENS status.
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
