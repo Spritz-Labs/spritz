@@ -123,7 +123,7 @@ function handleResolve(calldata: Hex, user: NonNullable<Awaited<ReturnType<typeo
     if (selector === "0xf1cb7e06") {
         const { args } = decodeFunctionData({ abi: ADDR_MULTICHAIN_ABI, data: calldata });
         const coinType = args[1];
-        if (coinType === 60n) {
+        if (coinType === BigInt(60)) {
             return encodeFunctionResult({
                 abi: ADDR_MULTICHAIN_ABI,
                 functionName: "addr",
