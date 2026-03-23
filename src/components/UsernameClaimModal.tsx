@@ -390,11 +390,36 @@ export function UsernameClaimModal({
                                         </div>
 
                                         {!currentUsername ? (
-                                            <p className="text-zinc-500 text-sm">
-                                                Save a username above first. After this screen
-                                                refreshes, you can claim your subname here or in
-                                                Settings.
-                                            </p>
+                                            isValid && isAvailable === true ? (
+                                                <div className="space-y-2 text-sm">
+                                                    <p className="text-zinc-400">
+                                                        Your name will be{" "}
+                                                        <span className="text-white font-medium">
+                                                            @{inputValue}
+                                                        </span>
+                                                        . Tap{" "}
+                                                        <span className="text-white font-medium">
+                                                            Claim Username
+                                                        </span>{" "}
+                                                        below to save it — then this page reloads and you
+                                                        can claim{" "}
+                                                        <span className="text-white font-medium">
+                                                            {inputValue}.
+                                                            {ensStatus?.parentName || "spritz.eth"}
+                                                        </span>{" "}
+                                                        here or in Settings.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <p className="text-zinc-500 text-sm">
+                                                    Enter an available username above and save it. Then
+                                                    you can link{" "}
+                                                    <span className="text-zinc-400">
+                                                        yourname.{ensStatus?.parentName || "spritz.eth"}
+                                                    </span>{" "}
+                                                    on Ethereum.
+                                                </p>
+                                            )
                                         ) : ensLoading ? (
                                             <p className="text-zinc-500 text-sm">Loading…</p>
                                         ) : usernameDirty ? (

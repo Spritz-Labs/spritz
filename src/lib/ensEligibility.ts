@@ -30,7 +30,10 @@ export interface UserRow {
 
 export function checkEnsEligibility(user: UserRow): EligibilityResult {
     if (!user.username || user.username.trim().length < 2) {
-        return { eligible: false, reason: "No username set" };
+        return {
+            eligible: false,
+            reason: "Claim and save a Spritz username first — then you can link it on ENS.",
+        };
     }
 
     if (user.is_banned) {
