@@ -50,22 +50,26 @@ The deployer address becomes **`owner`** on `SpritzENSResolver` (can call `setGa
 Set `MAINNET_RPC_URL` to dRPC (see `.env.example`) or use the built-in alias:
 
 ```bash
+cd contracts
+set -a && source .env && set +a
 forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver \
   --rpc-url drpc \
   --broadcast \
+  --private-key "$ETH_PRIVATE_KEY" \
   -vvvv
 ```
 
-(Requires `drpc` in `foundry.toml` — defaults to `https://eth.drpc.org/`.)
+(`drpc` is defined in `foundry.toml`. **Use `--private-key`** — on many Foundry versions `ETH_PRIVATE_KEY` alone is not enough and you get “default sender” / “no associated wallet”. Quote `SPRITZ_ENS_GATEWAY_URL` in `.env` so `&` does not break `source`.)
 
-**Option A — private key in env (hot wallet)**
+**Option A — private key in `contracts/.env`**
 
 ```bash
-source .env
-export ETH_PRIVATE_KEY=0x...   # deployer; becomes contract owner
+cd contracts
+set -a && source .env && set +a
 forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver \
   --rpc-url "$MAINNET_RPC_URL" \
   --broadcast \
+  --private-key "$ETH_PRIVATE_KEY" \
   -vvvv
 ```
 
