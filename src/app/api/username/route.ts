@@ -93,19 +93,26 @@ async function syncUsernameToShoutUser(
     walletAddress: string,
     username: string | null
 ) {
-    // shout_users Row type in repo may lag migrations (ENS columns).
+    // Generated Supabase types can mark shout_users updates as `never` when schema lags migrations.
+    const users = supabase.from("shout_users") as unknown as {
+        update: (values: Record<string, unknown>) => {
+            eq: (
+                col: string,
+                val: string
+            ) => Promise<{ error: { message: string } | null }>;
+        };
+    };
+
     const { error } =
         username === null
-            ? await supabase
-                  .from("shout_users")
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DB types omit ENS columns
+            ? await users
                   .update({
                       username: null,
                       ens_subname_claimed_at: null,
                       ens_resolve_address: null,
-                  } as any)
+                  })
                   .eq("wallet_address", walletAddress)
-            : await supabase.from("shout_users").update({ username }).eq("wallet_address", walletAddress);
+            : await users.update({ username }).eq("wallet_address", walletAddress);
 
     if (error) {
         console.error("[Username] shout_users sync error:", error);
