@@ -89,7 +89,8 @@ function normalizeAddress(address: string): string {
 
 /** Keep shout_users.username in sync for ENS /api/ens/claim (reads shout_users, not shout_usernames). */
 async function syncUsernameToShoutUser(
-    supabase: ReturnType<typeof createClient>,
+    // Service client from createClient(url, key); loosen generics vs. strict generated DB types.
+    supabase: ReturnType<typeof createClient<any>>,
     walletAddress: string,
     username: string | null
 ) {
