@@ -217,6 +217,19 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
+
+        // Admin / monitoring: avoids fake CCIP calldata; works even when ENS is disabled
+        if (searchParams.get("health") === "1") {
+            const config = await getConfig();
+            const res = NextResponse.json({
+                ok: true,
+                enabled: !!config?.enabled,
+                parent_name: config?.parent_name || "spritz.eth",
+            });
+            res.headers.set("Access-Control-Allow-Origin", "*");
+            return res;
+        }
+
         const sender = searchParams.get("sender") || "";
         const data = (searchParams.get("data") || "0x") as Hex;
 

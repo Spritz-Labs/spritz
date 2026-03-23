@@ -101,7 +101,7 @@ export default function AdminEnsPage() {
     const [testName, setTestName] = useState("");
     const [testResult, setTestResult] = useState<ResolveResult | null>(null);
     const [testing, setTesting] = useState(false);
-    const [gatewayPing, setGatewayPing] = useState<"idle" | "loading" | "ok" | "fail">("idle");
+    const [gatewayPing, setGatewayPing] = useState<"idle" | "loading" | "ok" | "disabled" | "fail">("idle");
 
     const [editEnabled, setEditEnabled] = useState(false);
     const [editGateway, setEditGateway] = useState("");
@@ -203,10 +203,18 @@ export default function AdminEnsPage() {
         if (!base) return;
         setGatewayPing("loading");
         try {
-            const url = `${base}/api/ens/ccip-gateway?sender=0x0000000000000000000000000000000000000000&data=0x`;
+            const url = `${base}/api/ens/ccip-gateway?health=1`;
             const res = await fetch(url, { method: "GET" });
-            const json = await res.json().catch(() => ({}));
-            setGatewayPing(res.ok && typeof (json as { data?: string }).data === "string" ? "ok" : "fail");
+            const json = (await res.json().catch(() => null)) as {
+                ok?: boolean;
+                enabled?: boolean;
+                parent_name?: string;
+            } | null;
+            if (!json || json.ok !== true) {
+                setGatewayPing("fail");
+                return;
+            }
+            setGatewayPing(json.enabled ? "ok" : "disabled");
         } catch {
             setGatewayPing("fail");
         }
@@ -440,8 +448,19 @@ export default function AdminEnsPage() {
                         >
                             {gatewayPing === "loading" ? "Pinging…" : "Ping CCIP gateway endpoint"}
                         </button>
-                        {gatewayPing === "ok" && <span className="text-sm text-green-400 self-center">Gateway responded</span>}
-                        {gatewayPing === "fail" && <span className="text-sm text-amber-400 self-center">No valid JSON — check URL or deployment</span>}
+                        {gatewayPing === "ok" && (
+                            <span className="text-sm text-green-400 self-center">Gateway up — ENS subnames enabled</span>
+                        )}
+                        {gatewayPing === "disabled" && (
+                            <span className="text-sm text-amber-400 self-center">
+                                Gateway up — turn on &quot;Subnames enabled&quot; in Step 1 so CCIP returns records
+                            </span>
+                        )}
+                        {gatewayPing === "fail" && (
+                            <span className="text-sm text-red-400/90 self-center">
+                                No response or wrong host — check you&apos;re on production and the route is deployed
+                            </span>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <input
