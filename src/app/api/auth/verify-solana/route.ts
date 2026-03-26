@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
+import { PublicKey } from "@solana/web3.js";
 import { createAuthResponse } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { generateSecureNonce, storeNonce, verifyAndConsumeNonce, extractNonceFromMessage } from "@/lib/nonce";
+import { friendRequestAddressCandidates, normalizeAddress } from "@/utils/address";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -104,18 +106,31 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
         }
 
-        // For Solana, addresses are case-sensitive, don't lowercase
-        const normalizedAddress = address;
+        // Canonical base58 (never persist lowercased garbage from legacy clients)
+        const normalizedAddress = normalizeAddress(address);
+        try {
+            new PublicKey(normalizedAddress);
+        } catch {
+            return NextResponse.json({ error: "Invalid Solana address" }, { status: 400 });
+        }
 
-        // Get or create user in database
-        let { data: user, error: fetchError } = await supabase
+        const lookupCandidates = friendRequestAddressCandidates(address);
+
+        // Get or create user in database (match any legacy string for same key)
+        const { data: rows, error: fetchError } = await supabase
             .from("shout_users")
             .select("*")
-            .eq("wallet_address", normalizedAddress)
-            .single();
+            .in("wallet_address", lookupCandidates.length > 0 ? lookupCandidates : [normalizedAddress])
+            .limit(1);
 
-        if (fetchError && fetchError.code === "PGRST116") {
-            // User doesn't exist, create them
+        if (fetchError) {
+            console.error("[SIWS] Error fetching user:", fetchError);
+            return NextResponse.json({ error: "Database error" }, { status: 500 });
+        }
+
+        let user = rows?.[0] ?? null;
+
+        if (!user) {
             const { data: newUser, error: createError } = await supabase
                 .from("shout_users")
                 .insert({
@@ -134,18 +149,16 @@ export async function POST(request: NextRequest) {
             }
 
             user = newUser;
-        } else if (fetchError) {
-            console.error("[SIWS] Error fetching user:", fetchError);
-            return NextResponse.json({ error: "Database error" }, { status: 500 });
-        } else if (user) {
-            // Update last login
-            await supabase
-                .from("shout_users")
-                .update({
-                    last_login: new Date().toISOString(),
-                    login_count: (user.login_count || 0) + 1,
-                })
-                .eq("wallet_address", normalizedAddress);
+        } else {
+            const patch: Record<string, unknown> = {
+                last_login: new Date().toISOString(),
+                login_count: (user.login_count || 0) + 1,
+            };
+            if (user.wallet_address !== normalizedAddress) {
+                patch.wallet_address = normalizedAddress;
+            }
+            await supabase.from("shout_users").update(patch).eq("id", user.id);
+            user = { ...user, wallet_address: normalizedAddress };
         }
 
         // Return user data with verification status and set session cookie
