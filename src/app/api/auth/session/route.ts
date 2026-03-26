@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
         // If the session says "passkey" but the database says "wallet",
         // the user is a wallet/EOA user who registered a passkey
         // They should still use wallet signing, not passkey signing
-        if (user?.wallet_type) {
-            effectiveAuthMethod = user.wallet_type;
+        if (userData?.wallet_type) {
+            effectiveAuthMethod = userData.wallet_type;
             if (effectiveAuthMethod !== session.authMethod) {
                 console.log(
                     "[Session] Auth method override:",
