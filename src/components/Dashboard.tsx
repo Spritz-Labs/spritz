@@ -782,7 +782,9 @@ function DashboardContent({
         clearError: clearFriendsError,
         isConfigured: isSupabaseConfigured,
         refresh: refreshFriends,
-    } = useFriendRequests(userAddress);
+    } = useFriendRequests(
+        userAddress ? normalizeAddress(userAddress) : null,
+    );
 
     // Fetch custom avatars for friends (batched for large friend lists)
     useEffect(() => {

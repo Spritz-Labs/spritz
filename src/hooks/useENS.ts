@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { createPublicClient, http, isAddress, type Address, fallback } from "viem";
 import { mainnet } from "viem/chains";
 import { normalize } from "viem/ens";
-import { isSolanaAddress } from "@/utils/address";
+import { isSolanaAddress, normalizeAddress } from "@/utils/address";
 import { getRpcUrl } from "@/lib/rpc";
 
 // Multiple RPC endpoints for reliability (dRPC primary if configured)
@@ -141,7 +141,7 @@ export function useENS() {
             /* ignore */
           }
           const result: CachedENSEntry = {
-            address: trimmed,
+            address: normalizeAddress(trimmed),
             ensName: null,
             snsName,
             avatar: null,
@@ -212,15 +212,16 @@ export function useENS() {
               );
               return null;
             }
+            const canonical = normalizeAddress(data.address);
             const result: CachedENSEntry = {
-              address: data.address,
+              address: canonical,
               ensName: null,
               snsName: data.name || lower,
               avatar: null,
               timestamp: Date.now(),
             };
             ensCache.set(cacheKey, result);
-            ensCache.set(data.address, result);
+            ensCache.set(canonical, result);
             saveCacheToStorage();
             return result;
           } catch {

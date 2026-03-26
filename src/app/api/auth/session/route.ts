@@ -7,6 +7,7 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { logAccess } from "@/lib/auditLog";
+import { normalizeAddress } from "@/utils/address";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -32,12 +33,13 @@ export async function GET(request: NextRequest) {
     let effectiveAuthMethod = session.authMethod;
 
     if (supabase) {
+        const lookupWallet = normalizeAddress(session.userAddress);
         const { data: user } = await supabase
             .from("shout_users")
             .select(
                 "id, wallet_address, username, ens_name, email, email_verified, email_updates_opt_in, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url, wallet_type"
             )
-            .eq("wallet_address", session.userAddress)
+            .eq("wallet_address", lookupWallet)
             .single();
 
         userData = user;
@@ -71,7 +73,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
         authenticated: true,
         session: {
-            userAddress: session.userAddress,
+            // Prefer DB wallet (canonical); JWT may be stale for pre-fix Solana sessions
+            userAddress: userData?.wallet_address ?? session.userAddress,
             authMethod: effectiveAuthMethod,
             expiresAt: new Date(session.exp * 1000).toISOString(),
         },
@@ -111,7 +114,7 @@ export async function POST(request: NextRequest) {
             await supabase
                 .from("shout_users")
                 .update({ last_login: new Date().toISOString() })
-                .eq("wallet_address", userAddress);
+                .eq("wallet_address", normalizeAddress(userAddress));
         }
 
         console.log(
