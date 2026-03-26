@@ -1,13 +1,11 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import { resolve, getFavoriteDomain } from "@bonfida/spl-name-service";
 
+const DEFAULT_SOLANA_MAINNET_RPC = "https://api.mainnet-beta.solana.com";
+
 export function getSnsMainnetConnection(): Connection {
-    const heliusKey = process.env.NEXT_PUBLIC_HELIUS_API_KEY || "";
     const rpc =
-        process.env.SOLANA_RPC_URL ||
-        (heliusKey
-            ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}`
-            : "https://api.mainnet-beta.solana.com");
+        process.env.SOLANA_RPC_URL?.trim() || DEFAULT_SOLANA_MAINNET_RPC;
     return new Connection(rpc, "confirmed");
 }
 
