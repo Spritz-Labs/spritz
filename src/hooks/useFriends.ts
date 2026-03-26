@@ -2,12 +2,14 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
-import { useENS, type ENSResolution } from "./useENS";
+import { useENS } from "./useENS";
+import { walletCacheKey } from "@/utils/address";
 
 export type Friend = {
     id: string;
     address: string; // Can be EVM or Solana address
     ensName: string | null;
+    snsName?: string | null;
     avatar: string | null;
     nickname: string | null;
     addedAt: string;
@@ -97,8 +99,8 @@ export function useFriends(userAddress: string | null) {
                 if (
                     friends.some(
                         (f) =>
-                            f.address.toLowerCase() ===
-                            resolution.address!.toLowerCase()
+                            walletCacheKey(f.address) ===
+                            walletCacheKey(resolution.address as string)
                     )
                 ) {
                     setError("This address is already in your friends list");
@@ -107,8 +109,8 @@ export function useFriends(userAddress: string | null) {
 
                 // Check if trying to add self
                 if (
-                    resolution.address.toLowerCase() ===
-                    userAddress.toLowerCase()
+                    walletCacheKey(resolution.address as string) ===
+                    walletCacheKey(userAddress)
                 ) {
                     setError("You cannot add yourself as a friend");
                     return false;
@@ -118,6 +120,7 @@ export function useFriends(userAddress: string | null) {
                     id: crypto.randomUUID(),
                     address: resolution.address as string,
                     ensName: resolution.ensName,
+                    snsName: resolution.snsName ?? null,
                     avatar: resolution.avatar,
                     nickname: nickname || null,
                     addedAt: new Date().toISOString(),

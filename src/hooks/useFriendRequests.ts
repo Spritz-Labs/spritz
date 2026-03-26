@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
-import { normalizeAddress } from "@/utils/address";
+import { normalizeAddress, walletCacheKey } from "@/utils/address";
 import { useENS } from "./useENS";
 import { getENSCache } from "@/lib/lruCache";
 import { ENS_CACHE_TTL_MS } from "@/lib/constants";
@@ -38,6 +38,7 @@ export type Friend = {
     created_at: string;
     // Resolved data
     ensName?: string | null;
+    snsName?: string | null;
     avatar?: string | null;
     reachUsername?: string | null;
 };
@@ -58,8 +59,8 @@ export function useFriendRequests(userAddress: string | null) {
     // Cached ENS resolver with TTL (H-2 FIX: uses LRU cache)
     const getCachedENS = useCallback(
         async (address: string) => {
-            const normalizedAddr = address.toLowerCase();
-            const cached = ensCache.get(normalizedAddr);
+            const key = walletCacheKey(address);
+            const cached = ensCache.get(key);
 
             // LRU cache handles TTL internally
             if (cached) {
@@ -70,12 +71,13 @@ export function useFriendRequests(userAddress: string | null) {
                 const resolved = await resolveAddressOrENS(address);
                 const result = {
                     ensName: resolved?.ensName || null,
+                    snsName: resolved?.snsName ?? null,
                     avatar: resolved?.avatar || null,
                 };
-                ensCache.set(normalizedAddr, result);
+                ensCache.set(key, result);
                 return result;
             } catch {
-                return { ensName: null, avatar: null };
+                return { ensName: null, snsName: null, avatar: null };
             }
         },
         [resolveAddressOrENS],
@@ -130,7 +132,7 @@ export function useFriendRequests(userAddress: string | null) {
 
                 usernameMap = (usernameData || []).reduce(
                     (acc, row) => {
-                        acc[row.wallet_address.toLowerCase()] = row.username;
+                        acc[walletCacheKey(row.wallet_address)] = row.username;
                         return acc;
                     },
                     {} as Record<string, string>,
@@ -139,11 +141,12 @@ export function useFriendRequests(userAddress: string | null) {
 
             // Build friends list with cached ENS data (instant) + batch usernames
             const resolvedFriends = (friendsData || []).map((friend) => {
-                const addr = friend.friend_address.toLowerCase();
+                const addr = walletCacheKey(friend.friend_address);
                 const cached = ensCache.get(addr); // LRU cache handles TTL
                 return {
                     ...friend,
                     ensName: cached?.ensName || null,
+                    snsName: cached?.snsName ?? null,
                     avatar: cached?.avatar || null,
                     reachUsername: usernameMap[addr] || null,
                 };
@@ -151,8 +154,8 @@ export function useFriendRequests(userAddress: string | null) {
 
             // Batch-fetch usernames for incoming/outgoing request addresses
             const requestAddresses = [
-                ...(incoming || []).map((r) => r.from_address.toLowerCase()),
-                ...(outgoing || []).map((r) => r.to_address.toLowerCase()),
+                ...(incoming || []).map((r) => normalizeAddress(r.from_address)),
+                ...(outgoing || []).map((r) => normalizeAddress(r.to_address)),
             ].filter((v, i, a) => a.indexOf(v) === i); // unique
 
             let requestUsernameMap: Record<string, string> = {};
@@ -163,7 +166,7 @@ export function useFriendRequests(userAddress: string | null) {
                     .in("wallet_address", requestAddresses);
                 requestUsernameMap = (reqUsernameData || []).reduce(
                     (acc, row) => {
-                        acc[row.wallet_address.toLowerCase()] = row.username;
+                        acc[walletCacheKey(row.wallet_address)] = row.username;
                         return acc;
                     },
                     {} as Record<string, string>,
@@ -173,7 +176,7 @@ export function useFriendRequests(userAddress: string | null) {
             // Quick ENS lookup for incoming requests (usually just 0-3 items)
             const resolvedIncoming = await Promise.all(
                 (incoming || []).map(async (req) => {
-                    const addr = req.from_address.toLowerCase();
+                    const addr = walletCacheKey(req.from_address);
                     const cached = ensCache.get(addr);
                     if (cached) {
                         return {
@@ -196,7 +199,7 @@ export function useFriendRequests(userAddress: string | null) {
             // Resolve outgoing requests with usernames + ENS
             const resolvedOutgoing = await Promise.all(
                 (outgoing || []).map(async (req) => {
-                    const addr = req.to_address.toLowerCase();
+                    const addr = walletCacheKey(req.to_address);
                     const cached = ensCache.get(addr);
                     if (cached) {
                         return {
@@ -243,7 +246,7 @@ export function useFriendRequests(userAddress: string | null) {
                 try {
                     await Promise.all(
                         friendsData.map(async (friend) => {
-                            const addr = friend.friend_address.toLowerCase();
+                            const addr = walletCacheKey(friend.friend_address);
                             // Skip if already cached
                             if (ensCache.has(addr)) return null;
                             return getCachedENS(friend.friend_address);
@@ -255,16 +258,18 @@ export function useFriendRequests(userAddress: string | null) {
                         setFriends((prev) =>
                             prev.map((friend) => {
                                 const cached = ensCache.get(
-                                    friend.friend_address.toLowerCase(),
+                                    walletCacheKey(friend.friend_address),
                                 );
                                 if (
                                     cached &&
                                     !friend.ensName &&
-                                    cached.ensName
+                                    !friend.snsName &&
+                                    (cached.ensName || cached.snsName)
                                 ) {
                                     return {
                                         ...friend,
                                         ensName: cached.ensName,
+                                        snsName: cached.snsName ?? null,
                                         avatar: cached.avatar,
                                     };
                                 }

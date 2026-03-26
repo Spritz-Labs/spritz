@@ -93,6 +93,7 @@ import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
 import { WalletModal } from "./WalletModal";
+import { walletCacheKey, normalizeAddress } from "@/utils/address";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
 import { useChatPinned } from "@/hooks/useChatPinned";
 import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
@@ -141,6 +142,7 @@ type FriendsListFriend = {
     id: string;
     address: Address;
     ensName: string | null;
+    snsName?: string | null;
     avatar: string | null;
     nickname: string | null;
     reachUsername: string | null;
@@ -220,9 +222,11 @@ function DashboardContent({
     );
     const [userENS, setUserENS] = useState<{
         ensName: string | null;
+        snsName: string | null;
         avatar: string | null;
     }>({
         ensName: null,
+        snsName: null,
         avatar: null,
     });
     const wakuAutoInitAttempted = useRef(false);
@@ -434,7 +438,7 @@ function DashboardContent({
         walletAddress: userAddress,
         walletType: actualAuthMethod,
         chain: isSolanaUser ? "solana" : "ethereum",
-        ensName: userENS.ensName,
+        ensName: userENS.ensName || userENS.snsName,
         username: reachUsername,
     });
 
@@ -785,7 +789,9 @@ function DashboardContent({
         if (friends.length === 0 || !isSupabaseConfigured || !supabase) return;
 
         const client = supabase; // Capture for closure (after null check)
-        const addresses = friends.map((f) => f.friend_address.toLowerCase());
+        const addresses = friends.map((f) =>
+            normalizeAddress(f.friend_address)
+        );
 
         const fetchCustomAvatars = async () => {
             try {
@@ -812,7 +818,7 @@ function DashboardContent({
                                     row.use_custom_avatar &&
                                     row.custom_avatar_url
                                 ) {
-                                    avatars[row.wallet_address] =
+                                    avatars[walletCacheKey(row.wallet_address)] =
                                         row.custom_avatar_url;
                                 }
                             }
@@ -834,7 +840,7 @@ function DashboardContent({
     // Helper to get effective avatar (custom if enabled, otherwise ENS/default)
     const getEffectiveAvatar = useCallback(
         (address: string, ensAvatar: string | null): string | null => {
-            const customAvatar = friendCustomAvatars[address.toLowerCase()];
+            const customAvatar = friendCustomAvatars[walletCacheKey(address)];
             return customAvatar || ensAvatar;
         },
         [friendCustomAvatars]
@@ -846,20 +852,22 @@ function DashboardContent({
 
         const uniqueSenders = new Set<string>();
         alphaChat.messages.forEach((msg) => {
-            const sender = msg.sender_address.toLowerCase();
+            const sender = msg.sender_address;
+            const senderKey = walletCacheKey(sender);
             // Skip only current user - include friends to get their effective avatar
-            if (sender !== userAddress.toLowerCase()) {
+            if (senderKey !== walletCacheKey(userAddress)) {
                 uniqueSenders.add(sender);
             }
         });
 
         // Only fetch for senders not in cache (or refetch when chatsUserInfoRefreshKey bumps)
         const sendersToFetch = Array.from(uniqueSenders).filter(
-            (address) => !userInfoCache.has(address)
+            (address) => !userInfoCache.has(walletCacheKey(address))
         );
 
         // Fetch user info for all unique senders not in cache
         sendersToFetch.forEach((address) => {
+            const cacheKey = walletCacheKey(address);
             fetch(`/api/public/user?address=${encodeURIComponent(address)}`)
                 .then((res) => res.json())
                 .then((data) => {
@@ -876,13 +884,10 @@ function DashboardContent({
                         };
                         setUserInfoCache((prev) => {
                             // Check again to avoid race conditions
-                            if (prev.has(address.toLowerCase())) {
+                            if (prev.has(cacheKey)) {
                                 return prev;
                             }
-                            return new Map(prev).set(
-                                address.toLowerCase(),
-                                userInfo
-                            );
+                            return new Map(prev).set(cacheKey, userInfo);
                         });
                     }
                 })
@@ -936,12 +941,14 @@ function DashboardContent({
                 setUserENS((prev) => {
                     if (
                         prev.ensName === resolved.ensName &&
+                        prev.snsName === resolved.snsName &&
                         prev.avatar === resolved.avatar
                     ) {
                         return prev; // No change, don't trigger re-render
                     }
                     return {
                         ensName: resolved.ensName,
+                        snsName: resolved.snsName ?? null,
                         avatar: resolved.avatar,
                     };
                 });
@@ -1826,14 +1833,15 @@ function DashboardContent({
     // Display name priority: ENS > Spritz username > address
     const getAlphaUserInfo = useCallback(
         (address: string) => {
-            const normalizedAddress = address.toLowerCase();
+            const key = walletCacheKey(address);
 
             // Check if it's the current user
             // Priority: ENS > username
-            if (normalizedAddress === userAddress.toLowerCase()) {
+            if (key === walletCacheKey(userAddress)) {
                 return {
                     name:
                         userENS?.ensName ||
+                        userENS?.snsName ||
                         (reachUsername ? `@${reachUsername}` : null),
                     avatar: effectiveAvatar || null,
                 };
@@ -1842,20 +1850,21 @@ function DashboardContent({
             // Check cache first - has effective avatar from public API
             // Cache stores: { name: string | null; avatar: string | null }
             // where name is already formatted with priority (ENS > @username)
-            const cached = userInfoCache.get(normalizedAddress);
+            const cached = userInfoCache.get(key);
 
             // Check friends list for name info
             const friend = friends.find(
-                (f) => f.friend_address.toLowerCase() === normalizedAddress
+                (f) => walletCacheKey(f.friend_address) === key
             );
 
-            // Build display name with priority: local nickname > ENS > username
+            // Build display name with priority: local nickname > ENS > SNS > username
             const getDisplayNameForFriend = () => {
                 // Local nickname takes highest priority (personal override)
                 if (friend?.nickname) return friend.nickname;
                 // ENS is second priority
                 if (friend?.ensName) return friend.ensName;
-                // Spritz username is third priority
+                if (friend?.snsName) return friend.snsName;
+                // Spritz username is next
                 if (friend?.reachUsername) return `@${friend.reachUsername}`;
                 // Fallback to cached name if available (already formatted correctly)
                 if (cached?.name) return cached.name;
@@ -1899,6 +1908,7 @@ function DashboardContent({
                 id: f.id,
                 address: f.friend_address as Address,
                 ensName: f.ensName || null,
+                snsName: f.snsName ?? null,
                 avatar: getEffectiveAvatar(f.friend_address, f.avatar || null),
                 nickname: f.nickname,
                 reachUsername: f.reachUsername || null,
@@ -1929,8 +1939,8 @@ function DashboardContent({
 
         // Add DM chats from friends
         friendsListData.forEach((friend) => {
-            const addressLower = friend.address.toLowerCase();
-            const lastMsgTime = lastMessageTimes[addressLower];
+            const addressKey = walletCacheKey(friend.address);
+            const lastMsgTime = lastMessageTimes[addressKey];
             const lastMessageAt = lastMsgTime
                 ? toValidLastMessageAt(lastMsgTime)
                 : toValidLastMessageAt(friend.addedAt);
@@ -1944,13 +1954,14 @@ function DashboardContent({
                         ? `@${friend.reachUsername}`
                         : null) ||
                     friend.ensName ||
+                    friend.snsName ||
                     `${friend.address.slice(0, 6)}...${friend.address.slice(
                         -4
                     )}`,
                 avatar: friend.avatar,
-                lastMessage: lastMessagePreviews[addressLower] || null,
+                lastMessage: lastMessagePreviews[addressKey] || null,
                 lastMessageAt,
-                unreadCount: unreadCounts[addressLower] || 0,
+                unreadCount: unreadCounts[addressKey] || 0,
                 isOnline: false, // Will be updated by FriendsList logic
                 isPinned: pinnedIds.has(`dm-${friend.address}`),
                 metadata: {
@@ -2902,6 +2913,7 @@ function DashboardContent({
         // Create signaling record to notify the callee
         const callerDisplayName =
             userENS.ensName ||
+            userENS.snsName ||
             (reachUsername ? `@${reachUsername}` : undefined);
         const callRecord = await startCall(
             friend.address,
@@ -3560,6 +3572,7 @@ function DashboardContent({
                                                 {userSettings.statusEmoji}
                                             </span>
                                             {userENS.ensName ||
+                                                userENS.snsName ||
                                                 (reachUsername
                                                     ? `@${reachUsername}`
                                                     : "Spritz")}
@@ -3978,8 +3991,49 @@ function DashboardContent({
                                                 </button>
 
                                                 {/* 6. ENS/SNS Name Service */}
-                                                {isSolanaUser ? (
-                                                    // Solana users - show SNS link
+                                                {isSolanaUser && userENS.snsName ? (
+                                                    <div className="px-4 py-3 flex items-center gap-3 border-t border-zinc-800">
+                                                        <div className="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+                                                            <svg
+                                                                className="w-4 h-4 text-violet-400"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={
+                                                                        2
+                                                                    }
+                                                                    d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
+                                                                />
+                                                            </svg>
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-white text-sm font-medium">
+                                                                SNS
+                                                            </p>
+                                                            <p className="text-violet-400 text-xs truncate">
+                                                                {userENS.snsName}
+                                                            </p>
+                                                        </div>
+                                                        <svg
+                                                            className="w-4 h-4 text-violet-400"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                            stroke="currentColor"
+                                                        >
+                                                            <path
+                                                                strokeLinecap="round"
+                                                                strokeLinejoin="round"
+                                                                strokeWidth={2}
+                                                                d="M5 13l4 4L19 7"
+                                                            />
+                                                        </svg>
+                                                    </div>
+                                                ) : isSolanaUser ? (
+                                                    // Solana users without primary SNS — link to register
                                                     <a
                                                         href="https://www.sns.id/"
                                                         target="_blank"
@@ -6232,7 +6286,7 @@ function DashboardContent({
                     clearFriendsError();
                 }}
                 address={userAddress as `0x${string}`}
-                ensName={userENS.ensName}
+                ensName={userENS.ensName || userENS.snsName}
                 reachUsername={reachUsername || null}
                 avatar={effectiveAvatar}
                 onAddFriend={handleSendFriendRequest}
@@ -7166,6 +7220,7 @@ function DashboardContent({
                 effectiveAvatar={effectiveAvatar ?? null}
                 displayName={
                     userENS.ensName ||
+                    userENS.snsName ||
                     (reachUsername
                         ? `@${reachUsername}`
                         : formatAddress(userAddress))

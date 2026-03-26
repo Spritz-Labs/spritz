@@ -20,6 +20,8 @@ const publicClient = createPublicClient({
 export type ENSResolution = {
   address: Address | string | null; // Can be EVM Address or Solana address string
   ensName: string | null;
+  /** Primary Solana SNS name (.sol), from favorite domain reverse lookup */
+  snsName: string | null;
   avatar: string | null;
 };
 
@@ -42,10 +44,13 @@ function loadCacheFromStorage(): void {
       const parsed = JSON.parse(stored) as Record<string, CachedENSEntry>;
       const now = Date.now();
       
-      // Load non-expired entries
+      // Load non-expired entries (snsName added later — backfill for old cache)
       for (const [key, entry] of Object.entries(parsed)) {
         if (now - entry.timestamp < CACHE_TTL_MS) {
-          ensCache.set(key, entry);
+          ensCache.set(key, {
+            ...entry,
+            snsName: entry.snsName ?? null,
+          });
         }
       }
       
@@ -91,6 +96,10 @@ function isCacheValid(entry: CachedENSEntry | undefined): entry is CachedENSEntr
   return Date.now() - entry.timestamp < CACHE_TTL_MS;
 }
 
+function resolutionCacheKey(input: string): string {
+  return isSolanaAddress(input) ? input : input.toLowerCase();
+}
+
 export function useENS() {
   const [isResolving, setIsResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,8 +113,8 @@ export function useENS() {
     async (input: string): Promise<ENSResolution | null> => {
       initCache(); // Ensure cache is loaded
       
-      // Check cache first (with TTL validation)
-      const cacheKey = input.toLowerCase();
+      // Check cache first (with TTL validation). Solana base58 is case-sensitive.
+      const cacheKey = resolutionCacheKey(input.trim());
       const cached = ensCache.get(cacheKey);
       if (isCacheValid(cached)) {
         return cached;
@@ -115,24 +124,44 @@ export function useENS() {
       setError(null);
 
       try {
-        // Check if input is a Solana address - return it directly (no ENS for Solana)
-        if (isSolanaAddress(input)) {
-          const result: CachedENSEntry = { address: input, ensName: null, avatar: null, timestamp: Date.now() };
+        const trimmed = input.trim();
+
+        // Solana address — optional primary .sol via SNS reverse lookup
+        if (isSolanaAddress(trimmed)) {
+          let snsName: string | null = null;
+          try {
+            const res = await fetch(
+              `/api/sns/resolve?wallet=${encodeURIComponent(trimmed)}`
+            );
+            if (res.ok) {
+              const data = (await res.json()) as { name?: string | null };
+              snsName = data.name || null;
+            }
+          } catch {
+            /* ignore */
+          }
+          const result: CachedENSEntry = {
+            address: trimmed,
+            ensName: null,
+            snsName,
+            avatar: null,
+            timestamp: Date.now(),
+          };
           ensCache.set(cacheKey, result);
           saveCacheToStorage();
           return result;
         }
 
         // Check if input is already an EVM address
-        if (isAddress(input)) {
+        if (isAddress(trimmed)) {
           let ensName: string | null = null;
           let avatar: string | null = null;
 
           // Get primary ENS name (reverse record)
           try {
-            ensName = await publicClient.getEnsName({ address: input });
+            ensName = await publicClient.getEnsName({ address: trimmed });
             if (ensName) {
-              console.log("[ENS] Found name for", input.slice(0, 8) + "...:", ensName);
+              console.log("[ENS] Found name for", trimmed.slice(0, 8) + "...:", ensName);
             }
           } catch (err) {
             // Silent fail - many addresses don't have ENS
@@ -152,14 +181,56 @@ export function useENS() {
             }
           }
 
-          const result: CachedENSEntry = { address: input, ensName, avatar, timestamp: Date.now() };
+          const result: CachedENSEntry = {
+            address: trimmed,
+            ensName,
+            snsName: null,
+            avatar,
+            timestamp: Date.now(),
+          };
           ensCache.set(cacheKey, result);
           saveCacheToStorage();
           return result;
         }
 
+        const lower = trimmed.toLowerCase();
+
+        // SNS forward: name.sol → Solana owner address (same UX as typing ens.eth)
+        if (lower.endsWith(".sol")) {
+          try {
+            const res = await fetch(
+              `/api/sns/resolve?name=${encodeURIComponent(lower)}`
+            );
+            const data = (await res.json()) as {
+              address?: string;
+              name?: string;
+              error?: string;
+            };
+            if (!res.ok || !data.address) {
+              setError(
+                typeof data.error === "string" ? data.error : "SNS name not found"
+              );
+              return null;
+            }
+            const result: CachedENSEntry = {
+              address: data.address,
+              ensName: null,
+              snsName: data.name || lower,
+              avatar: null,
+              timestamp: Date.now(),
+            };
+            ensCache.set(cacheKey, result);
+            ensCache.set(data.address, result);
+            saveCacheToStorage();
+            return result;
+          } catch {
+            setError("Could not resolve SNS name");
+            return null;
+          }
+        }
+
         // Input looks like an ENS name - forward resolution
-        const normalizedName = input.endsWith(".eth") ? input : `${input}.eth`;
+        const normalizedName = trimmed.endsWith(".eth") ? trimmed : `${trimmed}.eth`;
 
         try {
           const address = await publicClient.getEnsAddress({
@@ -181,7 +252,13 @@ export function useENS() {
             // Silent fail
           }
 
-          const result: CachedENSEntry = { address, ensName: normalizedName, avatar, timestamp: Date.now() };
+          const result: CachedENSEntry = {
+            address,
+            ensName: normalizedName,
+            snsName: null,
+            avatar,
+            timestamp: Date.now(),
+          };
           ensCache.set(cacheKey, result);
           ensCache.set(address.toLowerCase(), result);
           saveCacheToStorage();
@@ -209,7 +286,7 @@ export function useENS() {
       
       const uncached: string[] = [];
       for (const addr of addresses) {
-        const cacheKey = addr.toLowerCase();
+        const cacheKey = resolutionCacheKey(addr);
         const cached = ensCache.get(cacheKey);
         if (isCacheValid(cached)) {
           results.set(addr, cached);

@@ -1,16 +1,4 @@
 /**
- * Normalizes an address for database storage/comparison.
- * All addresses are lowercased for consistent storage and lookup.
- * The original case is preserved in the UI for display purposes only.
- */
-export function normalizeAddress(address: string): string {
-    if (!address) return address;
-
-    // Lowercase all addresses for consistent database storage/comparison
-    return address.toLowerCase();
-}
-
-/**
  * Checks if an address is an EVM address
  */
 export function isEvmAddress(address: string): boolean {
@@ -25,6 +13,24 @@ export function isSolanaAddress(address: string): boolean {
     // Solana addresses are base58 encoded, typically 32-44 characters
     const base58Regex = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
     return base58Regex.test(address);
+}
+
+/**
+ * Normalizes an address for database storage/comparison.
+ * EVM addresses are lowercased. Solana base58 is case-sensitive and is left unchanged.
+ */
+export function normalizeAddress(address: string): string {
+    if (!address) return address;
+
+    if (isSolanaAddress(address)) {
+        return address;
+    }
+    return address.toLowerCase();
+}
+
+/** Cache / map key: Solana addresses keep case; EVM lowercased. */
+export function walletCacheKey(address: string): string {
+    return isSolanaAddress(address) ? address : address.toLowerCase();
 }
 
 /**
@@ -45,6 +51,8 @@ export function formatAddress(address: string, startChars = 6, endChars = 4): st
 export type UserDisplayInfo = {
     address: string;
     ensName?: string | null;
+    /** Solana SNS (.sol) when known */
+    snsName?: string | null;
     username?: string | null;
     nickname?: string | null;
 };
@@ -52,8 +60,9 @@ export type UserDisplayInfo = {
 /**
  * Gets the display name for a user following priority:
  * 1. ENS name (if available)
- * 2. Spritz username with @ prefix (if available)
- * 3. Formatted address (fallback)
+ * 2. SNS .sol name (if available)
+ * 3. Spritz username with @ prefix (if available)
+ * 4. Formatted address (fallback)
  * 
  * Note: Local nicknames are handled separately in FriendsList
  * as they are user-specific overrides, not global display names.
@@ -76,8 +85,12 @@ export function getDisplayName(
     if (user.ensName) {
         return user.ensName;
     }
+
+    if (user.snsName) {
+        return user.snsName;
+    }
     
-    // Spritz username is second priority
+    // Spritz username is next
     if (user.username) {
         return `@${user.username}`;
     }
@@ -108,6 +121,10 @@ export function getSecondaryDisplayText(
     // Show ENS if not in primary
     if (user.ensName && !primary.includes(user.ensName)) {
         parts.push(user.ensName);
+    }
+
+    if (user.snsName && !primary.includes(user.snsName)) {
+        parts.push(user.snsName);
     }
     
     // Always include truncated address if primary isn't showing it

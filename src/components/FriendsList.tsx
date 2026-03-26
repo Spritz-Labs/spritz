@@ -19,6 +19,7 @@ export type Friend = {
     id: string;
     address: Address;
     ensName: string | null;
+    snsName?: string | null;
     avatar: string | null;
     nickname: string | null;
     reachUsername: string | null;
@@ -67,12 +68,13 @@ const formatPhoneNumber = (phone: string) => {
 };
 
 // Get display name with local nickname support
-// Priority: nickname > ENS > username > address
+// Priority: nickname > ENS > SNS > username > address
 const getDisplayName = (friend: Friend) => {
     return getBaseDisplayName(
         {
             address: friend.address,
             ensName: friend.ensName,
+            snsName: friend.snsName ?? null,
             username: friend.reachUsername,
             nickname: friend.nickname,
         },
@@ -85,6 +87,7 @@ const getSecondaryText = (friend: Friend) => {
         {
             address: friend.address,
             ensName: friend.ensName,
+            snsName: friend.snsName ?? null,
             username: friend.reachUsername,
             nickname: friend.nickname,
         },
@@ -1259,6 +1262,7 @@ export function FriendsList({
                 const displayName = getDisplayName(friend).toLowerCase();
                 const address = friend.address.toLowerCase();
                 const ensName = friend.ensName?.toLowerCase() || "";
+                const snsName = friend.snsName?.toLowerCase() || "";
                 const username = friend.reachUsername?.toLowerCase() || "";
                 const tag = getTag(friend.address.toLowerCase());
                 const tagText = tag?.tag?.toLowerCase() || "";
@@ -1266,6 +1270,7 @@ export function FriendsList({
                     displayName.includes(query) ||
                     address.includes(query) ||
                     ensName.includes(query) ||
+                    snsName.includes(query) ||
                     username.includes(query) ||
                     tagText.includes(query)
                 );

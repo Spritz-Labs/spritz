@@ -21,6 +21,7 @@
     "dependencies": {
         "@alien_org/bridge": "^0.2.2",
         "@alien_org/sso-sdk-react": "^1.0.39",
+        "@bonfida/spl-name-service": "^3.0.20",
         "@coinbase/onchainkit": "^1.1.2",
         "@coinbase/wallet-sdk": "^4.3.7",
         "@dnd-kit/core": "^6.3.1",

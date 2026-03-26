@@ -147,6 +147,7 @@ export function QRCodeModal({
                             setResolved({
                                 address: phoneResult.wallet_address as `0x${string}`,
                                 ensName: ensResult?.ensName || null,
+                                snsName: ensResult?.snsName ?? null,
                                 avatar: ensResult?.avatar || null,
                             });
                             setResolvedFromPhone(true);
@@ -170,6 +171,7 @@ export function QRCodeModal({
                             setResolved({
                                 address: usernameResult.wallet_address as `0x${string}`,
                                 ensName: ensResult?.ensName || null,
+                                snsName: ensResult?.snsName ?? null,
                                 avatar: ensResult?.avatar || null,
                             });
                             setResolvedFromUsername(true);
@@ -551,7 +553,7 @@ export function QRCodeModal({
                                         <form onSubmit={handleSubmit} className="space-y-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-zinc-400 mb-2">
-                                                    Phone, Username, Address, or ENS
+                                                    Phone, Username, Address, ENS, or SNS (.sol)
                                                 </label>
                                                 <div className="flex gap-2">
                                                     <div className="relative flex-1">
@@ -559,7 +561,7 @@ export function QRCodeModal({
                                                             type="text"
                                                             value={input}
                                                             onChange={(e) => setInput(e.target.value)}
-                                                            placeholder="kevin, 0x..., or vitalik.eth"
+                                                            placeholder="kevin, 0x..., vitalik.eth, or bonfida.sol"
                                                             spellCheck={false}
                                                             autoComplete="off"
                                                             autoCorrect="off"
@@ -640,14 +642,18 @@ export function QRCodeModal({
                                                                 ) : (
                                                                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
                                                                         <span className="text-white font-bold text-lg">
-                                                                            {(resolved.ensName || resolved.address)[0].toUpperCase()}
+                                                                            {(
+                                                                                resolved.snsName ||
+                                                                                resolved.ensName ||
+                                                                                resolved.address
+                                                                            )[0].toUpperCase()}
                                                                         </span>
                                                                     </div>
                                                                 )}
                                                                 <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center gap-2">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
                                                                         <svg
-                                                                            className="w-4 h-4 text-emerald-400"
+                                                                            className="w-4 h-4 text-emerald-400 shrink-0"
                                                                             fill="none"
                                                                             viewBox="0 0 24 24"
                                                                             stroke="currentColor"
@@ -666,10 +672,17 @@ export function QRCodeModal({
                                                                                 ? `Found @${input.trim().toLowerCase()}`
                                                                                 : "Resolved"}
                                                                         </span>
+                                                                        {resolved.snsName && (
+                                                                            <span className="rounded bg-violet-500/20 text-violet-300 text-xs font-medium px-1.5 py-0.5">
+                                                                                SNS
+                                                                            </span>
+                                                                        )}
                                                                     </div>
-                                                                    {resolved.ensName && (
+                                                                    {(resolved.ensName ||
+                                                                        resolved.snsName) && (
                                                                         <p className="text-white font-medium truncate">
-                                                                            {resolved.ensName}
+                                                                            {resolved.snsName ||
+                                                                                resolved.ensName}
                                                                         </p>
                                                                     )}
                                                                     <p className="text-zinc-400 text-sm font-mono truncate">

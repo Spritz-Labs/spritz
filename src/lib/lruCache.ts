@@ -125,20 +125,26 @@ export class LRUCache<K, V> {
  * Create a singleton cache for ENS resolutions
  * This ensures consistent caching across hook instances
  */
+export type ENSCacheValue = {
+    ensName: string | null;
+    snsName: string | null;
+    avatar: string | null;
+};
+
 export function createENSCache() {
-    return new LRUCache<string, { ensName: string | null; avatar: string | null }>(
+    return new LRUCache<string, ENSCacheValue>(
         1000, // Max 1000 entries
         5 * 60 * 1000 // 5 minute TTL
     );
 }
 
 // Singleton instance for ENS - only created on client side
-let ensCache: LRUCache<string, { ensName: string | null; avatar: string | null }> | null = null;
+let ensCache: LRUCache<string, ENSCacheValue> | null = null;
 
 export function getENSCache() {
     if (typeof window === "undefined") {
         // Server-side: return a new instance each time (no persistence)
-        return new LRUCache<string, { ensName: string | null; avatar: string | null }>(100, 60000);
+        return new LRUCache<string, ENSCacheValue>(100, 60000);
     }
     
     if (!ensCache) {
