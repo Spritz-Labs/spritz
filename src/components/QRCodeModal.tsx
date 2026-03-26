@@ -8,6 +8,7 @@ import { QRCodeScanner } from "./QRCodeScanner";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { useUsername } from "@/hooks/useUsername";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
+import { stripLeadingAt } from "@/utils/socialInput";
 
 interface QRCodeModalProps {
     isOpen: boolean;
@@ -135,6 +136,7 @@ export function QRCodeModal({
         const timer = setTimeout(async () => {
             try {
                 const trimmedInput = input.trim();
+                const normalizedInput = stripLeadingAt(trimmedInput);
 
                 // First, check if it looks like a phone number
                 if (looksLikePhone(trimmedInput)) {
@@ -160,7 +162,7 @@ export function QRCodeModal({
                 }
 
                 // Try to lookup as a Spritz username
-                const lowerInput = trimmedInput.toLowerCase();
+                const lowerInput = normalizedInput.toLowerCase();
                 if (!lowerInput.startsWith("0x") && !lowerInput.includes(".")) {
                     try {
                         const usernameResult = await lookupUsername(lowerInput);
@@ -183,8 +185,8 @@ export function QRCodeModal({
                     }
                 }
 
-                // Fall back to ENS/address resolution
-                const result = await resolveAddressOrENS(lowerInput);
+                // Fall back to ENS / SNS / address resolution
+                const result = await resolveAddressOrENS(normalizedInput);
                 setResolved(result);
                 setResolvedFromUsername(false);
                 setResolvedFromPhone(false);

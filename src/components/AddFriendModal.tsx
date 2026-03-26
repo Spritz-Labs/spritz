@@ -6,6 +6,7 @@ import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { useUsername } from "@/hooks/useUsername";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import { QRCodeScanner } from "./QRCodeScanner";
+import { stripLeadingAt } from "@/utils/socialInput";
 
 type AddFriendModalProps = {
     isOpen: boolean;
@@ -81,6 +82,7 @@ export function AddFriendModal({
         const timer = setTimeout(async () => {
             try {
                 const trimmedInput = input.trim();
+                const normalizedInput = stripLeadingAt(trimmedInput);
 
                 // First, check if it looks like a phone number
                 if (looksLikePhone(trimmedInput)) {
@@ -108,8 +110,8 @@ export function AddFriendModal({
                     }
                 }
 
-                // Try to lookup as a Spritz username (if it doesn't look like an address or ENS)
-                const lowerInput = trimmedInput.toLowerCase();
+                // Try to lookup as a Spritz username (if it doesn't look like an address or ENS/SNS)
+                const lowerInput = normalizedInput.toLowerCase();
                 if (!lowerInput.startsWith("0x") && !lowerInput.includes(".")) {
                     try {
                         const usernameResult = await lookupUsername(lowerInput);
@@ -138,8 +140,8 @@ export function AddFriendModal({
                     }
                 }
 
-                // Fall back to ENS/address resolution
-                const result = await resolveAddressOrENS(lowerInput);
+                // Fall back to ENS / SNS / address resolution (@prefix stripped inside useENS)
+                const result = await resolveAddressOrENS(normalizedInput);
                 setResolved(result);
                 setResolvedFromUsername(false);
                 setResolvedFromPhone(false);

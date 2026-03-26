@@ -6,6 +6,7 @@ import { mainnet } from "viem/chains";
 import { normalize } from "viem/ens";
 import { isSolanaAddress, normalizeAddress } from "@/utils/address";
 import { getRpcUrl } from "@/lib/rpc";
+import { stripLeadingAt } from "@/utils/socialInput";
 
 // Multiple RPC endpoints for reliability (dRPC primary if configured)
 const publicClient = createPublicClient({
@@ -113,8 +114,9 @@ export function useENS() {
     async (input: string): Promise<ENSResolution | null> => {
       initCache(); // Ensure cache is loaded
       
+      const trimmedForKey = stripLeadingAt(input);
       // Check cache first (with TTL validation). Solana base58 is case-sensitive.
-      const cacheKey = resolutionCacheKey(input.trim());
+      const cacheKey = resolutionCacheKey(trimmedForKey);
       const cached = ensCache.get(cacheKey);
       if (isCacheValid(cached)) {
         return cached;
@@ -124,7 +126,7 @@ export function useENS() {
       setError(null);
 
       try {
-        const trimmed = input.trim();
+        const trimmed = stripLeadingAt(input);
 
         // Solana address — optional primary .sol via SNS reverse lookup
         if (isSolanaAddress(trimmed)) {

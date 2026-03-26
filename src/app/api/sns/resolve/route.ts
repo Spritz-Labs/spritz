@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { snsForwardResolve, snsReverseResolve } from "@/lib/snsResolveServer";
 import { isSolanaAddress } from "@/utils/address";
+import { stripLeadingAt } from "@/utils/socialInput";
 
 /**
  * GET /api/sns/resolve?name=alice.sol  — forward resolve to owner address
@@ -8,7 +9,9 @@ import { isSolanaAddress } from "@/utils/address";
  */
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
-    const name = searchParams.get("name")?.trim();
+    const name = searchParams.get("name")
+        ? stripLeadingAt(searchParams.get("name") || "")
+        : undefined;
     const wallet = searchParams.get("wallet")?.trim();
 
     if (!name && !wallet) {
