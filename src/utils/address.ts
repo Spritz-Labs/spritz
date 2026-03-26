@@ -1,5 +1,10 @@
 import { PublicKey } from "@solana/web3.js";
 
+/** Strip zero-width / BOM so pasted addresses match DB rows */
+function stripWalletNoise(s: string): string {
+    return s.replace(/[\u200B-\u200D\uFEFF]/g, "");
+}
+
 /**
  * Checks if an address is an EVM address
  */
@@ -18,14 +23,41 @@ export function isSolanaAddress(address: string): boolean {
 }
 
 /**
+ * All distinct strings to try when matching friend rows / shout_users.wallet_address
+ * (handles regex edge lengths, invisible chars, and legacy stored forms).
+ */
+export function friendRequestAddressCandidates(
+    raw: string | null | undefined,
+): string[] {
+    if (!raw) return [];
+    const cleaned = stripWalletNoise(raw).trim();
+    if (!cleaned) return [];
+    const set = new Set<string>();
+    set.add(cleaned);
+    set.add(normalizeAddress(cleaned));
+    if (!cleaned.startsWith("0x")) {
+        try {
+            set.add(new PublicKey(cleaned).toBase58());
+        } catch {
+            /* not a valid Solana pubkey */
+        }
+    }
+    return [...set];
+}
+
+/**
  * Normalizes an address for database storage/comparison.
  * EVM addresses are lowercased. Solana pubkeys are canonicalized with PublicKey.toBase58()
  * so all code paths agree on one string per key (never use toLowerCase on Solana).
  */
 export function normalizeAddress(address: string): string {
     if (!address) return address;
-    const trimmed = address.trim();
+    const trimmed = stripWalletNoise(address).trim();
     if (!trimmed) return trimmed;
+
+    if (trimmed.startsWith("0x")) {
+        return trimmed.toLowerCase();
+    }
 
     if (isSolanaAddress(trimmed)) {
         try {
@@ -34,6 +66,20 @@ export function normalizeAddress(address: string): string {
             return trimmed;
         }
     }
+
+    // Valid pubkey can occasionally fall outside the narrow regex; never lowercase base58.
+    if (
+        trimmed.length >= 32 &&
+        trimmed.length <= 48 &&
+        /^[1-9A-HJ-NP-Za-km-z]+$/.test(trimmed)
+    ) {
+        try {
+            return new PublicKey(trimmed).toBase58();
+        } catch {
+            /* fall through */
+        }
+    }
+
     return trimmed.toLowerCase();
 }
 

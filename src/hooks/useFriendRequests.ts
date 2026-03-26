@@ -2,7 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
-import { normalizeAddress, walletCacheKey } from "@/utils/address";
+import {
+    friendRequestAddressCandidates,
+    normalizeAddress,
+    walletCacheKey,
+} from "@/utils/address";
 import { useENS } from "./useENS";
 import { getENSCache } from "@/lib/lruCache";
 import { ENS_CACHE_TTL_MS } from "@/lib/constants";
@@ -89,34 +93,80 @@ export function useFriendRequests(userAddress: string | null) {
             return;
         }
 
+        const trimmedAddr = userAddress.trim();
+        if (!trimmedAddr) {
+            return;
+        }
+
         setIsLoading(true);
         try {
+            let addrCandidates = friendRequestAddressCandidates(userAddress);
+            if (addrCandidates.length === 0) {
+                addrCandidates = [normalizeAddress(userAddress)];
+            }
             const normalizedAddress = normalizeAddress(userAddress);
             const client = supabase;
 
+            const singleAddr = addrCandidates[0] ?? normalizedAddress;
+            const incomingBuilder =
+                addrCandidates.length <= 1
+                    ? client
+                          .from("shout_friend_requests")
+                          .select("*")
+                          .eq("status", "pending")
+                          .eq("to_address", singleAddr)
+                    : client
+                          .from("shout_friend_requests")
+                          .select("*")
+                          .eq("status", "pending")
+                          .in("to_address", addrCandidates);
+            const outgoingBuilder =
+                addrCandidates.length <= 1
+                    ? client
+                          .from("shout_friend_requests")
+                          .select("*")
+                          .eq("status", "pending")
+                          .eq("from_address", singleAddr)
+                    : client
+                          .from("shout_friend_requests")
+                          .select("*")
+                          .eq("status", "pending")
+                          .in("from_address", addrCandidates);
+            const friendsBuilder =
+                addrCandidates.length <= 1
+                    ? client
+                          .from("shout_friends")
+                          .select("*")
+                          .eq("user_address", singleAddr)
+                          .order("created_at", { ascending: false })
+                          .limit(FRIENDS_INITIAL_LIMIT)
+                    : client
+                          .from("shout_friends")
+                          .select("*")
+                          .in("user_address", addrCandidates)
+                          .order("created_at", { ascending: false })
+                          .limit(FRIENDS_INITIAL_LIMIT);
+
             // Fetch ALL data in parallel - no ENS resolution yet!
             const [
-                { data: incoming },
-                { data: outgoing },
-                { data: friendsData },
+                { data: incoming, error: incomingErr },
+                { data: outgoing, error: outgoingErr },
+                { data: friendsData, error: friendsErr },
             ] = await Promise.all([
-                client
-                    .from("shout_friend_requests")
-                    .select("*")
-                    .eq("to_address", normalizedAddress)
-                    .eq("status", "pending"),
-                client
-                    .from("shout_friend_requests")
-                    .select("*")
-                    .eq("from_address", normalizedAddress)
-                    .eq("status", "pending"),
-                client
-                    .from("shout_friends")
-                    .select("*")
-                    .eq("user_address", normalizedAddress)
-                    .order("created_at", { ascending: false })
-                    .limit(FRIENDS_INITIAL_LIMIT),
+                incomingBuilder,
+                outgoingBuilder,
+                friendsBuilder,
             ]);
+
+            if (incomingErr) {
+                console.error("[useFriendRequests] incoming fetch:", incomingErr);
+            }
+            if (outgoingErr) {
+                console.error("[useFriendRequests] outgoing fetch:", outgoingErr);
+            }
+            if (friendsErr) {
+                console.error("[useFriendRequests] friends fetch:", friendsErr);
+            }
 
             // Batch fetch usernames in ONE query instead of N queries
             const friendAddresses = (friendsData || []).map((f) =>
@@ -311,7 +361,18 @@ export function useFriendRequests(userAddress: string | null) {
     useEffect(() => {
         if (!userAddress || !isSupabaseConfigured || !supabase) return;
 
-        const normalizedAddress = normalizeAddress(userAddress);
+        let c = friendRequestAddressCandidates(userAddress);
+        if (c.length === 0) {
+            c = [normalizeAddress(userAddress)];
+        }
+        const toFilter =
+            c.length === 1
+                ? `to_address=eq.${c[0]}`
+                : `to_address=in.(${c.join(",")})`;
+        const fromFilter =
+            c.length === 1
+                ? `from_address=eq.${c[0]}`
+                : `from_address=in.(${c.join(",")})`;
 
         const channel = supabase
             .channel("friend_requests_changes")
@@ -321,7 +382,7 @@ export function useFriendRequests(userAddress: string | null) {
                     event: "*",
                     schema: "public",
                     table: "shout_friend_requests",
-                    filter: `to_address=eq.${normalizedAddress}`,
+                    filter: toFilter,
                 },
                 () => {
                     fetchData();
@@ -333,7 +394,7 @@ export function useFriendRequests(userAddress: string | null) {
                     event: "*",
                     schema: "public",
                     table: "shout_friend_requests",
-                    filter: `from_address=eq.${normalizedAddress}`,
+                    filter: fromFilter,
                 },
                 () => {
                     fetchData();

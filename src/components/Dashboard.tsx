@@ -4741,25 +4741,22 @@ function DashboardContent({
                     {/* Friends Section - shown when Friends tab selected */}
                     {activeNavTab === "friends" && (
                         <>
-                            {/* Friend Requests Section - only on Friends tab */}
-                            {(incomingRequests.length > 0 ||
-                                outgoingRequests.length > 0) && (
-                                <div
-                                    id="friend-requests-section"
-                                    className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6"
-                                >
-                                    <div className="px-1 py-2 sm:p-4">
-                                        <FriendRequests
-                                            incomingRequests={incomingRequests}
-                                            outgoingRequests={outgoingRequests}
-                                            onAccept={handleAcceptRequest}
-                                            onReject={rejectRequest}
-                                            onCancel={cancelRequest}
-                                            isLoading={isFriendsLoading}
-                                        />
-                                    </div>
+                            {/* Friend Requests — always visible on Friends tab (empty state explains pending) */}
+                            <div
+                                id="friend-requests-section"
+                                className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden mb-4 sm:mb-6"
+                            >
+                                <div className="px-1 py-2 sm:p-4">
+                                    <FriendRequests
+                                        incomingRequests={incomingRequests}
+                                        outgoingRequests={outgoingRequests}
+                                        onAccept={handleAcceptRequest}
+                                        onReject={rejectRequest}
+                                        onCancel={cancelRequest}
+                                        isLoading={isFriendsLoading}
+                                    />
                                 </div>
-                            )}
+                            </div>
                             <div
                                 id="friends-section"
                                 className="sm:bg-zinc-900/50 sm:border sm:border-zinc-800 sm:rounded-2xl overflow-hidden"

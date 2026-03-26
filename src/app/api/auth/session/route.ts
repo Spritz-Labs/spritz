@@ -7,7 +7,10 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { logAccess } from "@/lib/auditLog";
-import { normalizeAddress } from "@/utils/address";
+import {
+    friendRequestAddressCandidates,
+    normalizeAddress,
+} from "@/utils/address";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey =
@@ -33,16 +36,21 @@ export async function GET(request: NextRequest) {
     let effectiveAuthMethod = session.authMethod;
 
     if (supabase) {
-        const lookupWallet = normalizeAddress(session.userAddress);
-        const { data: user } = await supabase
-            .from("shout_users")
-            .select(
-                "id, wallet_address, username, ens_name, email, email_verified, email_updates_opt_in, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url, wallet_type"
-            )
-            .eq("wallet_address", lookupWallet)
-            .single();
+        const candidates = friendRequestAddressCandidates(session.userAddress);
+        if (candidates.length > 0) {
+            const { data: rows, error: userLookupError } = await supabase
+                .from("shout_users")
+                .select(
+                    "id, wallet_address, username, ens_name, email, email_verified, email_updates_opt_in, beta_access, subscription_tier, points, invite_count, is_banned, display_name, avatar_url, wallet_type"
+                )
+                .in("wallet_address", candidates)
+                .limit(1);
 
-        userData = user;
+            if (userLookupError) {
+                console.warn("[Session] shout_users lookup:", userLookupError.message);
+            }
+            userData = rows?.[0] ?? null;
+        }
 
         // IMPORTANT: The database wallet_type is the source of truth
         // If the session says "passkey" but the database says "wallet",
