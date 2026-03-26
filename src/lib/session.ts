@@ -1,6 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeAddress } from "@/utils/address";
 import { hasApiKey, validateApiKey, type DeveloperKeyInfo } from "./apiKey";
 
 // SECURITY: No fallback secrets - must be explicitly set
@@ -52,7 +53,7 @@ export async function createSessionToken(
     const now = Math.floor(Date.now() / 1000);
     
     return new SignJWT({
-        userAddress: userAddress.toLowerCase(),
+        userAddress: normalizeAddress(userAddress),
         userId,
         authMethod,
     })
@@ -274,7 +275,7 @@ export async function createFrontendSessionToken(
     const FRONTEND_TOKEN_DURATION = 30 * 24 * 60 * 60; // 30 days
     
     return new SignJWT({
-        userAddress: userAddress.toLowerCase(),
+        userAddress: normalizeAddress(userAddress),
         authMethod,
         purpose: "frontend", // Distinguish from cookie tokens
     })
@@ -298,7 +299,7 @@ export async function createRecoveryToken(
     const RECOVERY_TOKEN_DURATION = 15 * 60; // 15 minutes
     
     return new SignJWT({
-        userAddress: userAddress.toLowerCase(),
+        userAddress: normalizeAddress(userAddress),
         type,
     })
         .setProtectedHeader({ alg: "HS256" })

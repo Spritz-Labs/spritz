@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
 import { logAccess } from "@/lib/auditLog";
+import { normalizeAddress } from "@/utils/address";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
     if (session instanceof NextResponse) return session;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const userAddress = session.userAddress.toLowerCase();
+    const userAddress = normalizeAddress(session.userAddress);
 
     logAccess(request, "friends.list", {
         userAddress,

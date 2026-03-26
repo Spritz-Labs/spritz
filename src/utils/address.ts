@@ -1,3 +1,5 @@
+import { PublicKey } from "@solana/web3.js";
+
 /**
  * Checks if an address is an EVM address
  */
@@ -17,20 +19,27 @@ export function isSolanaAddress(address: string): boolean {
 
 /**
  * Normalizes an address for database storage/comparison.
- * EVM addresses are lowercased. Solana base58 is case-sensitive and is left unchanged.
+ * EVM addresses are lowercased. Solana pubkeys are canonicalized with PublicKey.toBase58()
+ * so all code paths agree on one string per key (never use toLowerCase on Solana).
  */
 export function normalizeAddress(address: string): string {
     if (!address) return address;
+    const trimmed = address.trim();
+    if (!trimmed) return trimmed;
 
-    if (isSolanaAddress(address)) {
-        return address;
+    if (isSolanaAddress(trimmed)) {
+        try {
+            return new PublicKey(trimmed).toBase58();
+        } catch {
+            return trimmed;
+        }
     }
-    return address.toLowerCase();
+    return trimmed.toLowerCase();
 }
 
-/** Cache / map key: Solana addresses keep case; EVM lowercased. */
+/** Same as normalizeAddress — single canonical key for caches and maps. */
 export function walletCacheKey(address: string): string {
-    return isSolanaAddress(address) ? address : address.toLowerCase();
+    return normalizeAddress(address);
 }
 
 /**
