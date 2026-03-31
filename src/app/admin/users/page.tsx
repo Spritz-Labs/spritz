@@ -108,6 +108,7 @@ export default function UsersPage() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [isLoadingData, setIsLoadingData] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     const [search, setSearch] = useState("");
     const [sortBy, setSortBy] = useState("last_login");
     const [sortOrder, setSortOrder] = useState("desc");
@@ -443,92 +444,42 @@ export default function UsersPage() {
         fetchWalletStatus(user.wallet_address);
     };
 
-    // Generate CSV content from users
-    const generateCSV = useCallback(() => {
-        const headers = [
-            "Wallet Address",
-            "Username",
-            "ENS Name",
-            "Email",
-            "Email Verified",
-            "Wallet Type",
-            "Chain",
-            "First Login",
-            "Last Login",
-            "Login Count",
-            "Points",
-            "Friends",
-            "Messages Sent",
-            "Voice Minutes",
-            "Video Minutes",
-            "Total Calls",
-            "Groups",
-            "Invites Used",
-            "Invite Allocation",
-            "Invite Code Used",
-            "Referred By",
-            "Is Banned",
-            "Ban Reason",
-            "Notes",
-        ];
+    // Full export (all users) via admin API — includes Has .eth Name column
+    const exportToCSV = useCallback(async () => {
+        if (!isReady) return;
+        const authHeaders = getAuthHeaders();
+        if (!authHeaders) return;
 
-        const rows = users.map((user) => [
-            user.wallet_address,
-            user.username || "",
-            user.ens_name || "",
-            user.email || "",
-            user.email_verified ? "Yes" : "No",
-            user.wallet_type || "",
-            user.chain || "",
-            user.first_login ? new Date(user.first_login).toISOString() : "",
-            user.last_login ? new Date(user.last_login).toISOString() : "",
-            user.login_count || 0,
-            user.points || 0,
-            user.friends_count || 0,
-            user.messages_sent || 0,
-            user.voice_minutes || 0,
-            user.video_minutes || 0,
-            user.total_calls || 0,
-            user.groups_count || 0,
-            user.invites_used || 0,
-            user.invite_count || 5,
-            user.invite_code_used || "",
-            user.referred_by || "",
-            user.is_banned ? "Yes" : "No",
-            user.ban_reason || "",
-            user.notes || "",
-        ]);
-
-        // Escape CSV values
-        const escapeCSV = (value: string | number): string => {
-            const str = String(value);
-            if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-                return `"${str.replace(/"/g, '""')}"`;
+        setIsExporting(true);
+        try {
+            const res = await fetch("/api/admin/users/export", { headers: authHeaders });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                console.error("[Users] Export failed:", err);
+                alert(err?.error || "Export failed");
+                return;
             }
-            return str;
-        };
-
-        const csvContent = [
-            headers.map(escapeCSV).join(","),
-            ...rows.map((row) => row.map(escapeCSV).join(",")),
-        ].join("\n");
-
-        return csvContent;
-    }, [users]);
-
-    // Export to CSV file
-    const exportToCSV = useCallback(() => {
-        const csvContent = generateCSV();
-        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `spritz-users-${new Date().toISOString().split("T")[0]}.csv`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }, [generateCSV]);
+            const exportedCount = res.headers.get("X-Export-User-Count");
+            if (exportedCount) {
+                console.log(`[Users] CSV export: ${exportedCount} users (full database)`);
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            const date = new Date().toISOString().split("T")[0];
+            link.download = `spritz-users-${date}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error("[Users] Export error:", e);
+            alert("Export failed");
+        } finally {
+            setIsExporting(false);
+        }
+    }, [isReady, getAuthHeaders]);
 
     // Loading
     if (isLoading) {
@@ -646,14 +597,16 @@ export default function UsersPage() {
                             Refresh
                         </button>
                         <button
-                            onClick={exportToCSV}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors flex items-center gap-2"
-                            title="Download CSV"
+                            type="button"
+                            onClick={() => void exportToCSV()}
+                            disabled={isExporting}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:pointer-events-none rounded-lg transition-colors flex items-center gap-2"
+                            title="Download CSV of all users"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                             </svg>
-                            Export CSV
+                            {isExporting ? "Exporting…" : "Export CSV"}
                         </button>
                     </div>
                 </div>
