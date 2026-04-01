@@ -47,7 +47,7 @@ type V2OverviewData = {
         current: { new_users: number; active_users: number; messages: number; dm_messages: number; channel_messages: number; alpha_messages: number; ai_prompts: number; friendships: number; agents_created: number };
         previous: { new_users: number; active_users: number; messages: number; dm_messages: number; channel_messages: number; alpha_messages: number; ai_prompts: number; friendships: number; agents_created: number };
     } | null;
-    totals: { users: number; agents: number; messages: number; dmMessages: number; channelMessages: number; alphaMessages: number } | null;
+    totals: { users: number; agents: number; messages: number; organicMessages: number; dmMessages: number; organicDmMessages: number; automatedDmMessages: number; welcomeDms: number; broadcastDms: number; channelMessages: number; alphaMessages: number } | null;
 };
 
 type V2UsersData = {
@@ -89,6 +89,9 @@ type TimeSeriesItem = {
     newUsers: number;
     logins: number;
     messages: number;
+    dms?: number;
+    channels?: number;
+    alpha?: number;
     points: number;
     friendRequests: number;
     groups: number;
@@ -169,7 +172,9 @@ type AnalyticsData = {
         newUsersCount: number;
         activeUsers: number;
         totalMessages: number;
+        totalOrganicMessages: number;
         messagesInPeriod: number;
+        organicMessagesInPeriod: number;
         totalCalls: number;
         totalVoiceMinutes: number;
         totalVideoMinutes: number;
@@ -189,6 +194,15 @@ type AnalyticsData = {
         totalDmMessages: number;
         totalChannelMessages: number;
         totalAlphaMessages: number;
+        // Organic vs automated DM breakdown
+        totalOrganicDms: number;
+        totalAutomatedDms: number;
+        totalWelcomeDms: number;
+        totalBroadcastDms: number;
+        totalSystemDms: number;
+        organicDmsInPeriod: number;
+        welcomeDmsInPeriod: number;
+        broadcastDmsInPeriod: number;
         totalAgents: number;
         newAgentsCount: number;
         publicAgents: number;
@@ -561,12 +575,13 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                     subtext={`+${data.summary.newUsersCount} new`}
                 />
                 <KPICard
-                    label="Messages"
-                    value={data.summary.totalMessages}
+                    label="Organic Messages"
+                    value={data.summary.totalOrganicMessages}
                     icon="💬"
                     current={curr?.messages}
                     previous={prev?.messages}
                     trendLabel="vs prev"
+                    subtext={`${data.summary.totalAutomatedDms.toLocaleString()} automated excluded`}
                 />
                 <KPICard
                     label="Smart Wallets"
@@ -612,11 +627,11 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
             )}
 
             {/* Message Breakdown with comparison */}
-            <ChartCard title={`Message Breakdown (in ${period})`} description="Messages by type with period comparison">
-                <div className="grid grid-cols-3 gap-4">
+            <ChartCard title={`Message Breakdown (in ${period})`} description="Organic user messages by type — excludes automated welcome & broadcast DMs">
+                <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-blue-400">{data.summary.dmMessagesInPeriod.toLocaleString()}</p>
-                        <p className="text-xs text-zinc-500 mt-1">DMs ({data.summary.totalDmMessages.toLocaleString()} total)</p>
+                        <p className="text-2xl font-bold text-blue-400">{(data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod).toLocaleString()}</p>
+                        <p className="text-xs text-zinc-500 mt-1">User DMs ({(data.summary.totalOrganicDms ?? data.summary.totalDmMessages).toLocaleString()} total)</p>
                         {curr && prev && (
                             <div className="mt-1">
                                 <TrendBadge current={curr.dm_messages} previous={prev.dm_messages} label="vs prev" />
@@ -640,6 +655,24 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                                 <TrendBadge current={curr.alpha_messages} previous={prev.alpha_messages} label="vs prev" />
                             </div>
                         )}
+                    </div>
+                </div>
+                {/* Automated DM sub-breakdown */}
+                <div className="border-t border-zinc-700/50 pt-3">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Automated DMs (excluded from organic totals)</p>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="text-center p-2 bg-zinc-800/30 rounded-lg">
+                            <p className="text-lg font-bold text-zinc-400">{(data.summary.welcomeDmsInPeriod ?? 0).toLocaleString()}</p>
+                            <p className="text-xs text-zinc-600">Welcome ({(data.summary.totalWelcomeDms ?? 0).toLocaleString()} total)</p>
+                        </div>
+                        <div className="text-center p-2 bg-zinc-800/30 rounded-lg">
+                            <p className="text-lg font-bold text-zinc-400">{(data.summary.broadcastDmsInPeriod ?? 0).toLocaleString()}</p>
+                            <p className="text-xs text-zinc-600">Broadcasts ({(data.summary.totalBroadcastDms ?? 0).toLocaleString()} total)</p>
+                        </div>
+                        <div className="text-center p-2 bg-zinc-800/30 rounded-lg">
+                            <p className="text-lg font-bold text-zinc-400">{(data.summary.totalAutomatedDms ?? 0).toLocaleString()}</p>
+                            <p className="text-xs text-zinc-600">All Automated (total)</p>
+                        </div>
                     </div>
                 </div>
             </ChartCard>
@@ -717,7 +750,7 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                 <SmallMetric label="Calls" value={data.summary.totalCalls} />
                 <SmallMetric label="Streams" value={data.summary.totalStreamsCreated} />
                 <SmallMetric label="Rooms" value={data.summary.totalRoomsCreated} />
-                <SmallMetric label="Messages" value={data.summary.totalMessages} />
+                <SmallMetric label="Organic Msgs" value={data.summary.totalOrganicMessages} />
                 <SmallMetric label="Points" value={data.summary.totalPoints} />
                 <SmallMetric label="Friendships" value={data.summary.acceptedFriendships} />
                 <SmallMetric label="Public Profiles" value={data.summary.publicProfilesCount} />
@@ -758,7 +791,7 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
                 <KPICard label="Total Users" value={data.summary.totalUsers} icon="👥" />
                 <KPICard label="New Users" value={data.summary.newUsersCount} icon="✨" subtext={`in ${period}`} />
                 <KPICard label="Active Users" value={data.summary.activeUsers} icon="🔥" subtext={`in ${period}`} />
-                <KPICard label="Messages Sent" value={data.summary.messagesInPeriod} icon="💬" subtext={`in ${period}`} />
+                <KPICard label="Organic Messages" value={data.summary.organicMessagesInPeriod ?? data.summary.messagesInPeriod} icon="💬" subtext={`in ${period} (excl. automated)`} />
                 <KPICard label="Friend Requests" value={data.summary.friendRequestsCount} icon="🤝" />
                 <KPICard label="Invites Used" value={data.summary.invitesUsed} icon="🎟️" />
             </div>
@@ -1040,8 +1073,8 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
                 <KPICard label="Schedules Joined" value={data.summary.schedulesJoined} icon="✅" subtext={`(${data.summary.totalSchedulesJoined} total)`} />
             </div>
 
-            {/* Engagement Chart */}
-            <ChartCard title="Engagement Over Time" description="Daily messages, friend requests, and groups created">
+            {/* Engagement Chart — stacked message types */}
+            <ChartCard title="Message Volume Over Time" description="Organic messages by type (DMs, channels, alpha) — excludes automated">
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={data.timeSeries}>
@@ -1050,7 +1083,24 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
                             <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
                             <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
                             <Legend />
-                            <Bar dataKey="messages" name="Messages" fill="#10B981" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="dms" name="DMs" fill="#3B82F6" stackId="msgs" radius={[0, 0, 0, 0]} />
+                            <Bar dataKey="channels" name="Channels" fill="#8B5CF6" stackId="msgs" radius={[0, 0, 0, 0]} />
+                            <Bar dataKey="alpha" name="Alpha" fill="#FF5500" stackId="msgs" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </ChartCard>
+
+            {/* Social Engagement Chart */}
+            <ChartCard title="Social Engagement" description="Friend requests and groups over time">
+                <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data.timeSeries}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                            <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
+                            <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
+                            <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                            <Legend />
                             <Bar dataKey="friendRequests" name="Friend Requests" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="groups" name="Groups" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                         </BarChart>

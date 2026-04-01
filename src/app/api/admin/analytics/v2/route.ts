@@ -117,9 +117,11 @@ export async function GET(request: NextRequest) {
                     comparison,
                     totalUsers,
                     totalAgents,
-                    totalMessages,
+                    totalDmMessages,
                     totalChannelMessages,
                     totalAlphaMessages,
+                    totalWelcomeDms,
+                    totalBroadcastDms,
                 ] = await Promise.all([
                     safeRpc("analytics_active_users"),
                     safeRpc("analytics_dau_sparkline", { p_days: 14 }),
@@ -134,7 +136,12 @@ export async function GET(request: NextRequest) {
                     safeCount("shout_messages"),
                     safeCount("shout_channel_messages"),
                     safeCount("shout_alpha_messages"),
+                    safeCount("shout_messages", (q) => q.eq("message_type", "welcome")),
+                    safeCount("shout_messages", (q) => q.eq("message_type", "broadcast")),
                 ]);
+
+                const totalAutomatedDms = totalWelcomeDms + totalBroadcastDms;
+                const totalOrganicDms = totalDmMessages - totalAutomatedDms;
 
                 return NextResponse.json({
                     section: "overview",
@@ -146,8 +153,13 @@ export async function GET(request: NextRequest) {
                     totals: {
                         users: totalUsers,
                         agents: totalAgents,
-                        messages: totalMessages + totalChannelMessages + totalAlphaMessages,
-                        dmMessages: totalMessages,
+                        messages: totalDmMessages + totalChannelMessages + totalAlphaMessages,
+                        organicMessages: totalOrganicDms + totalChannelMessages + totalAlphaMessages,
+                        dmMessages: totalDmMessages,
+                        organicDmMessages: totalOrganicDms,
+                        automatedDmMessages: totalAutomatedDms,
+                        welcomeDms: totalWelcomeDms,
+                        broadcastDms: totalBroadcastDms,
                         channelMessages: totalChannelMessages,
                         alphaMessages: totalAlphaMessages,
                     },

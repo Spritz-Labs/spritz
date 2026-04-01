@@ -346,10 +346,10 @@ export async function GET(request: NextRequest) {
             },
         );
 
-        // Fetch DM messages in period
-        const dmMessages = await fetchAllRows<{ created_at: string; sender_address: string }>(
+        // Fetch DM messages in period (include message_type for organic/automated split)
+        const dmMessages = await fetchAllRows<{ created_at: string; sender_address: string; message_type: string | null }>(
             "shout_messages",
-            "created_at, sender_address",
+            "created_at, sender_address, message_type",
             {
                 filters: (q) => q.gte("created_at", startIso),
                 order: { column: "created_at", ascending: true },
@@ -371,6 +371,16 @@ export async function GET(request: NextRequest) {
         const totalChannelMessages = await fetchCount("shout_channel_messages");
         const totalAlphaMessages = await fetchCount("shout_alpha_messages");
 
+        // Automated DM types — not initiated by real users
+        const AUTOMATED_DM_TYPES = ["welcome", "broadcast", "system"];
+
+        // Automated DM totals (all-time)
+        const totalWelcomeDms = await fetchCount("shout_messages", (q) => q.eq("message_type", "welcome"));
+        const totalBroadcastDms = await fetchCount("shout_messages", (q) => q.eq("message_type", "broadcast"));
+        const totalSystemDms = await fetchCount("shout_messages", (q) => q.or("message_type.eq.system,message_type.is.null"));
+        const totalAutomatedDms = totalWelcomeDms + totalBroadcastDms;
+        const totalOrganicDms = totalDmMessages - totalAutomatedDms;
+
         // Fetch public profile stats (count-only)
         const publicProfilesCount = await fetchCount(
             "shout_user_settings",
@@ -383,8 +393,24 @@ export async function GET(request: NextRequest) {
         const activeUsers = loginData.length;
         const totalMessages =
             totalDmMessages + totalChannelMessages + totalAlphaMessages;
+        const totalOrganicMessages =
+            totalOrganicDms + totalChannelMessages + totalAlphaMessages;
+
+        // Period DM breakdown by message_type
+        const organicDmsInPeriod = dmMessages.filter(
+            (m) => !AUTOMATED_DM_TYPES.includes(m.message_type ?? ""),
+        );
+        const welcomeDmsInPeriod = dmMessages.filter(
+            (m) => m.message_type === "welcome",
+        );
+        const broadcastDmsInPeriod = dmMessages.filter(
+            (m) => m.message_type === "broadcast",
+        );
+
         const messagesInPeriod =
             alphaMessages.length + dmMessages.length + channelMessages.length;
+        const organicMessagesInPeriod =
+            alphaMessages.length + organicDmsInPeriod.length + channelMessages.length;
         const totalCalls =
             allUsers.reduce((sum, u: Record<string, unknown>) => sum + (Number(u.total_calls) || 0), 0);
         const totalVoiceMinutes =
@@ -422,7 +448,7 @@ export async function GET(request: NextRequest) {
         const agentMessagesInPeriod =
             agentChats.filter((c) => c.role === "user").length;
         const uniqueAgentUsers = new Set(
-            agentChats.map((c) => c.user_address),
+            agentChats.filter((c) => c.role === "user").map((c) => c.user_address),
         ).size;
         const knowledgeItemsCount = knowledgeItems.length;
         const indexedKnowledgeItems =
@@ -696,11 +722,13 @@ export async function GET(request: NextRequest) {
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
 
-        // Generate time series data
+        // Generate time series data (pass all message sources for accurate charts)
         const timeSeriesData = generateTimeSeries(startDate, now, groupBy, {
             newUsers,
             logins: loginData,
-            messages: alphaMessages,
+            alphaMessages,
+            dmMessages: organicDmsInPeriod,
+            channelMessages,
             points: pointsHistory,
             friendRequests,
             groups,
@@ -793,7 +821,9 @@ export async function GET(request: NextRequest) {
                 newUsersCount,
                 activeUsers,
                 totalMessages,
+                totalOrganicMessages,
                 messagesInPeriod,
+                organicMessagesInPeriod,
                 // Message breakdown
                 dmMessagesInPeriod,
                 channelMessagesInPeriod,
@@ -801,6 +831,15 @@ export async function GET(request: NextRequest) {
                 totalDmMessages,
                 totalChannelMessages,
                 totalAlphaMessages,
+                // Organic vs automated DM breakdown
+                totalOrganicDms,
+                totalAutomatedDms,
+                totalWelcomeDms,
+                totalBroadcastDms,
+                totalSystemDms,
+                organicDmsInPeriod: organicDmsInPeriod.length,
+                welcomeDmsInPeriod: welcomeDmsInPeriod.length,
+                broadcastDmsInPeriod: broadcastDmsInPeriod.length,
                 totalCalls,
                 totalVoiceMinutes,
                 totalVideoMinutes,
@@ -933,7 +972,9 @@ export async function GET(request: NextRequest) {
 interface DataSources {
     newUsers: { created_at: string }[];
     logins: { last_login: string }[];
-    messages: { created_at: string }[];
+    alphaMessages: { created_at: string }[];
+    dmMessages: { created_at: string }[];
+    channelMessages: { created_at: string }[];
     points: { created_at: string; points: number }[];
     friendRequests: { created_at: string }[];
     groups: { created_at: string }[];
@@ -954,6 +995,9 @@ function generateTimeSeries(
         newUsers: number;
         logins: number;
         messages: number;
+        dms: number;
+        channels: number;
+        alpha: number;
         points: number;
         friendRequests: number;
         groups: number;
@@ -1041,12 +1085,18 @@ function generateTimeSeries(
                 itemDate >= current && itemDate < nextDate && c.role === "user"
             );
         });
+        const dmCount = countInRange(data.dmMessages, "created_at");
+        const channelCount = countInRange(data.channelMessages, "created_at");
+        const alphaCount = countInRange(data.alphaMessages, "created_at");
         series.push({
             date: current.toISOString(),
             label,
             newUsers: countInRange(data.newUsers, "created_at"),
             logins: countInRange(data.logins, "last_login"),
-            messages: countInRange(data.messages, "created_at"),
+            messages: dmCount + channelCount + alphaCount,
+            dms: dmCount,
+            channels: channelCount,
+            alpha: alphaCount,
             points: sumInRange(data.points, "created_at", "points"),
             friendRequests: countInRange(data.friendRequests, "created_at"),
             groups: countInRange(data.groups, "created_at"),
