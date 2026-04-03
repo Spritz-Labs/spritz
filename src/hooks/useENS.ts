@@ -169,7 +169,7 @@ export function useENS() {
             // Silent fail - many addresses don't have ENS
           }
 
-          // Get avatar if we have an ENS name
+          // Get avatar if we have an ENS name (primary can be .eth, .io, etc.)
           if (ensName) {
             try {
               avatar = await publicClient.getEnsAvatar({
@@ -178,8 +178,18 @@ export function useENS() {
               if (avatar) {
                 console.log("[ENS] Found avatar for", ensName);
               }
-            } catch (err) {
-              // Silent fail - many ENS names don't have avatars
+            } catch {
+              // DNS-import / non-.eth primaries: normalize() can throw; viem may still resolve avatar
+              try {
+                avatar = await publicClient.getEnsAvatar({
+                  name: ensName,
+                });
+                if (avatar) {
+                  console.log("[ENS] Found avatar (fallback) for", ensName);
+                }
+              } catch {
+                // Silent fail - many names don't have avatars
+              }
             }
           }
 

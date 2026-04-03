@@ -777,7 +777,9 @@ export function SettingsModal({
                                                             onToggleUseCustomAvatar
                                                         }
                                                         disabled={
-                                                            !settings.customAvatarUrl
+                                                            settings.useCustomAvatar
+                                                                ? !ensAvatar
+                                                                : !settings.customAvatarUrl
                                                         }
                                                         className="w-full flex items-center justify-between disabled:opacity-50"
                                                     >
@@ -788,9 +790,15 @@ export function SettingsModal({
                                                                     : "Using ENS avatar"}
                                                             </p>
                                                             <p className="text-zinc-500 text-xs">
-                                                                {settings.customAvatarUrl
+                                                                {settings.customAvatarUrl &&
+                                                                ensAvatar
                                                                     ? "Toggle to switch between custom and ENS"
-                                                                    : "Upload a photo to use custom avatar"}
+                                                                    : settings.useCustomAvatar &&
+                                                                        !ensAvatar
+                                                                      ? "No ENS avatar detected — check primary name on Ethereum mainnet"
+                                                                      : !settings.customAvatarUrl
+                                                                        ? "Upload a photo to use a custom avatar"
+                                                                        : "Using ENS only"}
                                                             </p>
                                                         </div>
                                                         <div
