@@ -858,7 +858,12 @@ export function AlphaChatModal({
         if (!newMessage.trim() || isSending) return;
 
         // Validate against chat rules before sending
-        const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isModeratorForRules);
+        const ruleViolation = validateMessageClientSide(
+            chatRules,
+            newMessage.trim(),
+            "text",
+            isModeratorForRules,
+        );
         if (ruleViolation) {
             toast.error(ruleViolation);
             return;
@@ -942,7 +947,12 @@ export function AlphaChatModal({
             if (!gifUrl || isSending) return;
 
             // Validate GIF against chat rules
-            const ruleViolation = validateMessageClientSide(chatRules, gifUrl, "gif", isModeratorForRules);
+            const ruleViolation = validateMessageClientSide(
+                chatRules,
+                gifUrl,
+                "gif",
+                isModeratorForRules,
+            );
             if (ruleViolation) {
                 toast.error(ruleViolation);
                 return;
@@ -962,7 +972,12 @@ export function AlphaChatModal({
     const handleSendPixelArt = useCallback(
         async (imageData: string) => {
             // Validate pixel art against chat rules
-            const ruleViolation = validateMessageClientSide(chatRules, "", "pixel_art", isModeratorForRules);
+            const ruleViolation = validateMessageClientSide(
+                chatRules,
+                "",
+                "pixel_art",
+                isModeratorForRules,
+            );
             if (ruleViolation) {
                 toast.error(ruleViolation);
                 return;
@@ -1004,7 +1019,12 @@ export function AlphaChatModal({
             if (!file || !isAdmin) return;
 
             // Validate image against chat rules
-            const ruleViolation = validateMessageClientSide(chatRules, "", "image", isModeratorForRules);
+            const ruleViolation = validateMessageClientSide(
+                chatRules,
+                "",
+                "image",
+                isModeratorForRules,
+            );
             if (ruleViolation) {
                 toast.error(ruleViolation);
                 return;
@@ -1062,7 +1082,14 @@ export function AlphaChatModal({
                 }
             }
         },
-        [userAddress, isAdmin, sendMessage, onMessageSent, chatRules, isModeratorForRules],
+        [
+            userAddress,
+            isAdmin,
+            sendMessage,
+            onMessageSent,
+            chatRules,
+            isModeratorForRules,
+        ],
     );
 
     // Handle leave
@@ -2098,18 +2125,30 @@ export function AlphaChatModal({
                                                                                                       msg.is_pinned,
                                                                                                   hasMedia:
                                                                                                       isPixelArt ||
-                                                                                                      isGifMessage(msg.content) ||
-                                                                                                      isImageMessage(msg.content),
+                                                                                                      isGifMessage(
+                                                                                                          msg.content,
+                                                                                                      ) ||
+                                                                                                      isImageMessage(
+                                                                                                          msg.content,
+                                                                                                      ),
                                                                                                   isPixelArt,
                                                                                                   mediaUrl:
                                                                                                       isPixelArt
                                                                                                           ? getPixelArtUrl(
                                                                                                                 msg.content,
                                                                                                             )
-                                                                                                          : isGifMessage(msg.content)
-                                                                                                            ? getGifUrl(msg.content)
-                                                                                                            : isImageMessage(msg.content)
-                                                                                                              ? getImageUrl(msg.content)
+                                                                                                          : isGifMessage(
+                                                                                                                  msg.content,
+                                                                                                              )
+                                                                                                            ? getGifUrl(
+                                                                                                                  msg.content,
+                                                                                                              )
+                                                                                                            : isImageMessage(
+                                                                                                                    msg.content,
+                                                                                                                )
+                                                                                                              ? getImageUrl(
+                                                                                                                    msg.content,
+                                                                                                                )
                                                                                                               : undefined,
                                                                                               },
                                                                                     );
@@ -2232,7 +2271,11 @@ export function AlphaChatModal({
                                                                                                     msg.sender_address,
                                                                                                 )}
                                                                                             </button>
-                                                                                            <RoleBadgeTag role={getRoleBadge(msg.sender_address)} />
+                                                                                            <RoleBadgeTag
+                                                                                                role={getRoleBadge(
+                                                                                                    msg.sender_address,
+                                                                                                )}
+                                                                                            />
                                                                                         </div>
                                                                                     ))}
                                                                                 {isPixelArt ? (
@@ -2589,9 +2632,17 @@ export function AlphaChatModal({
                                                 onLocation={async (
                                                     location: LocationData,
                                                 ) => {
-                                                    const ruleViolation = validateMessageClientSide(chatRules, "", "location", isModeratorForRules);
+                                                    const ruleViolation =
+                                                        validateMessageClientSide(
+                                                            chatRules,
+                                                            "",
+                                                            "location",
+                                                            isModeratorForRules,
+                                                        );
                                                     if (ruleViolation) {
-                                                        toast.error(ruleViolation);
+                                                        toast.error(
+                                                            ruleViolation,
+                                                        );
                                                         return;
                                                     }
                                                     const locationMsg =
@@ -2619,7 +2670,11 @@ export function AlphaChatModal({
                                                 }
                                                 disabled={isCurrentUserMuted}
                                                 chatRules={chatRules}
-                                                isModerator={isAdmin || moderation.permissions.isModerator}
+                                                isModerator={
+                                                    isAdmin ||
+                                                    moderation.permissions
+                                                        .isModerator
+                                                }
                                             />
                                             {isCurrentUserMuted ? (
                                                 <div
@@ -3121,7 +3176,9 @@ export function AlphaChatModal({
                                 : undefined,
                             onCopy: selectedMessageConfig
                                 ? () => {
-                                      if (selectedMessageConfig.messageContent) {
+                                      if (
+                                          selectedMessageConfig.messageContent
+                                      ) {
                                           navigator.clipboard.writeText(
                                               selectedMessageConfig.messageContent,
                                           );
@@ -3159,7 +3216,8 @@ export function AlphaChatModal({
                                 selectedMessageConfig?.mediaUrl
                                     ? () => {
                                           setPreviewImage(
-                                              selectedMessageConfig.mediaUrl || "",
+                                              selectedMessageConfig.mediaUrl ||
+                                                  "",
                                           );
                                       }
                                     : undefined,
