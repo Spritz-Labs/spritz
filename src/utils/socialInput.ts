@@ -1,5 +1,5 @@
 /**
- * SNS / Bonfida resolve expects "alice.sol", not "@alice.sol" (the latter 404s on-chain).
+ * SNS (Solana Name Service) resolution expects "alice.sol", not "@alice.sol" (the latter 404s on-chain).
  * Same for Spritz username lookups (stored without @).
  */
 export function stripLeadingAt(input: string): string {

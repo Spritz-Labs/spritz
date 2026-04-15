@@ -1,4 +1,5 @@
 import { Connection, PublicKey } from "@solana/web3.js";
+// Official Solana Name Service (SNS) SDK — npm package is published under @bonfida.
 import { resolve, getFavoriteDomain } from "@bonfida/spl-name-service";
 
 const DEFAULT_SOLANA_MAINNET_RPC = "https://api.mainnet-beta.solana.com";

@@ -563,7 +563,7 @@ export function QRCodeModal({
                                                             type="text"
                                                             value={input}
                                                             onChange={(e) => setInput(e.target.value)}
-                                                            placeholder="kevin, 0x..., vitalik.eth, or bonfida.sol"
+                                                            placeholder="kevin, 0x..., vitalik.eth, or alice.sol (SNS)"
                                                             spellCheck={false}
                                                             autoComplete="off"
                                                             autoCorrect="off"
