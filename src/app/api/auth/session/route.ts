@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
     getAuthenticatedUser,
     createAuthResponse,
+    createFrontendSessionToken,
     type SessionPayload,
 } from "@/lib/session";
 import { createClient } from "@supabase/supabase-js";
@@ -132,10 +133,16 @@ export async function POST(request: NextRequest) {
             authMethod
         );
 
-        // Create new session with extended expiry
+        const sessionToken = await createFrontendSessionToken(
+            userAddress,
+            authMethod
+        );
+
+        // Create new session with extended expiry (cookie + Bearer token for API/SDK clients)
         return createAuthResponse(userAddress, authMethod, {
             success: true,
             extended: true,
+            sessionToken,
         });
     } catch (error) {
         console.error("[Session] Extend error:", error);
