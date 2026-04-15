@@ -56,6 +56,11 @@ import { useGroupPolls } from "@/hooks/useGroupPolls";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
+import { walletCacheKey } from "@/utils/address";
+import {
+    useSolanaDisplayLabelMap,
+    solanaSnsFromResolvedLabel,
+} from "@/hooks/useSolanaDisplayNames";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -300,6 +305,20 @@ export function GroupChatModal({
             return !senderAddress || !isUserBlocked(senderAddress);
         });
     }, [allMessages, members, isUserBlocked]);
+
+    const groupSenderAddressesForSns = useMemo(() => {
+        const s = new Set<string>();
+        for (const m of messages) {
+            const addr = members.find((mem) => mem.inboxId === m.senderInboxId)
+                ?.addresses?.[0];
+            if (addr) s.add(addr);
+        }
+        return [...s];
+    }, [messages, members]);
+
+    const solanaSnsForGroupSenders = useSolanaDisplayLabelMap(
+        groupSenderAddressesForSns,
+    );
 
     const groupSearchMessages = useMemo(
         () =>
@@ -933,6 +952,12 @@ export function GroupChatModal({
         // Then check our locally resolved ENS data
         const ensData = memberENSData.get(address.toLowerCase());
         if (ensData?.ensName) return ensData.ensName;
+
+        const sns = solanaSnsFromResolvedLabel(
+            address,
+            solanaSnsForGroupSenders[walletCacheKey(address)],
+        );
+        if (sns) return sns;
 
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };

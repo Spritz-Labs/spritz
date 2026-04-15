@@ -69,6 +69,11 @@ import { ChatMembersList } from "./ChatMembersList";
 import { LinkPreview, detectUrls } from "./LinkPreview";
 import { MessageSearch } from "./MessageSearch";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
+import { walletCacheKey } from "@/utils/address";
+import {
+    useSolanaDisplayLabelMap,
+    solanaSnsFromResolvedLabel,
+} from "@/hooks/useSolanaDisplayNames";
 
 // Helper to detect if a message is emoji-only (for larger display)
 const EMOJI_REGEX =
@@ -179,6 +184,19 @@ export function ChannelChatModal({
     const messages = useMemo(
         () => allMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
         [allMessages, isUserBlocked],
+    );
+
+    const messageSenderAddressesForSns = useMemo(() => {
+        const s = new Set<string>();
+        for (const m of messages) {
+            if (m.sender_address) s.add(m.sender_address);
+            if (m.reply_to?.sender_address) s.add(m.reply_to.sender_address);
+        }
+        return [...s];
+    }, [messages]);
+
+    const solanaSnsForSenders = useSolanaDisplayLabelMap(
+        messageSenderAddressesForSns,
     );
 
     const pinnedMessages = isWakuChannel ? [] : standardMessages.pinnedMessages;
@@ -1400,7 +1418,13 @@ export function ChannelChatModal({
             return agentInfo?.name || "AI Agent";
         }
         const userInfo = getEffectiveUserInfo(address);
-        return userInfo?.name || formatAddress(address);
+        if (userInfo?.name) return userInfo.name;
+        const sns = solanaSnsFromResolvedLabel(
+            address,
+            solanaSnsForSenders[walletCacheKey(address)],
+        );
+        if (sns) return sns;
+        return formatAddress(address);
     };
 
     const getSenderAvatar = (address: string) => {

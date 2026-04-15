@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import {
@@ -458,7 +459,13 @@ export function ChatModal({
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
-    const displayName = peerName || formatAddress(peerAddress);
+    const userAddressLabel = useSolanaDisplayLabel(userAddress);
+    const peerAddressLabel = useSolanaDisplayLabel(peerAddress);
+    const replyToAddressLabel = useSolanaDisplayLabel(
+        replyingTo?.senderAddress ?? null,
+    );
+
+    const displayName = peerName || peerAddressLabel;
 
     // Apply draft when modal opens (once per open)
     useEffect(() => {
@@ -1167,7 +1174,7 @@ export function ChatModal({
                 const senderDisplay =
                     replySender.toLowerCase() === userAddress.toLowerCase()
                         ? "yourself"
-                        : peerName || formatAddress(replySender);
+                        : peerName || replyToAddressLabel || formatAddress(replySender);
                 messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
             }
 
@@ -1253,6 +1260,7 @@ export function ChatModal({
             stopTyping,
             replyingTo,
             peerName,
+            replyToAddressLabel,
             clearDraft,
         ]
     );
@@ -1784,7 +1792,7 @@ export function ChatModal({
                                             }
                                             // Always show truncated address if name isn't already the address
                                             if (peerName && peerAddress) {
-                                                secondary.push(formatAddress(peerAddress));
+                                                secondary.push(peerAddressLabel);
                                             }
                                             if (secondary.length === 0) return null;
                                             return (
@@ -3508,7 +3516,7 @@ export function ChatModal({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-[#FFF0E0]">You</p>
-                                        <p className="text-xs text-zinc-500 font-mono truncate">{formatAddress(userAddress)}</p>
+                                        <p className="text-xs text-zinc-500 font-mono truncate">{userAddressLabel}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-800/50">
@@ -3521,7 +3529,7 @@ export function ChatModal({
                                     )}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-zinc-300 truncate">{displayName}</p>
-                                        <p className="text-xs text-zinc-500 font-mono truncate">{formatAddress(peerAddress)}</p>
+                                        <p className="text-xs text-zinc-500 font-mono truncate">{peerAddressLabel}</p>
                                     </div>
                                 </div>
                             </div>

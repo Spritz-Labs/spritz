@@ -55,6 +55,11 @@ import {
 import { ScrollToBottom } from "./ScrollToBottom";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
+import { walletCacheKey } from "@/utils/address";
+import {
+    useSolanaDisplayLabelMap,
+    solanaSnsFromResolvedLabel,
+} from "@/hooks/useSolanaDisplayNames";
 
 type LocationChatModalProps = {
     isOpen: boolean;
@@ -186,6 +191,21 @@ export function LocationChatModal({
     const messages = useMemo(
         () => rawMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
         [rawMessages, isUserBlocked],
+    );
+
+    const locationSenderAddressesForSns = useMemo(() => {
+        const s = new Set<string>();
+        for (const m of messages) {
+            if (m.sender_address) s.add(m.sender_address);
+            if (m.reply_to_message?.sender_address) {
+                s.add(m.reply_to_message.sender_address);
+            }
+        }
+        return [...s];
+    }, [messages]);
+
+    const solanaSnsForSenders = useSolanaDisplayLabelMap(
+        locationSenderAddressesForSns,
     );
 
     // Admin check: global admin or chat creator
@@ -643,6 +663,11 @@ export function LocationChatModal({
         }
         const info = getUserInfo?.(address);
         if (info?.name) return info.name;
+        const sns = solanaSnsFromResolvedLabel(
+            address,
+            solanaSnsForSenders[walletCacheKey(address)],
+        );
+        if (sns) return sns;
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 

@@ -39,6 +39,11 @@ import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
+import { walletCacheKey } from "@/utils/address";
+import {
+    useSolanaDisplayLabelMap,
+    solanaSnsFromResolvedLabel,
+} from "@/hooks/useSolanaDisplayNames";
 import {
     LocationMessage,
     isLocationMessage,
@@ -197,6 +202,19 @@ export function TokenChatModal({
         [messages, isUserBlocked],
     );
 
+    const tokenChatSenderAddresses = useMemo(() => {
+        const s = new Set<string>();
+        for (const m of filteredMessages) {
+            if (m.sender_address) s.add(m.sender_address);
+            if (m.reply_to_message?.sender_address) {
+                s.add(m.reply_to_message.sender_address);
+            }
+        }
+        return [...s];
+    }, [filteredMessages]);
+
+    const solanaSnsForSenders = useSolanaDisplayLabelMap(tokenChatSenderAddresses);
+
     // Fetch reactions when messages change
     useEffect(() => {
         const messageIds = filteredMessages.map((msg) => msg.id);
@@ -227,9 +245,14 @@ export function TokenChatModal({
         (address: string) => {
             const info = getUserInfo?.(address);
             if (info?.name) return info.name;
+            const sns = solanaSnsFromResolvedLabel(
+                address,
+                solanaSnsForSenders[walletCacheKey(address)],
+            );
+            if (sns) return sns;
             return `${address.slice(0, 6)}...${address.slice(-4)}`;
         },
-        [getUserInfo],
+        [getUserInfo, solanaSnsForSenders],
     );
 
     const getAvatar = useCallback(

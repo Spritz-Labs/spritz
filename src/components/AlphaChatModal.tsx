@@ -48,6 +48,11 @@ import { AvatarWithStatus } from "./OnlineStatus";
 import { DateDivider } from "./UnreadDivider";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { fetchOnlineStatuses } from "@/hooks/usePresence";
+import { walletCacheKey } from "@/utils/address";
+import {
+    useSolanaDisplayLabelMap,
+    solanaSnsFromResolvedLabel,
+} from "@/hooks/useSolanaDisplayNames";
 import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ChatEmptyState } from "./ChatEmptyState";
@@ -179,6 +184,21 @@ export function AlphaChatModal({
     const messages = useMemo(
         () => rawMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
         [rawMessages, isUserBlocked],
+    );
+
+    const alphaSenderAddressesForSns = useMemo(() => {
+        const s = new Set<string>();
+        for (const m of messages) {
+            if (m.sender_address) s.add(m.sender_address);
+            if (m.reply_to?.sender_address) {
+                s.add(m.reply_to.sender_address);
+            }
+        }
+        return [...s];
+    }, [messages]);
+
+    const solanaSnsForSenders = useSolanaDisplayLabelMap(
+        alphaSenderAddressesForSns,
     );
 
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -1177,6 +1197,11 @@ export function AlphaChatModal({
         }
         const info = getUserInfo?.(address);
         if (info?.name) return info.name;
+        const sns = solanaSnsFromResolvedLabel(
+            address,
+            solanaSnsForSenders[walletCacheKey(address)],
+        );
+        if (sns) return sns;
         return `${address.slice(0, 6)}...${address.slice(-4)}`;
     };
 
