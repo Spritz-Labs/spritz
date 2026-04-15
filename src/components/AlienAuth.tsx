@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useAlienAuthContext } from "@/context/AlienAuthProvider";
 import { useWorldIdContext } from "@/context/WorldIdProvider";
 import { useAlienMiniApp } from "@/hooks/useAlienMiniApp";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 import {
     IDKitWidget,
     VerificationLevel,
@@ -156,10 +157,7 @@ export function AlienAuth({ alienOnly = false }: AlienAuthProps) {
     const currentAddress = alienAddress || worldIdAddress;
     const authProvider = isAlienAuthenticated ? "Alien ID" : isWorldIdAuthenticated ? "World ID" : null;
 
-    const formatAddress = (addr: string) => {
-        if (addr.length <= 12) return addr;
-        return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-    };
+    const identityLabel = useSolanaDisplayLabel(currentAddress ?? null);
 
     const handleLogout = () => {
         if (isAlienAuthenticated) {
@@ -214,7 +212,7 @@ export function AlienAuth({ alienOnly = false }: AlienAuthProps) {
                             Identity
                         </p>
                         <p className="text-white font-mono text-sm">
-                            {formatAddress(currentAddress)}
+                            {identityLabel}
                         </p>
                     </div>
 

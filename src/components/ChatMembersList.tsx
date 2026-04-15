@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { getDisplayName, formatAddress } from "@/utils/address";
+import { getDisplayName, formatAddress, walletCacheKey } from "@/utils/address";
+import {
+    useSolanaDisplayLabelMap,
+    solanaSnsFromResolvedLabel,
+} from "@/hooks/useSolanaDisplayNames";
 
 export type ChatMember = {
     user_address: string;
@@ -46,6 +50,12 @@ export function ChatMembersList({
     const [total, setTotal] = useState(0);
     const [hasMore, setHasMore] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+
+    const memberAddresses = useMemo(
+        () => members.map((m) => m.user_address),
+        [members]
+    );
+    const solanaSnsMap = useSolanaDisplayLabelMap(memberAddresses);
 
     const membersEndpoint = tokenChatId
         ? `/api/token-chats/${tokenChatId}/members`
@@ -101,11 +111,17 @@ export function ChatMembersList({
         
         // If getUserInfo returned a name, use it (already prioritized correctly)
         if (info?.name) return info.name;
+
+        const snsResolved = solanaSnsFromResolvedLabel(
+            member.user_address,
+            solanaSnsMap[walletCacheKey(member.user_address)]
+        );
         
-        // Otherwise use our utility with priority: ENS > username > address
+        // Priority: ENS > SNS (.sol) > @username > truncated address
         return getDisplayName({
             address: member.user_address,
             ensName: member.ens_name,
+            snsName: snsResolved,
             username: member.username,
         });
     };

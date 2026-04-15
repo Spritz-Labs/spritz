@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useFriendsWithWallets, type CreateVaultParams } from "@/hooks/useVaults";
 import { CHAIN_LIST, SEND_ENABLED_CHAIN_IDS, getChainById } from "@/config/chains";
+import {
+    useSolanaDisplayLabelMap,
+    solanaLabelFromMap,
+} from "@/hooks/useSolanaDisplayNames";
 
 type CreateVaultModalProps = {
     isOpen: boolean;
@@ -62,6 +66,20 @@ export function CreateVaultModal({
 
     const totalSigners = selectedFriends.length + 1;
     const chainInfo = getChainById(selectedChain);
+
+    const solanaLookupAddresses = useMemo(() => {
+        const s = new Set<string>();
+        s.add(userAddress);
+        for (const f of friends) {
+            s.add(f.address);
+        }
+        for (const a of selectedFriends) {
+            s.add(a);
+        }
+        return [...s];
+    }, [userAddress, friends, selectedFriends]);
+
+    const solanaSnsMap = useSolanaDisplayLabelMap(solanaLookupAddresses);
 
     const toggleFriend = (address: string) => {
         setSelectedFriends(prev => 
@@ -304,7 +322,12 @@ export function CreateVaultModal({
                                                 </div>
                                                 <div className="flex-1 text-left">
                                                     <p className="text-sm font-medium text-white">
-                                                        {friend.username || friend.ensName || truncateAddress(friend.address)}
+                                                        {friend.username ||
+                                                            friend.ensName ||
+                                                            solanaLabelFromMap(
+                                                                friend.address,
+                                                                solanaSnsMap
+                                                            )}
                                                     </p>
                                                     <p className="text-xs text-zinc-500 font-mono">
                                                         {truncateAddress(friend.smartWalletAddress)}
@@ -365,7 +388,10 @@ export function CreateVaultModal({
                                         <div>
                                             <p className="text-sm text-white">You (Creator)</p>
                                             <p className="text-xs text-zinc-500 font-mono">
-                                                {truncateAddress(userAddress)}
+                                                {solanaLabelFromMap(
+                                                    userAddress,
+                                                    solanaSnsMap
+                                                )}
                                             </p>
                                         </div>
                                     </div>
@@ -382,7 +408,12 @@ export function CreateVaultModal({
                                                 )}
                                                 <div>
                                                     <p className="text-sm text-white">
-                                                        {friend?.username || friend?.ensName || truncateAddress(addr)}
+                                                        {friend?.username ||
+                                                            friend?.ensName ||
+                                                            solanaLabelFromMap(
+                                                                addr,
+                                                                solanaSnsMap
+                                                            )}
                                                     </p>
                                                     <p className="text-xs text-zinc-500 font-mono">
                                                         {truncateAddress(friend?.smartWalletAddress || addr)}
@@ -436,7 +467,11 @@ export function CreateVaultModal({
                                             const friend = friends.find(f => f.address === addr);
                                             return (
                                                 <span key={addr} className="px-2 py-1 bg-orange-500/20 text-orange-400 text-xs rounded-full">
-                                                    {friend?.username || truncateAddress(addr)}
+                                                    {friend?.username ||
+                                                        solanaLabelFromMap(
+                                                            addr,
+                                                            solanaSnsMap
+                                                        )}
                                                 </span>
                                             );
                                         })}

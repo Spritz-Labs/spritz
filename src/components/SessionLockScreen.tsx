@@ -13,6 +13,7 @@ import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAccount, useSignMessage, useConnect, useConnectors } from "wagmi";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 
 type AuthMethod = "wallet" | "passkey" | "email" | "solana" | "world_id" | "alien_id";
 
@@ -39,6 +40,10 @@ export function SessionLockScreen({
     const [isUnlocking, setIsUnlocking] = useState(false);
     const [isReconnecting, setIsReconnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const connectedWalletLabel = useSolanaDisplayLabel(
+        (address || walletAddress) ?? null
+    );
 
     // Determine if this user should use passkey for unlock
     const usePasskeyUnlock = authMethod === "passkey" || authMethod === "email" || 
@@ -183,8 +188,7 @@ export function SessionLockScreen({
                             <div className="mb-6 p-3 bg-zinc-800/50 rounded-lg text-center">
                                 <p className="text-xs text-zinc-500 mb-1">Connected Wallet</p>
                                 <p className="text-sm text-zinc-300 font-mono">
-                                    {(address || walletAddress)?.slice(0, 6)}...
-                                    {(address || walletAddress)?.slice(-4)}
+                                    {connectedWalletLabel}
                                 </p>
                             </div>
                         )}

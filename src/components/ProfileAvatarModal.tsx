@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { formatAddress } from "@/utils/address";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 import { SpritzLogo } from "./SpritzLogo";
 import { GoLiveModal } from "./GoLiveModal";
 import { STATUS_PRESETS } from "@/hooks/useUserSettings";
@@ -55,6 +56,7 @@ export function ProfileAvatarModal({
     onEndStream,
     hasBetaAccess = false,
 }: ProfileAvatarModalProps) {
+    const addressLine = useSolanaDisplayLabel(userAddress);
     const [activeTab, setActiveTab] = useState<"profile" | "goLive">(
         initialTab
     );
@@ -194,7 +196,7 @@ export function ProfileAvatarModal({
                                         {displayName}
                                     </h2>
                                     <p className="text-zinc-500 text-sm mb-4">
-                                        {formatAddress(userAddress)}
+                                        {addressLine || formatAddress(userAddress)}
                                     </p>
 
                                     {/* Status: editable when onUpdateStatus provided */}

@@ -27,9 +27,12 @@ export type FriendRequest = {
     memo?: string | null;
     // Resolved data
     fromEnsName?: string | null;
+    /** Solana SNS (.sol) from reverse lookup */
+    fromSnsName?: string | null;
     fromAvatar?: string | null;
     fromUsername?: string | null;
     toEnsName?: string | null;
+    toSnsName?: string | null;
     toAvatar?: string | null;
     toUsername?: string | null;
 };
@@ -232,6 +235,7 @@ export function useFriendRequests(userAddress: string | null) {
                         return {
                             ...req,
                             fromEnsName: cached.ensName,
+                            fromSnsName: cached.snsName ?? null,
                             fromAvatar: cached.avatar,
                             fromUsername: requestUsernameMap[addr] || null,
                         };
@@ -240,6 +244,7 @@ export function useFriendRequests(userAddress: string | null) {
                     return {
                         ...req,
                         fromEnsName: resolved?.ensName,
+                        fromSnsName: resolved?.snsName ?? null,
                         fromAvatar: resolved?.avatar,
                         fromUsername: requestUsernameMap[addr] || null,
                     };
@@ -255,6 +260,7 @@ export function useFriendRequests(userAddress: string | null) {
                         return {
                             ...req,
                             toEnsName: cached.ensName,
+                            toSnsName: cached.snsName ?? null,
                             toAvatar: cached.avatar,
                             toUsername: requestUsernameMap[addr] || null,
                         };
@@ -263,6 +269,7 @@ export function useFriendRequests(userAddress: string | null) {
                     return {
                         ...req,
                         toEnsName: resolved?.ensName,
+                        toSnsName: resolved?.snsName ?? null,
                         toAvatar: resolved?.avatar,
                         toUsername: requestUsernameMap[addr] || null,
                     };

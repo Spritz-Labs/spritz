@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "motion/react";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 
 type IncomingCallModalProps = {
   callerAddress: string;
@@ -21,11 +22,9 @@ export function IncomingCallModal({
   onAccept,
   onReject,
 }: IncomingCallModalProps) {
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  const callerLabel = useSolanaDisplayLabel(callerAddress);
 
-  const displayName = callerName || formatAddress(callerAddress);
+  const displayName = callerName || callerLabel;
 
   return (
     <AnimatePresence>

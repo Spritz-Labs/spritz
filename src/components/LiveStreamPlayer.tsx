@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Hls from "hls.js";
 import type { Stream } from "@/app/api/streams/route";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 
 type LiveStreamPlayerProps = {
     isOpen: boolean;
@@ -36,6 +37,8 @@ export function LiveStreamPlayer({
     const RETRY_INTERVAL = 1000; // Every 1 second
     const hasTrackedViewerRef = useRef(false);
     const [viewerCount, setViewerCount] = useState(stream.viewer_count || 0);
+
+    const streamerAddressLabel = useSolanaDisplayLabel(stream.user_address);
 
     // Track viewer count when opening/closing
     useEffect(() => {
@@ -261,10 +264,6 @@ export function LiveStreamPlayer({
         setIsFullscreen(!isFullscreen);
     };
 
-    const formatAddress = (address: string) => {
-        return `${address.slice(0, 6)}...${address.slice(-4)}`;
-    };
-
     if (!isOpen) return null;
 
     return (
@@ -300,7 +299,7 @@ export function LiveStreamPlayer({
                             <div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-white font-medium">
-                                        {streamerName || formatAddress(stream.user_address)}
+                                        {streamerName || streamerAddressLabel}
                                     </span>
                                     {stream.status === "live" && (
                                         <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full animate-pulse">

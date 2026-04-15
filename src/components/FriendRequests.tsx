@@ -12,6 +12,19 @@ type FriendRequestsProps = {
     isLoading: boolean;
 };
 
+function primaryLabel(
+    username: string | null | undefined,
+    ensName: string | null | undefined,
+    snsName: string | null | undefined,
+    address: string,
+    formatShort: (a: string) => string
+) {
+    if (username) return `@${username}`;
+    if (ensName) return ensName;
+    if (snsName) return snsName;
+    return formatShort(address);
+}
+
 export function FriendRequests({
     incomingRequests,
     outgoingRequests,
@@ -86,8 +99,13 @@ export function FriendRequests({
                                     ) : (
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
                                             <span className="text-white font-bold">
-                                                {(request.fromEnsName ||
-                                                    request.from_address)[0].toUpperCase()}
+                                                {primaryLabel(
+                                                    request.fromUsername,
+                                                    request.fromEnsName,
+                                                    request.fromSnsName,
+                                                    request.from_address,
+                                                    formatAddress
+                                                ).slice(0, 1).toUpperCase()}
                                             </span>
                                         </div>
                                     )}
@@ -95,17 +113,23 @@ export function FriendRequests({
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-white font-medium truncate">
-                                            {request.fromUsername
-                                                ? `@${request.fromUsername}`
-                                                : request.fromEnsName ||
-                                                  formatAddress(
-                                                      request.from_address
-                                                  )}
+                                            {primaryLabel(
+                                                request.fromUsername,
+                                                request.fromEnsName,
+                                                request.fromSnsName,
+                                                request.from_address,
+                                                formatAddress
+                                            )}
                                         </p>
-                                        {/* Show ENS/address below username if both exist */}
-                                        {request.fromUsername && (request.fromEnsName || request.from_address) && (
+                                        {/* Show ENS/SNS/address below @username when present */}
+                                        {request.fromUsername &&
+                                            (request.fromEnsName ||
+                                                request.fromSnsName ||
+                                                request.from_address) && (
                                             <p className="text-zinc-500 text-xs truncate">
-                                                {request.fromEnsName || formatAddress(request.from_address)}
+                                                {request.fromEnsName ||
+                                                    request.fromSnsName ||
+                                                    formatAddress(request.from_address)}
                                             </p>
                                         )}
                                         {request.memo && (
@@ -173,7 +197,13 @@ export function FriendRequests({
                                     ) : (
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center">
                                             <span className="text-white font-bold">
-                                                {(request.toEnsName || request.to_address)[0].toUpperCase()}
+                                                {primaryLabel(
+                                                    request.toUsername,
+                                                    request.toEnsName,
+                                                    request.toSnsName,
+                                                    request.to_address,
+                                                    formatAddress
+                                                ).slice(0, 1).toUpperCase()}
                                             </span>
                                         </div>
                                     )}
@@ -181,13 +211,22 @@ export function FriendRequests({
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
                                         <p className="text-white font-medium truncate">
-                                            {request.toUsername
-                                                ? `@${request.toUsername}`
-                                                : request.toEnsName || formatAddress(request.to_address)}
+                                            {primaryLabel(
+                                                request.toUsername,
+                                                request.toEnsName,
+                                                request.toSnsName,
+                                                request.to_address,
+                                                formatAddress
+                                            )}
                                         </p>
-                                        {request.toUsername && (request.toEnsName || request.to_address) && (
+                                        {request.toUsername &&
+                                            (request.toEnsName ||
+                                                request.toSnsName ||
+                                                request.to_address) && (
                                             <p className="text-zinc-500 text-xs truncate">
-                                                {request.toEnsName || formatAddress(request.to_address)}
+                                                {request.toEnsName ||
+                                                    request.toSnsName ||
+                                                    formatAddress(request.to_address)}
                                             </p>
                                         )}
                                         {request.memo && (

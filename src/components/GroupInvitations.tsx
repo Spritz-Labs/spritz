@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { GroupInvitation } from "@/hooks/useGroupInvitations";
+import {
+    useSolanaDisplayLabelMap,
+    solanaLabelFromMap,
+} from "@/hooks/useSolanaDisplayNames";
 
 interface GroupInvitationsProps {
     invitations: GroupInvitation[];
@@ -54,8 +58,11 @@ export function GroupInvitations({
     const [passwordInput, setPasswordInput] = useState("");
     const [passwordError, setPasswordError] = useState<string | null>(null);
 
-    const formatAddress = (address: string) =>
-        `${address.slice(0, 6)}...${address.slice(-4)}`;
+    const inviterKeys = useMemo(
+        () => invitations.map((i) => i.inviterAddress),
+        [invitations]
+    );
+    const inviterSnsMap = useSolanaDisplayLabelMap(inviterKeys);
 
     const handleAccept = async (invitation: GroupInvitation) => {
         setProcessingId(invitation.id);
@@ -199,7 +206,10 @@ export function GroupInvitations({
                                 </p>
                                 <p className="text-zinc-400 text-sm">
                                     Invited by{" "}
-                                    {formatAddress(invitation.inviterAddress)}
+                                    {solanaLabelFromMap(
+                                        invitation.inviterAddress,
+                                        inviterSnsMap
+                                    )}
                                 </p>
                                 <p className="text-zinc-500 text-xs mt-1">
                                     {invitation.createdAt.toLocaleDateString()}

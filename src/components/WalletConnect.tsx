@@ -12,6 +12,7 @@ import {
 } from "@reown/appkit/react";
 import { useDisconnect as useWagmiDisconnect } from "wagmi";
 import { projectId } from "@/config/wagmi";
+import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 
 export function WalletConnect() {
     // Wagmi for EVM
@@ -81,6 +82,8 @@ export function WalletConnect() {
     const formatAddress = (addr: string) => {
         return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
     };
+
+    const addressLabel = useSolanaDisplayLabel(address ?? null);
 
     if (!projectId) {
         return (
@@ -158,7 +161,7 @@ export function WalletConnect() {
                             Address
                         </p>
                         <p className="text-white font-mono text-sm">
-                            {formatAddress(address)}
+                            {addressLabel || formatAddress(address)}
                         </p>
                     </div>
 
