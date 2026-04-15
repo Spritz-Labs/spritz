@@ -57,9 +57,7 @@ export async function POST(request: NextRequest) {
             query = query.in("id", messageIds);
         }
 
-        const { error, count } = await query.select("id", {
-            count: "exact",
-        });
+        const { data, error } = await query.select("id");
 
         if (error) {
             console.error("[Inbox] Claim error:", error);
@@ -69,7 +67,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        return NextResponse.json({ success: true, claimed: count ?? 0 });
+        return NextResponse.json({ success: true, claimed: data?.length ?? 0 });
     } catch (error) {
         console.error("[Inbox] Claim error:", error);
         return NextResponse.json(
