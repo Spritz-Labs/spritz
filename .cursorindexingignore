@@ -160,7 +160,7 @@ yarn-error.log*
 
 .DS_Store
 
-# Dependency lockfiles (large; omit from AI context)
+# Dependency lockfiles (large; exclude from embeddings — safe to remove if you need them indexed)
 package-lock.json
 yarn.lock
 pnpm-lock.yaml

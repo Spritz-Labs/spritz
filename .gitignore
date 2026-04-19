@@ -11,6 +11,8 @@ build/
 dist/
 
 # Environment variables — never commit env-style files (see also AI *ignore files)
+# .env and .env.* cover: .env.local, .env.*.local, .env.development, .env.staging,
+# .env.production, .env.test, .env.ci, .env.docker, .env.override, etc.
 .env
 .env.*
 !.env.example
@@ -49,6 +51,7 @@ google-services.json
 GoogleService-Info.plist
 application_default_credentials.json
 .gcloud/
+.gcp/
 *-gcp-key*.json
 
 # Kubernetes
@@ -59,6 +62,7 @@ kube_config
 kubeconfig.yaml
 kubeconfig.yml
 **/kubeconfig.local
+helm-secrets/
 
 # AWS (paths often copied into a repo by mistake)
 .aws/credentials
@@ -77,12 +81,59 @@ azure.auth
 *.pem
 *.p12
 *.pfx
+*.crt
+*.cer
+*.csr
+*.jks
+*.ppk
+*.key
+!*.public.key
+!**/*.pub
 id_rsa
 id_ecdsa
 id_ed25519
+known_hosts
 known_hosts.bak
 *-credentials.json
+credentials.json
+!credentials.example.json
 .secrets/
+
+# App / framework secret filenames
+secrets.json
+!secrets.example.json
+config/secrets.yml
+secrets.yml
+!secrets.example.yml
+/secrets.yaml
+/secrets.yml
+database.yml
+!database.yml.example
+local_settings.py
+settings_local.py
+application-local.properties
+*.secret
+!*.secret.example
+
+# SOPS / decrypted material
+*.decrypted.*
+*.decrypted~
+
+# HashiCorp Vault (local token files)
+vault-token
+.vault-token
+
+# CI, observability, language package auth (local overlays)
+.sentryclirc
+.npmrc.local
+.pypirc
+.gem/credentials
+
+# Generated env shims (never commit real values)
+*.env.js
+*.env.cjs
+*.env.mjs
+generated-secrets.*
 
 # Docker (registry / credential store if copied into repo)
 .docker/config.json

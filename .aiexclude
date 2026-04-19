@@ -160,7 +160,6 @@ yarn-error.log*
 
 .DS_Store
 
-# Dependency lockfiles (large; omit from AI context)
 package-lock.json
 yarn.lock
 pnpm-lock.yaml

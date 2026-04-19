@@ -1,5 +1,5 @@
-# Env, cloud & IaC secret patterns — synced: .aiderignore .claudeignore .codeiumignore .continueignore .copilotignore .cursorignore
-# (Bulk / non-secret patterns at bottom reduce AI context size only.)
+# Synced: .cursorignore .cursorindexingignore .aiexclude .claudeignore .copilotignore .continueignore .aiderignore .codeiumignore
+# Canonical secret rules also live in .gitignore (repo-wide Git). Keep these aligned when editing.
 
 # Environment & direnv
 .env
@@ -11,7 +11,7 @@
 .envrc
 .direnv/
 
-# Terraform / OpenTofu
+# Terraform / OpenTofu (keep .terraform.lock.hcl committed)
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -39,6 +39,7 @@ google-services.json
 GoogleService-Info.plist
 application_default_credentials.json
 .gcloud/
+.gcp/
 *-gcp-key*.json
 
 # Kubernetes
@@ -49,6 +50,7 @@ kube_config
 kubeconfig.yaml
 kubeconfig.yml
 **/kubeconfig.local
+helm-secrets/
 
 # AWS
 .aws/credentials
@@ -63,27 +65,74 @@ azureProfile.json
 .azure/
 azure.auth
 
-# Keys & certs
+# Keys, certs, dumps
 *.pem
 *.p12
 *.pfx
+*.crt
+*.cer
+*.csr
+*.jks
+*.ppk
+*.key
+!*.public.key
+!**/*.pub
 id_rsa
 id_ecdsa
 id_ed25519
+known_hosts
 known_hosts.bak
 *-credentials.json
+credentials.json
+!credentials.example.json
 .secrets/
 
-# Docker (machine login)
+# App / framework secret filenames
+secrets.json
+!secrets.example.json
+config/secrets.yml
+secrets.yml
+!secrets.example.yml
+/secrets.yaml
+/secrets.yml
+database.yml
+!database.yml.example
+local_settings.py
+settings_local.py
+application-local.properties
+*.secret
+!*.secret.example
+
+# SOPS / decrypted
+*.decrypted.*
+*.decrypted~
+
+# HashiCorp Vault
+vault-token
+.vault-token
+
+# CI / package auth overlays
+.sentryclirc
+.npmrc.local
+.pypirc
+.gem/credentials
+
+# Generated env shims
+*.env.js
+*.env.cjs
+*.env.mjs
+generated-secrets.*
+
+# Docker
 .docker/config.json
 
-# Generic netrc
+# Netrc
 .netrc
 
-# Vercel CLI (local tokens / state)
+# Vercel CLI (local tokens)
 .vercel/
 
-# --- Generated & bulky (not secrets; keeps context small) ---
+# --- Generated & bulky (context / index noise, not necessarily secret) ---
 node_modules/
 .pnp/
 .pnp.js
@@ -110,3 +159,9 @@ yarn-error.log*
 .pnpm-debug.log*
 
 .DS_Store
+
+# Dependency lockfiles (large; omit from AI context)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
