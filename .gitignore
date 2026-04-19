@@ -1,4 +1,4 @@
-# Test scripts secrets
+# Test scripts secrets (explicit; also covered by .env rules below)
 scripts/.env
 
 # Dependencies
@@ -13,13 +13,30 @@ out/
 build/
 dist/
 
-# Environment variables - NEVER commit these!
+# Environment variables & local secrets — never commit
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env*.local
+.env.*
+!.env.example
+!.env.sample
+!**/.env.example
+!**/.env.sample
+# direnv / local shell env (often holds secrets)
+.envrc
+.direnv/
+
+# Keys, certs, and cloud credential files
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*-credentials.json
+*credentials*.json
+service-account*.json
+google-services.json
+GoogleService-Info.plist
+.secrets/
+secrets/
 
 # Debug logs
 npm-debug.log*
@@ -55,7 +72,6 @@ coverage/
 supabase/.temp/
 
 # Misc
-*.pem
 # Vercel: keep project link so `npm run vercel` targets production (shout → app.spritz.chat)
 .vercel/*
 !.vercel/project.json

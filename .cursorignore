@@ -1,0 +1,62 @@
+# Keep in sync with: .claudeignore, .copilotignore, .continueignore, .aiderignore, .codeiumignore
+# Gitignore-style patterns: exclude sensitive and noisy paths from Cursor indexing & AI context.
+
+# Dependencies & build outputs
+node_modules/
+.pnp/
+.pnp.js
+.yarn/
+.next/
+out/
+build/
+dist/
+.turbo/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+
+# Environment & local secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+!**/.env.example
+!**/.env.sample
+.envrc
+.direnv/
+
+# Keys, credentials, cloud service files
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+*-credentials.json
+*credentials*.json
+service-account*.json
+google-services.json
+GoogleService-Info.plist
+.secrets/
+secrets/
+
+# Supabase CLI cache
+supabase/.temp/
+
+# Vercel CLI local state (may contain tokens)
+.vercel/
+
+# Security audits & large archives
+audit/
+audit-*/
+*.zip
+*.tar.gz
+*.tgz
+
+# Logs (may contain tokens or URLs)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS junk
+.DS_Store
