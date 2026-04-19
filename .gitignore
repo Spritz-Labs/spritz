@@ -20,6 +20,80 @@ dist/
 .envrc
 .direnv/
 
+# --- Secrets & cloud credentials (Terraform, GCP, K8s, AWS, Azure, Vercel, keys) ---
+# Terraform / OpenTofu (keep .terraform.lock.hcl committed for reproducible providers)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!**/*.tfvars.example
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Google Cloud / GCP
+*-service-account*.json
+*service-account*.json
+gcloud-service-key*.json
+google-credentials.json
+google-services.json
+GoogleService-Info.plist
+application_default_credentials.json
+.gcloud/
+*-gcp-key*.json
+
+# Kubernetes
+kubeconfig
+*-kubeconfig
+*.kubeconfig
+kube_config
+kubeconfig.yaml
+kubeconfig.yml
+**/kubeconfig.local
+
+# AWS (paths often copied into a repo by mistake)
+.aws/credentials
+.aws/config
+aws-credentials.csv
+aws_access_keys.txt
+
+# Azure
+*.publishsettings
+*.azurePubxml
+azureProfile.json
+.azure/
+azure.auth
+
+# Keys, certs, generic credential dumps
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ecdsa
+id_ed25519
+known_hosts.bak
+*-credentials.json
+.secrets/
+
+# Docker (registry / credential store if copied into repo)
+.docker/config.json
+
+# Generic credential netrc (FTP, Git, legacy tools)
+.netrc
+
+# Vercel CLI local state (tokens). Tracked exception: .vercel/project.json (see Misc).
+.vercel/*
+!.vercel/project.json
+
 # Debug logs
 npm-debug.log*
 yarn-debug.log*
@@ -54,9 +128,7 @@ coverage/
 supabase/.temp/
 
 # Misc
-# Vercel: keep project link so `npm run vercel` targets production (shout → app.spritz.chat)
-.vercel/*
-!.vercel/project.json
+# Vercel: .vercel/* is ignored above except project.json — keeps `npm run vercel` linked to production (shout → app.spritz.chat)
 .turbo
 
 # PWA files

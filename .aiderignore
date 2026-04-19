@@ -1,7 +1,7 @@
-# “Secrets” here = env-variable-style files (+ direnv). Everything else is bulk / noise for AI context.
-# Keep in sync: .cursorignore, .claudeignore, .copilotignore, .continueignore, .codeiumignore
+# Env, cloud & IaC secret patterns — synced: .aiderignore .claudeignore .codeiumignore .continueignore .copilotignore .cursorignore
+# (Bulk / non-secret patterns at bottom reduce AI context size only.)
 
-# Env-style files (do not index or send to AI)
+# Environment & direnv
 .env
 .env.*
 !.env.example
@@ -11,7 +11,79 @@
 .envrc
 .direnv/
 
-# Generated & bulky (not secrets; keeps context small)
+# Terraform / OpenTofu
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!**/*.tfvars.example
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Google Cloud / GCP
+*-service-account*.json
+*service-account*.json
+gcloud-service-key*.json
+google-credentials.json
+google-services.json
+GoogleService-Info.plist
+application_default_credentials.json
+.gcloud/
+*-gcp-key*.json
+
+# Kubernetes
+kubeconfig
+*-kubeconfig
+*.kubeconfig
+kube_config
+kubeconfig.yaml
+kubeconfig.yml
+**/kubeconfig.local
+
+# AWS
+.aws/credentials
+.aws/config
+aws-credentials.csv
+aws_access_keys.txt
+
+# Azure
+*.publishsettings
+*.azurePubxml
+azureProfile.json
+.azure/
+azure.auth
+
+# Keys & certs
+*.pem
+*.p12
+*.pfx
+id_rsa
+id_ecdsa
+id_ed25519
+known_hosts.bak
+*-credentials.json
+.secrets/
+
+# Docker (machine login)
+.docker/config.json
+
+# Generic netrc
+.netrc
+
+# Vercel CLI (local tokens / state)
+.vercel/
+
+# --- Generated & bulky (not secrets; keeps context small) ---
 node_modules/
 .pnp/
 .pnp.js
