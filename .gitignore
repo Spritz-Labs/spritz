@@ -1,6 +1,3 @@
-# Test scripts secrets (explicit; also covered by .env rules below)
-scripts/.env
-
 # Dependencies
 node_modules/
 .pnp/
@@ -13,29 +10,15 @@ out/
 build/
 dist/
 
-# Environment variables & local secrets — never commit
+# Environment variables — never commit env-style files (see also AI *ignore files)
 .env
 .env.*
 !.env.example
 !.env.sample
 !**/.env.example
 !**/.env.sample
-# direnv / local shell env (often holds secrets)
 .envrc
 .direnv/
-
-# Keys, certs, and cloud credential files
-*.pem
-*.p12
-*.pfx
-id_rsa
-id_ed25519
-*-credentials.json
-*credentials*.json
-service-account*.json
-google-services.json
-GoogleService-Info.plist
-.secrets/
 
 # Debug logs
 npm-debug.log*
