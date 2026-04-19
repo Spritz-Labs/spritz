@@ -37,7 +37,6 @@ service-account*.json
 google-services.json
 GoogleService-Info.plist
 .secrets/
-secrets/
 
 # Supabase CLI cache
 supabase/.temp/
