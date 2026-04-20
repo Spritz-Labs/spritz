@@ -500,7 +500,7 @@ export default function SchedulePage({
                 args: [payToAddress, hostAmount],
             });
 
-            if (feeAmount > 0n) {
+            if (feeAmount > BigInt(0)) {
                 // Batch both transfers via Multicall3 (single tx, single approval)
                 const feeTransferData = encodeFunctionData({
                     abi: ERC20_ABI,
