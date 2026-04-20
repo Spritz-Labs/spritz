@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -15,14 +16,17 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress");
-
-        if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+        // SECURITY: a user's favorites list may include private / friends-only
+        // agents. Only the owner of that list should see it — require a
+        // real session and drop any `?userAddress=` override.
+        const session = await getAuthenticatedUser(request);
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
         }
-
-        const normalizedAddress = userAddress.toLowerCase();
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         // Get favorites with agent details
         const { data: favorites, error } = await supabase
@@ -106,13 +110,22 @@ export async function POST(request: NextRequest) {
 
     try {
         const body = await request.json();
-        const { userAddress, agentId } = body;
+        const { userAddress: _bodyUserAddress, agentId } = body;
+        void _bodyUserAddress;
 
-        if (!userAddress || !agentId) {
-            return NextResponse.json({ error: "User address and agent ID required" }, { status: 400 });
+        // SECURITY: identity comes from the session cookie, not the body.
+        const session = await getAuthenticatedUser(request);
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
         }
+        const normalizedAddress = session.userAddress.toLowerCase();
 
-        const normalizedAddress = userAddress.toLowerCase();
+        if (!agentId) {
+            return NextResponse.json({ error: "Agent ID required" }, { status: 400 });
+        }
 
         // Verify agent exists and is accessible
         const { data: agent, error: agentError } = await supabase
@@ -169,14 +182,22 @@ export async function DELETE(request: NextRequest) {
 
     try {
         const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress");
         const agentId = searchParams.get("agentId");
 
-        if (!userAddress || !agentId) {
-            return NextResponse.json({ error: "User address and agent ID required" }, { status: 400 });
+        // SECURITY: require a real session — the previous `?userAddress=`
+        // fallback meant anyone could delete anyone else's favorites.
+        const session = await getAuthenticatedUser(request);
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
         }
+        const normalizedAddress = session.userAddress.toLowerCase();
 
-        const normalizedAddress = userAddress.toLowerCase();
+        if (!agentId) {
+            return NextResponse.json({ error: "Agent ID required" }, { status: 400 });
+        }
 
         const { error } = await supabase
             .from("shout_agent_favorites")

@@ -143,6 +143,14 @@ const nextConfig = {
                     // SEC-012 FIX: Content Security Policy
                     // Allows safe inline scripts (needed for Next.js), external APIs, and WebSocket connections
                     {
+                        // SECURITY: 'unsafe-inline' is still required because
+                        // Next.js App Router emits inline hydration / Flight
+                        // payload scripts per request; removing it requires
+                        // nonce-based CSP via middleware (tracked as a
+                        // follow-up). Our own inline blobs (console-suppress +
+                        // GA bootstrap) have been externalised so compromising
+                        // them via XSS now requires the attacker to control
+                        // same-origin script hosting.
                         key: "Content-Security-Policy",
                         value: [
                             "default-src 'self'",
@@ -172,6 +180,77 @@ const nextConfig = {
                             "upgrade-insecure-requests",
                         ].join("; "),
                     },
+                ],
+            },
+            // SECURITY: force `no-store` on every response from routes that
+            // return sensitive user state (session, passkey material, wallet
+            // recovery signer, admin APIs). This is a default — any
+            // individual handler can still override its own Cache-Control
+            // header and wins over the platform header. Putting it here
+            // means we can't forget when adding a new route under these
+            // prefixes.
+            {
+                source: "/api/auth/:path*",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "no-store, no-cache, must-revalidate, max-age=0",
+                    },
+                    { key: "Pragma", value: "no-cache" },
+                ],
+            },
+            {
+                source: "/api/passkey/:path*",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "no-store, no-cache, must-revalidate, max-age=0",
+                    },
+                    { key: "Pragma", value: "no-cache" },
+                ],
+            },
+            {
+                source: "/api/wallet/recovery-signer",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "no-store, no-cache, must-revalidate, max-age=0",
+                    },
+                    { key: "Pragma", value: "no-cache" },
+                ],
+            },
+            {
+                source: "/api/wallet/smart-wallet",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "no-store, no-cache, must-revalidate, max-age=0",
+                    },
+                    { key: "Pragma", value: "no-cache" },
+                ],
+            },
+            {
+                source: "/api/admin/:path*",
+                headers: [
+                    {
+                        key: "Cache-Control",
+                        value: "no-store, no-cache, must-revalidate, max-age=0",
+                    },
+                    { key: "Pragma", value: "no-cache" },
+                ],
+            },
+            {
+                source: "/api/phone/:path*",
+                headers: [
+                    // /api/phone/status currently sets `private, max-age=30`
+                    // itself and that handler-level override still wins; the
+                    // default here covers the verify/send/remove mutations
+                    // that were never explicitly set.
+                    {
+                        key: "Cache-Control",
+                        value: "no-store, no-cache, must-revalidate, max-age=0",
+                    },
+                    { key: "Pragma", value: "no-cache" },
                 ],
             },
         ];

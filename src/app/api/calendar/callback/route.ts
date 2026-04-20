@@ -11,16 +11,51 @@ const supabase = createClient(
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.NEXTAUTH_SECRET;
 const encodedSecret = new TextEncoder().encode(SESSION_SECRET || "dev-only-insecure-secret");
 
-// Helper to get the app's base URL from the request
+// SECURITY: hard-coded allowlist of origins we'll ever redirect the OAuth
+// flow back to. Anything not in this list falls back to the first entry.
+// We do NOT trust x-forwarded-host / host for this any more — those are
+// attacker-controllable in non-Vercel environments and make it easy to
+// turn this callback into an open redirect.
+const ALLOWED_APP_ORIGINS = [
+    "https://app.spritz.chat",
+    "https://spritz.chat",
+    "http://localhost:3000",
+];
+
 function getAppUrl(request: NextRequest): string {
-    // Check environment variable first
-    if (process.env.NEXT_PUBLIC_APP_URL) {
-        return process.env.NEXT_PUBLIC_APP_URL;
+    const envUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (envUrl) {
+        try {
+            const origin = new URL(envUrl).origin;
+            if (ALLOWED_APP_ORIGINS.includes(origin)) {
+                return origin;
+            }
+        } catch {
+            // fall through to allowlist default
+        }
     }
-    // Use the request's origin (handles both production and development)
+
+    // Prefer the request's own host, but only if it's in the allowlist.
+    // This preserves localhost dev while hardening prod.
     const proto = request.headers.get("x-forwarded-proto") || "https";
-    const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "localhost:3000";
-    return `${proto}://${host}`;
+    const host =
+        request.headers.get("x-forwarded-host") ||
+        request.headers.get("host") ||
+        "";
+    if (host) {
+        const candidate = `${proto}://${host}`;
+        try {
+            const origin = new URL(candidate).origin;
+            if (ALLOWED_APP_ORIGINS.includes(origin)) {
+                return origin;
+            }
+        } catch {
+            // fall through
+        }
+    }
+
+    // Safe default.
+    return ALLOWED_APP_ORIGINS[0];
 }
 
 // GET /api/calendar/callback - Handle Google OAuth callback

@@ -142,17 +142,21 @@ export async function PATCH(
             apiTools,
         } = body;
 
-        // Use session address, fall back to body for backward compatibility
-        const userAddress = session?.userAddress || bodyUserAddress;
-
-        if (!userAddress) {
+        // SECURITY: mutation endpoints MUST require a valid session cookie.
+        // Previously we accepted `userAddress` from the request body as a
+        // fallback, which let a caller impersonate any other user (including
+        // admins) simply by setting the body field. Dropping the fallback
+        // closes the privilege-escalation path. `bodyUserAddress` is still
+        // destructured above so the payload shape stays compatible but it
+        // is ignored here.
+        void bodyUserAddress;
+        if (!session?.userAddress) {
             return NextResponse.json(
                 { error: "Authentication required" },
                 { status: 401 },
             );
         }
-
-        const normalizedAddress = userAddress.toLowerCase();
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         // Check if user is an admin
         const { data: adminData } = await supabase
@@ -323,22 +327,19 @@ export async function DELETE(
     try {
         const { id } = await params;
 
-        // Get authenticated user from session
+        // SECURITY: DELETE is destructive and admin-privileged when the
+        // target is an "official" agent. Previously the handler fell back
+        // to a `?userAddress=` query parameter, letting any caller pose as
+        // any admin and delete any agent. Require a real session — no
+        // fallback.
         const session = await getAuthenticatedUser(request);
-
-        // Fall back to query param for backward compatibility
-        const { searchParams } = new URL(request.url);
-        const paramUserAddress = searchParams.get("userAddress");
-        const userAddress = session?.userAddress || paramUserAddress;
-
-        if (!userAddress) {
+        if (!session?.userAddress) {
             return NextResponse.json(
                 { error: "Authentication required" },
                 { status: 401 },
             );
         }
-
-        const normalizedAddress = userAddress.toLowerCase();
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         // Check if user is an admin
         const { data: adminData } = await supabase

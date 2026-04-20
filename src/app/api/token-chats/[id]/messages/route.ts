@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -109,10 +110,21 @@ export async function DELETE(
     const { id: chatId } = await params;
     const { searchParams } = new URL(request.url);
     const messageId = searchParams.get("messageId");
-    const userAddress = searchParams.get("userAddress")?.toLowerCase();
 
-    if (!messageId || !userAddress) {
-        return NextResponse.json({ error: "Missing messageId or userAddress" }, { status: 400 });
+    // SECURITY: destructive + moderation-privileged (admins can delete any
+    // message). Require a real session — the previous `?userAddress=`
+    // fallback let anyone pose as an admin and delete arbitrary messages.
+    const session = await getAuthenticatedUser(request);
+    if (!session?.userAddress) {
+        return NextResponse.json(
+            { error: "Authentication required" },
+            { status: 401 },
+        );
+    }
+    const userAddress = session.userAddress.toLowerCase();
+
+    if (!messageId) {
+        return NextResponse.json({ error: "Missing messageId" }, { status: 400 });
     }
 
     try {

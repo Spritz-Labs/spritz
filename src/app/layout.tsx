@@ -160,19 +160,13 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en" className="dark">
-            {/* Google Analytics */}
+            {/* Google Analytics — gtag library + bootstrap, both external
+                so our CSP doesn't need 'unsafe-inline' for the config call. */}
             <Script
                 src="https://www.googletagmanager.com/gtag/js?id=G-EXM67L0P13"
                 strategy="afterInteractive"
             />
-            <Script id="google-analytics" strategy="afterInteractive">
-                {`
-                    window.dataLayer = window.dataLayer || [];
-                    function gtag(){dataLayer.push(arguments);}
-                    gtag('js', new Date());
-                    gtag('config', 'G-EXM67L0P13');
-                `}
-            </Script>
+            <Script src="/ga-init.js" strategy="afterInteractive" />
             <head>
                 <meta name="application-name" content="Spritz" />
                 <meta name="mobile-web-app-capable" content="yes" />
@@ -219,71 +213,13 @@ export default function RootLayout({
                         }),
                     }}
                 />
-                {/* Suppress known AppKit/Solana/Waku/React Query errors before React loads */}
-                <script
-                    dangerouslySetInnerHTML={{
-                        __html: `
-                            (function() {
-                                var suppressedErrors = [
-                                    'Endpoint URL must start with',
-                                    'No project ID is configured',
-                                    'Failed to dial',
-                                    'Connection refused',
-                                    'Query data cannot be undefined',
-                                    'auth-deeplink',
-                                    'Affected query key',
-                                    'DialogContent',
-                                    'DialogTitle',
-                                    'aria-describedby',
-                                    'VisuallyHidden',
-                                    'accessible for screen reader'
-                                ];
-                                
-                                function shouldSuppress(msg) {
-                                    if (!msg) return false;
-                                    msg = String(msg);
-                                    for (var i = 0; i < suppressedErrors.length; i++) {
-                                        if (msg.indexOf(suppressedErrors[i]) !== -1) {
-                                            return true;
-                                        }
-                                    }
-                                    return false;
-                                }
-                                
-                                window.addEventListener('error', function(e) {
-                                    var msg = e.message || (e.error && e.error.message) || '';
-                                    if (shouldSuppress(msg)) {
-                                        e.preventDefault();
-                                        e.stopImmediatePropagation();
-                                        e.stopPropagation();
-                                        return false;
-                                    }
-                                }, true);
-                                window.addEventListener('unhandledrejection', function(e) {
-                                    var msg = (e.reason && e.reason.message) || String(e.reason) || '';
-                                    if (shouldSuppress(msg)) {
-                                        e.preventDefault();
-                                        e.stopImmediatePropagation();
-                                        e.stopPropagation();
-                                        return false;
-                                    }
-                                }, true);
-                                // Also suppress console methods for these messages
-                                var originalConsoleError = console.error;
-                                var originalConsoleWarn = console.warn;
-                                console.error = function() {
-                                    var msg = Array.prototype.join.call(arguments, ' ');
-                                    if (shouldSuppress(msg)) return;
-                                    originalConsoleError.apply(console, arguments);
-                                };
-                                console.warn = function() {
-                                    var msg = Array.prototype.join.call(arguments, ' ');
-                                    if (shouldSuppress(msg)) return;
-                                    originalConsoleWarn.apply(console, arguments);
-                                };
-                            })();
-                        `,
-                    }}
+                {/* Pre-React console/error suppression. Externalised to
+                    public/console-suppress.js so our CSP doesn't need
+                    'unsafe-inline' for this blob. Uses beforeInteractive so
+                    it runs before any framework code has a chance to log. */}
+                <Script
+                    src="/console-suppress.js"
+                    strategy="beforeInteractive"
                 />
             </head>
             <body

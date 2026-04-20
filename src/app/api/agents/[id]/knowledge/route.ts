@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -58,12 +59,19 @@ export async function GET(
 
     try {
         const { id } = await params;
-        const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress");
 
-        if (!userAddress) {
-            return NextResponse.json({ error: "User address required" }, { status: 400 });
+        // SECURITY: require a real session. The knowledge list exposes the
+        // URLs an owner has attached to their agent and is only visible to
+        // the owner — so we must not let a caller supply any userAddress
+        // they want in a query param and pretend to be that user.
+        const session = await getAuthenticatedUser(request);
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
         }
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         // Verify agent ownership
         const { data: agent } = await supabase
@@ -72,7 +80,7 @@ export async function GET(
             .eq("id", id)
             .single();
 
-        if (!agent || agent.owner_address !== userAddress.toLowerCase()) {
+        if (!agent || agent.owner_address !== normalizedAddress) {
             return NextResponse.json({ error: "Access denied" }, { status: 403 });
         }
 
@@ -108,7 +116,7 @@ export async function POST(
         const { id } = await params;
         const body = await request.json();
         const { 
-            userAddress, 
+            userAddress: _bodyUserAddress,
             url, 
             title,
             // Firecrawl options (for official agents)
@@ -120,9 +128,23 @@ export async function POST(
             infiniteScroll,
             scrollCount,
         } = body;
+        void _bodyUserAddress;
 
-        if (!userAddress || !url) {
-            return NextResponse.json({ error: "User address and URL are required" }, { status: 400 });
+        // SECURITY: derive the caller identity from the signed session cookie,
+        // never from the request body. Previously `userAddress` in the body
+        // was treated as authoritative, so anyone could POST with another
+        // user's address and add knowledge items to that user's agent.
+        const session = await getAuthenticatedUser(request);
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
+        }
+        const normalizedAddress = session.userAddress.toLowerCase();
+
+        if (!url) {
+            return NextResponse.json({ error: "URL is required" }, { status: 400 });
         }
 
         // Validate URL
@@ -131,8 +153,6 @@ export async function POST(
         } catch {
             return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
         }
-
-        const normalizedAddress = userAddress.toLowerCase();
 
         // Verify agent ownership and get agent details
         const { data: agent } = await supabase
@@ -242,14 +262,22 @@ export async function DELETE(
     try {
         const { id } = await params;
         const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress");
         const itemId = searchParams.get("itemId");
 
-        if (!userAddress || !itemId) {
-            return NextResponse.json({ error: "User address and item ID are required" }, { status: 400 });
+        // SECURITY: destructive endpoint. Require a real session. Any
+        // `?userAddress=` in the URL is ignored.
+        const session = await getAuthenticatedUser(request);
+        if (!session?.userAddress) {
+            return NextResponse.json(
+                { error: "Authentication required" },
+                { status: 401 },
+            );
         }
+        const normalizedAddress = session.userAddress.toLowerCase();
 
-        const normalizedAddress = userAddress.toLowerCase();
+        if (!itemId) {
+            return NextResponse.json({ error: "Item ID is required" }, { status: 400 });
+        }
 
         // Verify agent ownership
         const { data: agent } = await supabase
