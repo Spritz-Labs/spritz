@@ -71,18 +71,20 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-        const query = supabase
+        let query = supabase
             .from("shout_chat_rules")
             .select("*")
             .eq("chat_type", chatType);
 
         if (chatId) {
-            query.eq("chat_id", chatId);
+            query = query.eq("chat_id", chatId);
         } else {
-            query.is("chat_id", null);
+            query = query.is("chat_id", null);
         }
 
-        const { data, error } = await query.limit(1).maybeSingle();
+        const { data: rows, error } = await query
+            .order("updated_at", { ascending: false })
+            .limit(1);
 
         if (error) {
             console.error("[ChatRules] Fetch error:", error);
@@ -92,7 +94,8 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Return rules or defaults
+        const data = rows?.[0];
+
         if (data) {
             return NextResponse.json({ rules: data });
         }
@@ -194,26 +197,29 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Find existing row first, then update or insert
-        // (upsert doesn't work reliably with NULL chat_id in PostgreSQL)
         console.log("[ChatRules] Saving:", JSON.stringify(updateData));
 
-        const existingQuery = supabase
+        // Find existing row — order by updated_at DESC and take the first
+        // to handle any legacy duplicates gracefully
+        let existingQuery = supabase
             .from("shout_chat_rules")
             .select("id")
             .eq("chat_type", chatType);
 
         if (chatId) {
-            existingQuery.eq("chat_id", chatId);
+            existingQuery = existingQuery.eq("chat_id", chatId);
         } else {
-            existingQuery.is("chat_id", null);
+            existingQuery = existingQuery.is("chat_id", null);
         }
 
-        const { data: existing } = await existingQuery.limit(1).maybeSingle();
+        const { data: existingRows } = await existingQuery
+            .order("updated_at", { ascending: false })
+            .limit(1);
+
+        const existing = existingRows?.[0];
 
         let data, error;
         if (existing?.id) {
-            // Update existing row by id
             const result = await supabase
                 .from("shout_chat_rules")
                 .update(updateData)
@@ -223,7 +229,6 @@ export async function POST(request: NextRequest) {
             data = result.data;
             error = result.error;
         } else {
-            // Insert new row
             const result = await supabase
                 .from("shout_chat_rules")
                 .insert(updateData)
