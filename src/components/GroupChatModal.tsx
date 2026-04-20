@@ -26,7 +26,7 @@ import { LinkPreview, detectUrls } from "./LinkPreview";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
-import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { validateMessageClientSide, checkBlockedWordsClient } from "@/lib/clientChatRules";
 import { toast } from "sonner";
 import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import {
@@ -835,6 +835,13 @@ export function GroupChatModal({
         const ruleViolation = validateMessageClientSide(chatRules, newMessage.trim(), "text", isAdmin);
         if (ruleViolation) {
             toast.error(ruleViolation);
+            return;
+        }
+
+        // Check blocked words (global + room-specific)
+        const blockedViolation = await checkBlockedWordsClient(newMessage.trim(), "group", group.id);
+        if (blockedViolation) {
+            toast.error(blockedViolation);
             return;
         }
 

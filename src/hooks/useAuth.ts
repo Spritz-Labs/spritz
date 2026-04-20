@@ -182,35 +182,47 @@ export function useAuthImplementation() {
         if (typeof window === "undefined") return;
 
         const handleVisibilityChange = async () => {
-            if (document.visibilityState === "visible" && state.isAuthenticated) {
-                console.log("[Auth] App became visible, refreshing session...");
-                // Try to extend the session
-                try {
-                    const res = await fetch("/api/auth/session", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                    });
-                    if (res.ok) {
-                        console.log("[Auth] Session refreshed on visibility change");
-                        // Optionally refresh user data
-                        const data = await res.json();
-                        if (data.success) {
-                            // Session extended successfully
-                        }
-                    } else if (res.status === 401) {
-                        // Session expired - user needs to re-authenticate
-                        console.log("[Auth] Session expired, user needs to re-authenticate");
-                        setState((prev) => ({
-                            ...prev,
-                            isAuthenticated: false,
-                            user: null,
-                            error: "Session expired. Please sign in again.",
-                        }));
-                    }
-                } catch (e) {
-                    console.warn("[Auth] Failed to refresh session on visibility change:", e);
+            if (document.visibilityState !== "visible" || !state.isAuthenticated) return;
+            console.log("[Auth] App became visible, refreshing session...");
+
+            try {
+                const res = await fetch("/api/auth/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    credentials: "include",
+                });
+                if (res.ok) {
+                    console.log("[Auth] Session refreshed on visibility change");
+                    return;
                 }
+
+                if (res.status !== 401) return;
+
+                // POST returned 401 — cookie may be stale but not necessarily gone.
+                // Verify with GET before dropping the user out of the app.
+                console.log("[Auth] POST session extend returned 401, verifying with GET...");
+                const check = await fetch("/api/auth/session", {
+                    credentials: "include",
+                });
+                if (check.ok) {
+                    const data = await check.json();
+                    if (data.authenticated) {
+                        console.log("[Auth] GET session still valid — staying authenticated");
+                        return;
+                    }
+                }
+
+                // Session is genuinely expired
+                console.log("[Auth] Session confirmed expired, clearing auth state");
+                setState((prev) => ({
+                    ...prev,
+                    isAuthenticated: false,
+                    user: null,
+                    error: "Session expired. Please sign in again.",
+                }));
+            } catch (e) {
+                // Network errors should not kick the user out
+                console.warn("[Auth] Failed to refresh session on visibility change:", e);
             }
         };
 

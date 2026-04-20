@@ -1236,6 +1236,15 @@ export function ChatModal({
             const content = (overrideMessage ?? newMessage).trim();
             if (!content) return;
 
+            // Check blocked words before sending
+            const { checkBlockedWordsClient } = await import("@/lib/clientChatRules");
+            const blockedViolation = await checkBlockedWordsClient(content, "dm");
+            if (blockedViolation) {
+                const { toast } = await import("sonner");
+                toast.error(blockedViolation);
+                return;
+            }
+
             // Include reply context if replying
             let messageContent = content;
             if (replyingTo) {

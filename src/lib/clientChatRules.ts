@@ -3,6 +3,9 @@
  * Mirrors the server-side validateMessageAgainstRules logic so that
  * chat types without a dedicated API route (Alpha, Group) can still
  * enforce content restrictions before sending.
+ *
+ * Also enforces blocked words on ALL surfaces (DMs, groups, alpha,
+ * token chats, waku channels) — not just the two server routes.
  */
 
 export type ContentPermission = "everyone" | "mods_only" | "disabled";
@@ -29,6 +32,105 @@ function normalize(value: unknown): ContentPermission {
 
 // Comprehensive URL detection regex - must match server-side chatRules.ts
 const URL_REGEX = /https?:\/\/[^\s]+|www\.[^\s]+|\b[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.(?:com|org|net|io|xyz|co|me|info|app|dev|gg|cc|ly|to|link|click|fun|site|online|top|live|space|tech|pro|us|uk|eu|de|fr|ca|au|ru|cn|br|in)\b[^\s]*/i;
+
+// ── Blocked words client-side cache ──
+
+type BlockedWordRule = {
+    word: string;
+    is_regex: boolean;
+    action: "block" | "flag" | "mute";
+    scope: "global" | "room";
+    chat_type: string | null;
+    chat_id: string | null;
+};
+
+let _globalBlockedWords: BlockedWordRule[] = [];
+let _globalBlockedWordsFetchedAt = 0;
+const BLOCKED_WORDS_TTL_MS = 60_000; // refresh every 60s
+let _fetchInFlight: Promise<void> | null = null;
+
+async function ensureGlobalBlockedWords(): Promise<BlockedWordRule[]> {
+    if (
+        _globalBlockedWords.length > 0 &&
+        Date.now() - _globalBlockedWordsFetchedAt < BLOCKED_WORDS_TTL_MS
+    ) {
+        return _globalBlockedWords;
+    }
+
+    if (_fetchInFlight) {
+        await _fetchInFlight;
+        return _globalBlockedWords;
+    }
+
+    _fetchInFlight = (async () => {
+        try {
+            const res = await fetch("/api/blocked-words?scope=all");
+            if (res.ok) {
+                const data = await res.json();
+                _globalBlockedWords = (data.words || []).filter(
+                    (w: BlockedWordRule) => w.action === "block" || w.action === "mute",
+                );
+                _globalBlockedWordsFetchedAt = Date.now();
+            }
+        } catch {
+            // fail open — don't block sends if the fetch fails
+        } finally {
+            _fetchInFlight = null;
+        }
+    })();
+
+    await _fetchInFlight;
+    return _globalBlockedWords;
+}
+
+/** Force a refresh on next check (e.g. after admin adds a word). */
+export function invalidateBlockedWordsCache(): void {
+    _globalBlockedWordsFetchedAt = 0;
+}
+
+function matchesBlockedWord(entry: BlockedWordRule, text: string): boolean {
+    if (entry.is_regex) {
+        try {
+            return new RegExp(entry.word, "i").test(text);
+        } catch {
+            return false;
+        }
+    }
+    const escaped = entry.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(text)) return true;
+    return text.toLowerCase().includes(entry.word.toLowerCase());
+}
+
+/**
+ * Check content against global + optional room-specific blocked words.
+ * Returns an error string or null.
+ */
+export async function checkBlockedWordsClient(
+    content: string,
+    chatType?: string | null,
+    chatId?: string | null,
+): Promise<string | null> {
+    if (!content.trim()) return null;
+
+    const words = await ensureGlobalBlockedWords();
+    if (words.length === 0) return null;
+
+    for (const entry of words) {
+        // Skip room-specific entries that don't match this room
+        if (entry.scope === "room") {
+            if (!chatType || entry.chat_type !== chatType) continue;
+            if (chatId && entry.chat_id && entry.chat_id !== chatId) continue;
+        }
+
+        if (matchesBlockedWord(entry, content)) {
+            return "Your message contains a word that is not allowed";
+        }
+    }
+
+    return null;
+}
+
+// ── Main validation ──
 
 /**
  * Validate a message against chat rules client-side.

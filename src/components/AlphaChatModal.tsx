@@ -25,7 +25,7 @@ import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { ModerationPanel, QuickMuteDialog } from "./ModerationPanel";
 import { useModeration } from "@/hooks/useModeration";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
-import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { validateMessageClientSide, checkBlockedWordsClient } from "@/lib/clientChatRules";
 import { toast } from "sonner";
 import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
@@ -886,6 +886,13 @@ export function AlphaChatModal({
         );
         if (ruleViolation) {
             toast.error(ruleViolation);
+            return;
+        }
+
+        // Check blocked words (global + room-specific)
+        const blockedViolation = await checkBlockedWordsClient(newMessage.trim(), "alpha");
+        if (blockedViolation) {
+            toast.error(blockedViolation);
             return;
         }
 

@@ -15,7 +15,7 @@ import { PixelArtImage } from "./PixelArtImage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
-import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { validateMessageClientSide, checkBlockedWordsClient } from "@/lib/clientChatRules";
 import { toast } from "sonner";
 import { useModeration } from "@/hooks/useModeration";
 import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
@@ -365,6 +365,13 @@ export function TokenChatModal({
         const ruleError = validateMessageClientSide(chatRules, messageInput.trim(), "text", canModerateChat);
         if (ruleError) {
             toast.error(ruleError);
+            return;
+        }
+
+        // Check blocked words (global + room-specific)
+        const blockedViolation = await checkBlockedWordsClient(messageInput.trim(), "token", chatData.id);
+        if (blockedViolation) {
+            toast.error(blockedViolation);
             return;
         }
 

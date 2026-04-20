@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import type { ChatRules } from "@/app/api/chat-rules/route";
+import { invalidateBlockedWordsCache } from "@/lib/clientChatRules";
 
 export type ChatRulesState = {
     rules: ChatRules | null;
@@ -501,6 +502,7 @@ export function useBlockedWords(
                     return false;
                 }
 
+                invalidateBlockedWordsCache();
                 await fetchWords();
                 return true;
             } catch (err) {
@@ -527,6 +529,7 @@ export function useBlockedWords(
                     return false;
                 }
 
+                invalidateBlockedWordsCache();
                 await fetchWords();
                 return true;
             } catch (err) {

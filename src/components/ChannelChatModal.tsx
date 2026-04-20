@@ -22,7 +22,7 @@ import { PixelArtImage } from "./PixelArtImage";
 import { ChatAttachmentMenu } from "./ChatAttachmentMenu";
 import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
-import { validateMessageClientSide } from "@/lib/clientChatRules";
+import { validateMessageClientSide, checkBlockedWordsClient } from "@/lib/clientChatRules";
 import { toast } from "sonner";
 import { useModeration } from "@/hooks/useModeration";
 import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
@@ -1088,6 +1088,13 @@ export function ChannelChatModal({
         const ruleViolation = validateMessageClientSide(chatRules, inputValue.trim(), "text", isModerator);
         if (ruleViolation) {
             toast.error(ruleViolation);
+            return;
+        }
+
+        // Check blocked words (global + room-specific)
+        const blockedViolation = await checkBlockedWordsClient(inputValue.trim(), "channel", channel.id);
+        if (blockedViolation) {
+            toast.error(blockedViolation);
             return;
         }
 
