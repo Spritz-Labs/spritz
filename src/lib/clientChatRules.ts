@@ -102,8 +102,13 @@ function matchesBlockedWord(entry: BlockedWordRule, text: string): boolean {
 }
 
 /**
- * Check content against global + optional room-specific blocked words.
- * Returns an error string or null.
+ * Check content against blocked words for a specific chat surface.
+ *
+ * Scoping rules:
+ *  - Room-specific words only apply in the exact room they were set for.
+ *  - Global words apply in shared spaces (channels, groups, alpha, token,
+ *    location) but NOT in private DMs.
+ *  - DMs are exempt from all blocked word checks.
  */
 export async function checkBlockedWordsClient(
     content: string,
@@ -112,15 +117,19 @@ export async function checkBlockedWordsClient(
 ): Promise<string | null> {
     if (!content.trim()) return null;
 
+    // DMs are private — no blocked word enforcement
+    if (chatType === "dm") return null;
+
     const words = await ensureGlobalBlockedWords();
     if (words.length === 0) return null;
 
     for (const entry of words) {
-        // Skip room-specific entries that don't match this room
         if (entry.scope === "room") {
+            // Room-specific: only enforce in the exact room it was set for
             if (!chatType || entry.chat_type !== chatType) continue;
-            if (chatId && entry.chat_id && entry.chat_id !== chatId) continue;
+            if (!chatId || entry.chat_id !== chatId) continue;
         }
+        // Global scope words apply to all shared surfaces (not DMs — already returned above)
 
         if (matchesBlockedWord(entry, content)) {
             return "Your message contains a word that is not allowed";
