@@ -1707,13 +1707,22 @@ export function ChatModal({
             };
 
             const timeout = setTimeout(updatePosition, 10);
-            window.addEventListener("resize", updatePosition);
-            window.addEventListener("scroll", updatePosition, true);
+            // PERF: capture-phase scroll listener on window is fired a LOT
+            // while the user scrolls the chat pane. Flag it as passive so
+            // Chrome/Safari don't have to wait to see whether the handler
+            // calls preventDefault() — keeps scrolling buttery-smooth.
+            window.addEventListener("resize", updatePosition, { passive: true });
+            window.addEventListener("scroll", updatePosition, {
+                capture: true,
+                passive: true,
+            });
 
             return () => {
                 clearTimeout(timeout);
                 window.removeEventListener("resize", updatePosition);
-                window.removeEventListener("scroll", updatePosition, true);
+                window.removeEventListener("scroll", updatePosition, {
+                    capture: true,
+                } as AddEventListenerOptions);
             };
         }, []);
 

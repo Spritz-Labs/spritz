@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { checkRateLimit } from "@/lib/ratelimit";
+import { supabaseService } from "@/lib/supabaseServer";
 
 export type SearchResult = {
     type: "channel_message" | "dm" | "group";
@@ -26,21 +22,32 @@ export type SearchResult = {
 
 // GET /api/search - Search across all chats
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q")?.trim();
-    const type = searchParams.get("type"); // "all", "channels", "dms", "groups"
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
-
+    // SECURITY: require authenticated session (no userAddress query-param fallback).
     const session = await getAuthenticatedUser(request);
-    const userAddress = session?.userAddress?.toLowerCase()
-        ?? searchParams.get("userAddress")?.toLowerCase();
-
-    if (!userAddress) {
+    if (!session?.userAddress) {
         return NextResponse.json(
             { error: "Authentication required" },
             { status: 401 }
         );
     }
+    const userAddress = session.userAddress.toLowerCase();
+
+    // SECURITY: rate-limit search — it's expensive and previously unbounded.
+    const rl = await checkRateLimit(request, "strict", userAddress);
+    if (rl) return rl;
+
+    if (!supabaseService) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 }
+        );
+    }
+    const supabase = supabaseService;
+
+    const { searchParams } = new URL(request.url);
+    const query = searchParams.get("q")?.trim();
+    const type = searchParams.get("type"); // "all", "channels", "dms", "groups"
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
 
     if (!query || query.length < 2) {
         return NextResponse.json(

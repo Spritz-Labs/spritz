@@ -108,9 +108,16 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Friend request already pending" }, { status: 400 });
     }
 
-    const oldRequests = existingRequests?.filter((r) => r.status !== "pending") ?? [];
-    for (const req of oldRequests) {
-        await supabase.from("shout_friend_requests").delete().eq("id", req.id);
+    const oldRequestIds =
+        existingRequests
+            ?.filter((r) => r.status !== "pending")
+            .map((r) => r.id) ?? [];
+    // PERF: collapse N sequential deletes into a single IN(...) delete.
+    if (oldRequestIds.length > 0) {
+        await supabase
+            .from("shout_friend_requests")
+            .delete()
+            .in("id", oldRequestIds);
     }
 
     await supabase.from("shout_users").upsert({ wallet_address: fromAddress }, { onConflict: "wallet_address" });

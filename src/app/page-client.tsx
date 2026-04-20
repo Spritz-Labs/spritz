@@ -102,6 +102,23 @@ export default function Home() {
         "wallet" | "email" | "passkey" | "digitalid"
     >("wallet");
 
+    // HYDRATION FIX: reading sessionStorage directly in JSX caused server/client
+    // render divergence. Set after mount so the server and first client render
+    // match, then flip the flag on the client only.
+    const [showPwaUpdatedNotice, setShowPwaUpdatedNotice] = useState(false);
+    useEffect(() => {
+        try {
+            if (
+                typeof window !== "undefined" &&
+                sessionStorage.getItem("pwa_update_reload") === "true"
+            ) {
+                setShowPwaUpdatedNotice(true);
+            }
+        } catch {
+            // sessionStorage not available (e.g. Safari private mode) — ignore.
+        }
+    }, []);
+
     // EVM wallet via wagmi
     const {
         address: wagmiAddress,
@@ -1062,22 +1079,20 @@ export default function Home() {
                     className="w-full max-w-md mt-auto"
                 >
                     <div className="glass-card rounded-2xl md:rounded-3xl p-5 md:p-8 shadow-2xl">
-                        {/* PWA Update Notice */}
-                        {typeof window !== "undefined" &&
-                            sessionStorage.getItem("pwa_update_reload") ===
-                                "true" && (
-                                <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
-                                    <div className="flex items-center gap-2">
-                                        <span>✅</span>
-                                        <span className="font-medium">
-                                            App updated!
-                                        </span>
-                                    </div>
-                                    <p className="mt-1 text-emerald-400/80 text-xs">
-                                        Please sign in again to continue.
-                                    </p>
+                        {/* PWA Update Notice (client-only, set after mount) */}
+                        {showPwaUpdatedNotice && (
+                            <div className="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span>✅</span>
+                                    <span className="font-medium">
+                                        App updated!
+                                    </span>
                                 </div>
-                            )}
+                                <p className="mt-1 text-emerald-400/80 text-xs">
+                                    Please sign in again to continue.
+                                </p>
+                            </div>
+                        )}
 
                         {/* Tabs - hide when inside Alien Mini App (only show Alien login) */}
                         {!isInsideAlienApp && (

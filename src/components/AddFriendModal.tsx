@@ -5,8 +5,22 @@ import { motion, AnimatePresence } from "motion/react";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
 import { useUsername } from "@/hooks/useUsername";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
-import { QRCodeScanner } from "./QRCodeScanner";
+import dynamic from "next/dynamic";
 import { stripLeadingAt } from "@/utils/socialInput";
+
+// PERF: html5-qrcode is ~280KB gzipped and only used when the user actively
+// opens the scanner. Load it on-demand so it stays out of the main bundle.
+const QRCodeScanner = dynamic(
+    () => import("./QRCodeScanner").then((m) => m.QRCodeScanner),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="min-h-[320px] flex items-center justify-center text-zinc-500 text-sm">
+                Loading scanner…
+            </div>
+        ),
+    }
+);
 
 type AddFriendModalProps = {
     isOpen: boolean;

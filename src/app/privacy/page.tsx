@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+// SEO: static content, re-render at most once a day.
+export const revalidate = 86400;
+// Stable build-time date avoids hydration mismatch from new Date() at render.
+const LAST_UPDATED = "January 2026";
+
 export const metadata: Metadata = {
     title: "Privacy Policy",
     description: "Privacy Policy for Spritz - Learn how we collect, use, and protect your data in our Web3 communication platform",
@@ -44,7 +49,7 @@ export default function PrivacyPage() {
                         Back to Spritz
                     </Link>
                     <h1 className="text-4xl font-bold mb-2">Privacy Policy</h1>
-                    <p className="text-zinc-400">Last updated: {new Date().toLocaleDateString()}</p>
+                    <p className="text-zinc-400">Last updated: {LAST_UPDATED}</p>
                 </div>
 
                 {/* Content */}

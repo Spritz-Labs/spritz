@@ -4,8 +4,22 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { QRCodeSVG } from "qrcode.react";
 import { type Address } from "viem";
-import { QRCodeScanner } from "./QRCodeScanner";
+import dynamic from "next/dynamic";
 import { useENS, type ENSResolution } from "@/hooks/useENS";
+
+// PERF: lazy-load html5-qrcode — it's only needed when the user switches to
+// the scan tab inside this modal.
+const QRCodeScanner = dynamic(
+    () => import("./QRCodeScanner").then((m) => m.QRCodeScanner),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="min-h-[320px] flex items-center justify-center text-zinc-500 text-sm">
+                Loading scanner…
+            </div>
+        ),
+    }
+);
 import { useUsername } from "@/hooks/useUsername";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import { stripLeadingAt } from "@/utils/socialInput";

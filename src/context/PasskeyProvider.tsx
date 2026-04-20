@@ -6,6 +6,7 @@ import React, {
     useState,
     useCallback,
     useEffect,
+    useMemo,
     type ReactNode,
 } from "react";
 import {
@@ -899,19 +900,33 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         log.debug("[Passkey] Logout complete");
     }, []);
 
+    // PERF: memoize so consumers don't re-render on every provider render
+    // just because the context value object identity changed.
+    const value = useMemo(
+        () => ({
+            ...state,
+            register,
+            login,
+            logout,
+            clearError,
+            clearWarning,
+            rescue,
+            needsRescue,
+        }),
+        [
+            state,
+            register,
+            login,
+            logout,
+            clearError,
+            clearWarning,
+            rescue,
+            needsRescue,
+        ]
+    );
+
     return (
-        <PasskeyContext.Provider
-            value={{
-                ...state,
-                register,
-                login,
-                logout,
-                clearError,
-                clearWarning,
-                rescue,
-                needsRescue,
-            }}
-        >
+        <PasskeyContext.Provider value={value}>
             {children}
         </PasskeyContext.Provider>
     );

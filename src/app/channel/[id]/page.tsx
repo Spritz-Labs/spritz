@@ -34,35 +34,50 @@ export default function ChannelInvitePage({
     const [joining, setJoining] = useState(false);
     const [joined, setJoined] = useState(false);
 
-    useEffect(() => {
-        fetchChannel();
-    }, [id]);
-
     // Auto-join if logged in and we have the channel (skip auto-join for POAP channels so user sees requirement first)
     const isPoapChannel = channel?.poap_event_id != null;
+
+    useEffect(() => {
+        // DATA: use AbortController so a fast remount (or id change) doesn't
+        // race — the stale response can't overwrite the new one.
+        const controller = new AbortController();
+
+        (async () => {
+            try {
+                const res = await fetch(`/api/public/channels/${id}`, {
+                    signal: controller.signal,
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    if (!controller.signal.aborted) {
+                        setError(data.error || "Channel not found");
+                    }
+                    return;
+                }
+
+                if (!controller.signal.aborted) {
+                    setChannel(data.channel);
+                }
+            } catch (err) {
+                if ((err as { name?: string })?.name === "AbortError") return;
+                setError("Failed to load channel");
+            } finally {
+                if (!controller.signal.aborted) {
+                    setLoading(false);
+                }
+            }
+        })();
+
+        return () => controller.abort();
+    }, [id]);
+
     useEffect(() => {
         if (channel && userAddress && !joining && !joined && !isPoapChannel) {
             handleJoin();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [channel, userAddress, isPoapChannel]);
-
-    const fetchChannel = async () => {
-        try {
-            const res = await fetch(`/api/public/channels/${id}`);
-            const data = await res.json();
-
-            if (!res.ok) {
-                setError(data.error || "Channel not found");
-                return;
-            }
-
-            setChannel(data.channel);
-        } catch {
-            setError("Failed to load channel");
-        } finally {
-            setLoading(false);
-        }
-    };
 
     const handleJoin = async () => {
         if (!userAddress || joining || !channel) return;

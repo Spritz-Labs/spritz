@@ -6,6 +6,7 @@ import React, {
     useState,
     useCallback,
     useEffect,
+    useMemo,
     type ReactNode,
 } from "react";
 import { type Address } from "viem";
@@ -518,17 +519,22 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
         window.location.reload();
     }, []);
 
+    // PERF: memoize so consumers don't re-render when only provider-local
+    // state that's not in `state` changes.
+    const value = useMemo(
+        () => ({
+            ...state,
+            login,
+            sendCode,
+            logout,
+            clearError,
+            setStep,
+        }),
+        [state, login, sendCode, logout, clearError, setStep]
+    );
+
     return (
-        <EmailAuthContext.Provider
-            value={{
-                ...state,
-                login,
-                sendCode,
-                logout,
-                clearError,
-                setStep,
-            }}
-        >
+        <EmailAuthContext.Provider value={value}>
             {children}
         </EmailAuthContext.Provider>
     );

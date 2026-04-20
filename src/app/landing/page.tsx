@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ContactButton } from "./ContactButton";
 
+// SEO: static marketing content, re-render at most once a day.
+export const revalidate = 86400;
+
 export const metadata: Metadata = {
     title: "Spritz - Censorship-Resistant Chat for Web3",
     description:

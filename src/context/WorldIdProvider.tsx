@@ -6,6 +6,7 @@ import React, {
     useState,
     useCallback,
     useEffect,
+    useMemo,
     type ReactNode,
 } from "react";
 
@@ -148,15 +149,18 @@ export function WorldIdProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, error: null }));
     }, []);
 
+    const value = useMemo(
+        () => ({
+            ...state,
+            setAuthenticated,
+            logout,
+            clearError,
+        }),
+        [state, setAuthenticated, logout, clearError]
+    );
+
     return (
-        <WorldIdAuthContext.Provider
-            value={{
-                ...state,
-                setAuthenticated,
-                logout,
-                clearError,
-            }}
-        >
+        <WorldIdAuthContext.Provider value={value}>
             {children}
         </WorldIdAuthContext.Provider>
     );

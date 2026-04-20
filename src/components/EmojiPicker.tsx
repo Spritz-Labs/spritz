@@ -204,13 +204,20 @@ export function EmojiPicker({
         };
 
         const timeout = setTimeout(updatePosition, 10);
-        window.addEventListener("resize", updatePosition);
-        window.addEventListener("scroll", updatePosition, true);
+        // PERF: mark as passive so the scroll handler doesn't block the main
+        // thread while the user scrolls through emoji categories on mobile.
+        window.addEventListener("resize", updatePosition, { passive: true });
+        window.addEventListener("scroll", updatePosition, {
+            capture: true,
+            passive: true,
+        });
 
         return () => {
             clearTimeout(timeout);
             window.removeEventListener("resize", updatePosition);
-            window.removeEventListener("scroll", updatePosition, true);
+            window.removeEventListener("scroll", updatePosition, {
+                capture: true,
+            } as AddEventListenerOptions);
         };
     }, [isOpen, position]);
 
@@ -430,13 +437,19 @@ export function QuickReactionPicker({
         };
 
         const timeout = setTimeout(updatePosition, 10);
-        window.addEventListener("resize", updatePosition);
-        window.addEventListener("scroll", updatePosition, true);
+        // PERF: passive listeners — these fire on every scroll frame.
+        window.addEventListener("resize", updatePosition, { passive: true });
+        window.addEventListener("scroll", updatePosition, {
+            capture: true,
+            passive: true,
+        });
 
         return () => {
             clearTimeout(timeout);
             window.removeEventListener("resize", updatePosition);
-            window.removeEventListener("scroll", updatePosition, true);
+            window.removeEventListener("scroll", updatePosition, {
+                capture: true,
+            } as AddEventListenerOptions);
         };
     }, [isOpen, isMobile, useBottomSheet]);
 

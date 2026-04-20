@@ -35,11 +35,24 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch messaging keys" }, { status: 500 });
     }
 
-    return NextResponse.json({
-        messaging_public_key: data?.messaging_public_key ?? null,
-        messaging_private_key_encrypted: data?.messaging_private_key_encrypted ?? null,
-        messaging_backup_encrypted: data?.messaging_backup_encrypted ?? null,
-        messaging_backup_salt: data?.messaging_backup_salt ?? null,
-        messaging_backup_enabled: data?.messaging_backup_enabled ?? false,
-    });
+    return NextResponse.json(
+        {
+            messaging_public_key: data?.messaging_public_key ?? null,
+            messaging_private_key_encrypted:
+                data?.messaging_private_key_encrypted ?? null,
+            messaging_backup_encrypted:
+                data?.messaging_backup_encrypted ?? null,
+            messaging_backup_salt: data?.messaging_backup_salt ?? null,
+            messaging_backup_enabled: data?.messaging_backup_enabled ?? false,
+        },
+        {
+            headers: {
+                // SECURITY: never cache encrypted key material — not in the
+                // browser, not in any intermediary (proxy/CDN).
+                "Cache-Control":
+                    "no-store, no-cache, must-revalidate, max-age=0",
+                Pragma: "no-cache",
+            },
+        }
+    );
 }

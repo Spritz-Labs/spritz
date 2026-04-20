@@ -6,6 +6,7 @@ import React, {
     useState,
     useCallback,
     useEffect,
+    useMemo,
     type ReactNode,
 } from "react";
 import dynamic from "next/dynamic";
@@ -293,14 +294,17 @@ function AlienAuthInner({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, error: null }));
     }, []);
 
+    const value = useMemo(
+        () => ({
+            ...state,
+            logout,
+            clearError,
+        }),
+        [state, logout, clearError]
+    );
+
     return (
-        <AlienAuthContext.Provider
-            value={{
-                ...state,
-                logout,
-                clearError,
-            }}
-        >
+        <AlienAuthContext.Provider value={value}>
             {children}
         </AlienAuthContext.Provider>
     );

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+// SEO: static content, re-render at most once a day.
+export const revalidate = 86400;
+
 export const metadata: Metadata = {
     title: "Terms of Service",
     description: "Terms of Service for Spritz Chat - Decentralized communication platform on Ethereum and Solana",

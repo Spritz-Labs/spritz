@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
+// P0 Env: importing env triggers a one-shot server-side validation (see src/lib/env.ts).
+import "@/lib/env";
 import { Web3Provider } from "@/context/Web3Provider";
 import { PasskeyProvider } from "@/context/PasskeyProvider";
 import { EmailAuthProvider } from "@/context/EmailAuthProvider";
@@ -10,17 +12,33 @@ import { WorldIdProvider } from "@/context/WorldIdProvider";
 import { AuthProvider } from "@/context/AuthProvider";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 import { Toaster } from "@/components/Toaster";
+import { WebVitals } from "@/components/WebVitals";
 
 const dmSans = DM_Sans({
     subsets: ["latin"],
     variable: "--font-dm-sans",
     display: "swap",
+    // PERF: primary UI font — preload so it's available during LCP and we
+    // avoid the "flash of unstyled text" on first navigation.
+    preload: true,
+    fallback: [
+        "system-ui",
+        "-apple-system",
+        "Segoe UI",
+        "Roboto",
+        "sans-serif",
+    ],
+    adjustFontFallback: true,
 });
 
 const jetbrainsMono = JetBrains_Mono({
     subsets: ["latin"],
     variable: "--font-jetbrains",
     display: "swap",
+    // PERF: mono is only used in a few admin/dev views — don't eat the LCP
+    // budget preloading it.
+    preload: false,
+    fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
 });
 
 export const metadata: Metadata = {
@@ -276,6 +294,10 @@ export default function RootLayout({
                     Skip to main content
                 </a>
                 
+                {/* OBSERVABILITY: report Core Web Vitals + Next-specific
+                    metrics so we can see real-user LCP/INP/CLS by route. */}
+                <WebVitals />
+
                 {/* SRE-012 FIX: Root Error Boundary catches unhandled errors */}
                 <RootErrorBoundary>
                     <Web3Provider>

@@ -344,7 +344,12 @@ export function useWaku(userAddress: Address | null) {
     // Close node
     const close = useCallback(() => {
         if (nodeRef.current) {
-            nodeRef.current.stop();
+            try {
+                nodeRef.current.stop();
+            } catch (e) {
+                // Node was already stopped or never started — ignore.
+                console.warn("[Waku] node.stop() threw on close:", e);
+            }
             nodeRef.current = null;
             setState({
                 isInitialized: false,
@@ -352,6 +357,22 @@ export function useWaku(userAddress: Address | null) {
                 error: null,
             });
         }
+    }, []);
+
+    // MEMORY FIX: stop the light-node and release peer connections/listeners
+    // when the consuming component unmounts. Without this, the node stays
+    // alive and keeps dialling peers even after logout/navigation.
+    useEffect(() => {
+        return () => {
+            if (nodeRef.current) {
+                try {
+                    nodeRef.current.stop();
+                } catch {
+                    /* already stopped */
+                }
+                nodeRef.current = null;
+            }
+        };
     }, []);
 
     return {
