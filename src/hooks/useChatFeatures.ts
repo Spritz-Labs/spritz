@@ -216,9 +216,14 @@ export function useReadReceipts(
                     reader_address: userAddress.toLowerCase(),
                 }));
 
-                await supabase
+                const { error } = await supabase
                     .from("shout_read_receipts")
-                    .upsert(receipts, { onConflict: "message_id,reader_address" });
+                    .upsert(receipts, {
+                        onConflict: "message_id,reader_address",
+                    });
+                if (error) {
+                    console.warn("[ReadReceipts] mark read upsert:", error.message);
+                }
             } catch (err) {
                 console.error("[ReadReceipts] Error marking read:", err);
             }

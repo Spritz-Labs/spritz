@@ -2283,49 +2283,58 @@ export function WakuProvider({
 
                     const senderLower = msg.sender_address.toLowerCase();
 
-                    // Only increment unread if this chat is not currently open
-                    // AND not in the grace period (recently closed / recently read)
-                    const isChatOpen = activeChatPeerRef.current === senderLower;
-                    const isRecentlyRead = recentlyReadPeersRef.current.has(senderLower);
+                    // Re-check active chat after the current stack clears. Realtime can
+                    // deliver INSERT in the same tick the user opens the DM; without this
+                    // we sometimes increment unread while the chat is already open.
+                    queueMicrotask(() => {
+                        const isChatOpen =
+                            activeChatPeerRef.current === senderLower;
+                        const isRecentlyRead =
+                            recentlyReadPeersRef.current.has(senderLower);
 
-                    if (!isChatOpen && !isRecentlyRead) {
-                        log.debug(
-                            "[Waku] Incrementing unread for:",
-                            senderLower
-                        );
-                        setUnreadCounts((prev) => ({
-                            ...prev,
-                            [senderLower]: (prev[senderLower] || 0) + 1,
-                        }));
+                        if (!isChatOpen && !isRecentlyRead) {
+                            log.debug(
+                                "[Waku] Incrementing unread for:",
+                                senderLower
+                            );
+                            setUnreadCounts((prev) => ({
+                                ...prev,
+                                [senderLower]: (prev[senderLower] || 0) + 1,
+                            }));
 
-                        // Trigger notification callbacks
-                        // For plaintext messages (welcome/broadcast/system), include real content
-                        const isPlaintext = ["welcome", "system", "broadcast"].includes(msg.message_type);
-                        const callbackContent = isPlaintext
-                            ? msg.encrypted_content
-                            : "New message received";
+                            const isPlaintext = [
+                                "welcome",
+                                "system",
+                                "broadcast",
+                            ].includes(msg.message_type);
+                            const callbackContent = isPlaintext
+                                ? msg.encrypted_content
+                                : "New message received";
 
-                        newMessageCallbacksRef.current.forEach((callback) => {
-                            try {
-                                callback({
-                                    senderAddress: msg.sender_address,
-                                    content: callbackContent,
-                                    conversationId: msg.conversation_id,
-                                });
-                            } catch (err) {
-                                log.error(
-                                    "[Waku] Notification callback error:",
-                                    err
-                                );
-                            }
-                        });
-                    } else {
-                        log.debug(
-                            "[Waku] Chat is open or recently read, skipping unread increment for:",
-                            senderLower,
-                            isChatOpen ? "(open)" : "(recently read)"
-                        );
-                    }
+                            newMessageCallbacksRef.current.forEach(
+                                (callback) => {
+                                    try {
+                                        callback({
+                                            senderAddress: msg.sender_address,
+                                            content: callbackContent,
+                                            conversationId: msg.conversation_id,
+                                        });
+                                    } catch (err) {
+                                        log.error(
+                                            "[Waku] Notification callback error:",
+                                            err
+                                        );
+                                    }
+                                },
+                            );
+                        } else {
+                            log.debug(
+                                "[Waku] Chat is open or recently read, skipping unread increment for:",
+                                senderLower,
+                                isChatOpen ? "(open)" : "(recently read)"
+                            );
+                        }
+                    });
                 }
             )
             .subscribe((status) => {

@@ -1095,6 +1095,43 @@ export function ChatModal({
         peerMessageIdsRef.current = peerMsgIds;
     }, [messages, userAddress]);
 
+    // When peer messages arrive or change while the modal is open, flush read state
+    // quickly (don't wait for the 5s interval). Debounced to avoid upsert storms.
+    const readFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        if (!isOpen || !userAddress) return;
+
+        if (readFlushTimerRef.current) clearTimeout(readFlushTimerRef.current);
+        readFlushTimerRef.current = setTimeout(() => {
+            readFlushTimerRef.current = null;
+            const peerMsgIds = messages
+                .filter(
+                    (m) =>
+                        m.senderAddress.toLowerCase() !==
+                        userAddress.toLowerCase()
+                )
+                .map((m) => m.id);
+            if (peerMsgIds.length > 0) {
+                void markMessagesRead(peerMsgIds);
+            }
+            markAsRead(peerAddress);
+        }, 200);
+
+        return () => {
+            if (readFlushTimerRef.current) {
+                clearTimeout(readFlushTimerRef.current);
+                readFlushTimerRef.current = null;
+            }
+        };
+    }, [
+        isOpen,
+        messages,
+        userAddress,
+        peerAddress,
+        markMessagesRead,
+        markAsRead,
+    ]);
+
     // Periodically check read receipts for all sent messages while chat is open
     useEffect(() => {
         if (!isOpen) return;
@@ -1136,16 +1173,18 @@ export function ChatModal({
                     peerMsgIds.length,
                     "peer messages as read"
                 );
-                markMessagesRead(peerMsgIds);
-                // Also clear unread count in Waku provider
-                markAsRead(peerAddress);
+                void markMessagesRead(peerMsgIds);
             }
+            // Always refresh DM read cursor (badge + shout_read_receipts_dm), even
+            // when there are no peer rows yet or only outbound messages — the old
+            // code skipped this when peerMsgIds was empty, so unreads could stick.
+            markAsRead(peerAddress);
         };
 
-        // Mark as read immediately when chat opens
+        // Mark as read shortly after open (lets message list hydrate first)
         const initialTimeout = setTimeout(markAllAsRead, 100);
 
-        // Then periodically ensure they stay marked as read
+        // Periodic backstop: Supabase upserts can fail transiently; re-assert read state
         const interval = setInterval(markAllAsRead, 5000);
 
         return () => {
