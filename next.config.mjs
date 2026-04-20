@@ -162,8 +162,8 @@ const nextConfig = {
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                             // Images: self + data URIs + external sources
                             "img-src 'self' data: blob: https: http:",
-                            // Fonts: self + Google Fonts
-                            "font-src 'self' https://fonts.gstatic.com data: blob:",
+                            // Fonts: self + Google Fonts + Reown (WalletConnect AppKit pulls KHTeka from fonts.reown.com)
+                            "font-src 'self' https://fonts.gstatic.com https://fonts.reown.com data: blob:",
                             // Connect: APIs, WebSockets, Waku, etc.
                             "connect-src 'self' https: wss: ws: blob: https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com",
                             // Media: self + blob for video/audio
