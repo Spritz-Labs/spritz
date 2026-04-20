@@ -369,6 +369,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // Compute Spritz platform fee (1% = 100 bps) on paid sessions
+        const PLATFORM_FEE_BPS = 100;
+        const isPaidSession = (isPaid || priceCents > 0) && requiresPayment;
+        const platformFeeCents = isPaidSession
+            ? Math.ceil((priceCents * PLATFORM_FEE_BPS) / 10_000)
+            : 0;
+
         // Create scheduled call record (invite_token required for join link and email)
         const inviteToken = generateInviteToken();
         const { data: scheduledCall, error: createError } = await supabase
@@ -399,6 +406,8 @@ export async function POST(request: NextRequest) {
                 is_paid: isPaid || priceCents > 0,
                 timezone: recipientTimezone,
                 invite_token: inviteToken,
+                platform_fee_cents: platformFeeCents,
+                platform_fee_status: platformFeeCents > 0 ? "pending" : "waived",
             })
             .select()
             .single();

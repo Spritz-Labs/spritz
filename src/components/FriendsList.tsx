@@ -1020,12 +1020,21 @@ export function FriendsList({
         };
 
         const fetchAllData = async () => {
+            // Fetch friend phone numbers via server-side API (PII table; anon RLS blocks direct access)
+            const phoneFetch = fetch("/api/phone/friends", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ addresses }),
+            })
+                .then((r) => (r.ok ? r.json() : { phones: {} }))
+                .catch(() => ({ phones: {} }));
+
             // Run ALL queries in parallel - much faster than sequential
             // Each query is automatically batched if >100 addresses
             const [
                 userSettingsResult,
                 socialsResult,
-                phonesResult,
+                phonesApiResult,
                 favoritesResult,
             ] = await Promise.all([
                 // Combined query for statuses + online + scheduling + avatar preferences + public profile
@@ -1044,14 +1053,8 @@ export function FriendsList({
                         .select("*")
                         .in("wallet_address", batch)
                 ),
-                // Phone numbers
-                batchQuery((batch) =>
-                    client
-                        .from("shout_phone_numbers")
-                        .select("wallet_address, phone_number")
-                        .in("wallet_address", batch)
-                        .eq("verified", true)
-                ),
+                // Phone numbers (via authenticated API — not direct Supabase)
+                phoneFetch,
                 // Favorites (if user is logged in)
                 userAddress
                     ? client
@@ -1121,13 +1124,9 @@ export function FriendsList({
                 setFriendSocials(socials);
             }
 
-            // Process phones
-            if (phonesResult.data) {
-                const phones: Record<string, string> = {};
-                phonesResult.data.forEach((row) => {
-                    phones[row.wallet_address] = row.phone_number;
-                });
-                setFriendPhones(phones);
+            // Process phones (from authenticated API response)
+            if (phonesApiResult?.phones) {
+                setFriendPhones(phonesApiResult.phones);
             }
 
             // Process favorites (sync with Supabase, update localStorage)

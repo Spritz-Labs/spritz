@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, isSupabaseConfigured } from "@/config/supabase";
+import { isSupabaseConfigured } from "@/config/supabase";
 
 /**
  * usePhoneVerification
@@ -202,39 +202,15 @@ export function usePhoneVerification(userAddress: string | null) {
 
     const lookupByPhone = useCallback(
         async (phone: string): Promise<PhoneData | null> => {
-            if (!isSupabaseConfigured || !supabase) return null;
-
-            const client = supabase;
-
-            let normalized = phone.replace(/[^\d+]/g, "");
-            if (!normalized.startsWith("+")) {
-                if (normalized.length === 10) {
-                    normalized = "+1" + normalized;
-                } else if (
-                    normalized.length === 11 &&
-                    normalized.startsWith("1")
-                ) {
-                    normalized = "+" + normalized;
-                }
-            }
-
             try {
-                const { data, error: lookupError } = await client
-                    .from("shout_phone_numbers")
-                    .select("*")
-                    .eq("phone_number", normalized)
-                    .eq("verified", true)
-                    .maybeSingle();
-
-                if (lookupError) {
-                    console.error(
-                        "[usePhoneVerification] Lookup error:",
-                        lookupError
-                    );
-                    return null;
-                }
-
-                return data;
+                const res = await fetch("/api/phone/lookup", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ phone }),
+                });
+                if (!res.ok) return null;
+                const { data } = await res.json();
+                return data ?? null;
             } catch (err) {
                 console.error("[usePhoneVerification] Lookup error:", err);
                 return null;
