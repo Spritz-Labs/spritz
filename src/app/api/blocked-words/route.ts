@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase =
-    supabaseUrl && supabaseServiceKey
-        ? createClient(supabaseUrl, supabaseServiceKey)
-        : null;
+import { supabaseService as supabase } from "@/lib/supabaseServer";
 
 // Error codes that indicate the table/relation is missing or inaccessible.
 // In all of these cases we treat blocked-words as "not configured" and return [].
@@ -24,6 +16,17 @@ function isMissingTableError(err: unknown): boolean {
         message.includes("does not exist") ||
         message.includes("not found") ||
         message.includes("permission denied")
+    );
+}
+
+function featureUnavailableResponse() {
+    return NextResponse.json(
+        {
+            error:
+                "Blocked words are not available: the database table is missing or not migrated. Run migration 092_blocked_words.sql (or deploy the latest Supabase migrations).",
+            code: "TABLE_MISSING",
+        },
+        { status: 503 },
     );
 }
 
@@ -216,25 +219,10 @@ export async function POST(request: NextRequest) {
                     { status: 409 },
                 );
             }
+            if (isMissingTableError(error)) {
+                return featureUnavailableResponse();
+            }
             console.error("[BlockedWords] Insert error:", error);
-            console.error(
-                "[BlockedWords] Insert error details:",
-                JSON.stringify({
-                    code: error.code,
-                    message: error.message,
-                    details: error.details,
-                    hint: error.hint,
-                    insertPayload: {
-                        word: word.trim().toLowerCase(),
-                        scope: scope || "global",
-                        chat_type: scope === "room" ? chatType : null,
-                        chat_id: scope === "room" ? chatId || null : null,
-                        action: action || "block",
-                        is_regex: isRegex || false,
-                        added_by: userAddress,
-                    },
-                }),
-            );
             return NextResponse.json(
                 {
                     error: "Failed to add blocked word",
@@ -286,11 +274,22 @@ export async function DELETE(request: NextRequest) {
         const userAddress = session.userAddress.toLowerCase();
 
         // Get the word to check permissions
-        const { data: wordData } = await supabase
+        const { data: wordData, error: selectErr } = await supabase
             .from("shout_blocked_words")
             .select("*")
             .eq("id", id)
             .single();
+
+        if (selectErr) {
+            if (isMissingTableError(selectErr)) {
+                return featureUnavailableResponse();
+            }
+            console.error("[BlockedWords] DELETE select error:", selectErr);
+            return NextResponse.json(
+                { error: "Failed to load blocked word" },
+                { status: 500 },
+            );
+        }
 
         if (!wordData) {
             return NextResponse.json(
@@ -319,6 +318,9 @@ export async function DELETE(request: NextRequest) {
             .eq("id", id);
 
         if (error) {
+            if (isMissingTableError(error)) {
+                return featureUnavailableResponse();
+            }
             console.error("[BlockedWords] Delete error:", error);
             return NextResponse.json(
                 { error: "Failed to remove blocked word" },

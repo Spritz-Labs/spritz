@@ -483,9 +483,21 @@ export function useBlockedWords(
 
                 if (!res.ok) {
                     const data = await res.json();
-                    const debugInfo = data.debug ? `\n\nDebug: ${data.debug.code} - ${data.debug.message}${data.debug.hint ? ` (${data.debug.hint})` : ''}` : '';
+                    if (data.code === "TABLE_MISSING") {
+                        console.warn("[useBlockedWords]", data.error);
+                        alert(
+                            data.error ||
+                                "Blocked words need the shout_blocked_words table. Apply Supabase migrations (092_blocked_words.sql).",
+                        );
+                        return false;
+                    }
+                    const debugInfo = data.debug
+                        ? `\n\nDebug: ${data.debug.code} - ${data.debug.message}${data.debug.hint ? ` (${data.debug.hint})` : ""}`
+                        : "";
                     console.error("[useBlockedWords] API error:", data);
-                    alert((data.error || "Failed to add blocked word") + debugInfo);
+                    alert(
+                        (data.error || "Failed to add blocked word") + debugInfo,
+                    );
                     return false;
                 }
 
