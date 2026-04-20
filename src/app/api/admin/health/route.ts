@@ -452,11 +452,16 @@ const PROBES: ProbeDef[] = [
         run: () => {
             const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
             if (!appId) return null;
-            // Agora's public HTTP DNS endpoint (stable, no auth).
-            return simpleHttpProbe(
-                `https://webrtc2-ap-web-1.agoraio.agoraio.net/api/v1/geo`,
-                { treatStatus: (s) => s < 500, degradedMs: 3000 },
-            );
+            // Agora's WebRTC gateway hostnames (webrtc2-ap-web-*.agoraio.net)
+            // are chosen dynamically by their SDK and do NOT resolve from a
+            // generic DNS lookup — probing them always fails. Use the public
+            // REST API root instead; it returns 404 for GET / which is a
+            // good liveness signal (the Cloudflare edge is up and the
+            // origin is responding).
+            return simpleHttpProbe(`https://api.agora.io/`, {
+                treatStatus: (s) => s < 500,
+                degradedMs: 3000,
+            });
         },
     },
     {
@@ -464,14 +469,31 @@ const PROBES: ProbeDef[] = [
         name: "Huddle01 (rooms)",
         category: "Media",
         critical: false,
+        docUrl: "https://docs.huddle01.com",
         run: () => {
             const key = process.env.HUDDLE01_API_KEY;
             if (!key) return null;
-            return simpleHttpProbe("https://api.huddle01.com/api/v1/healthCheck", {
-                headers: { "x-api-key": key },
-                // If their health endpoint 404s we fall back to checking base domain.
-                treatStatus: (s) => s < 500,
-            });
+            // /api/v1/healthCheck was removed and now returns Cloudflare 521
+            // (origin has no route). Probe the v2 create-room endpoint with
+            // an obviously-invalid key: a 401 confirms the service is alive
+            // and rejecting auth — same pattern as /api/huddle01/health.
+            // Never uses the real key so no rooms are actually created.
+            return simpleHttpProbe(
+                "https://api.huddle01.com/api/v2/sdk/rooms/create-room",
+                {
+                    method: "POST",
+                    headers: {
+                        "content-type": "application/json",
+                        "x-api-key": "spritz-health-probe-invalid-key",
+                    },
+                    body: JSON.stringify({
+                        roomLocked: false,
+                        metadata: { title: "probe" },
+                    }),
+                    treatStatus: (s) => s === 401 || s === 403 || s < 500,
+                    timeoutMs: 8000,
+                },
+            );
         },
     },
     {
@@ -479,11 +501,21 @@ const PROBES: ProbeDef[] = [
         name: "Livepeer (streaming)",
         category: "Media",
         critical: false,
+        docUrl: "https://livepeer.studio",
         run: () => {
             const key = process.env.LIVEPEER_API_KEY;
             if (!key) return null;
-            return simpleHttpProbe("https://livepeer.studio/api/stream?limit=1", {
+            // /api/stream?limit=1 was timing out at 5s for accounts with
+            // large stream histories because Livepeer paginates from the
+            // beginning. /api/user/me is a constant-time auth check —
+            // always fast. A 401 here would mean our key is invalid; a
+            // 200 means we're healthy. Anything < 500 still indicates the
+            // service itself is reachable.
+            return simpleHttpProbe("https://livepeer.studio/api/user/me", {
                 headers: { authorization: `Bearer ${key}` },
+                treatStatus: (s) => s < 500,
+                timeoutMs: 10000,
+                degradedMs: 3000,
             });
         },
     },
@@ -543,12 +575,39 @@ const PROBES: ProbeDef[] = [
         name: "Resend (email)",
         category: "Communications",
         critical: false,
+        docUrl: "https://resend.com/api-keys",
         run: () => {
             const key = process.env.RESEND_API_KEY;
             if (!key) return null;
-            return simpleHttpProbe("https://api.resend.com/domains", {
-                headers: { authorization: `Bearer ${key}` },
-            });
+            return async () => {
+                const res = await timedFetch("https://api.resend.com/domains", {
+                    headers: { authorization: `Bearer ${key}` },
+                    timeoutMs: 5000,
+                });
+                // 401 here means the service is reachable but our API key
+                // is invalid/revoked — this is actionable (rotate the key),
+                // so we want a specific message instead of the generic
+                // "HTTP 401" that simpleHttpProbe would produce.
+                if (res.status === 401) {
+                    return {
+                        status: "down" as Status,
+                        latencyMs: res.latencyMs,
+                        httpStatus: 401,
+                        message:
+                            "API key rejected — RESEND_API_KEY is invalid or revoked. Rotate at resend.com/api-keys.",
+                        probedUrl: "https://api.resend.com/domains",
+                    };
+                }
+                return {
+                    status: classify(res.ok, res.latencyMs, res.status),
+                    latencyMs: res.latencyMs,
+                    httpStatus: res.status,
+                    message: res.ok
+                        ? `HTTP ${res.status}`
+                        : res.error || `HTTP ${res.status}`,
+                    probedUrl: "https://api.resend.com/domains",
+                };
+            };
         },
     },
 
