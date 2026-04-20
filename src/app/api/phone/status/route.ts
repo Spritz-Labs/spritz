@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
 import { logAccess } from "@/lib/auditLog";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { supabaseService } from "@/lib/supabaseServer";
+import {
+    readPhoneStatusCache,
+    writePhoneStatusCache,
+} from "@/lib/phoneStatusCache";
 
 export async function GET(request: NextRequest) {
     const session = await requireAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const userAddress = session.userAddress.toLowerCase();
 
     logAccess(request, "phone.status.read", {
@@ -18,18 +18,47 @@ export async function GET(request: NextRequest) {
         resourceTable: "shout_phone_numbers",
     });
 
-    const { data, error } = await supabase
+    const cached = readPhoneStatusCache(userAddress);
+    if (cached) {
+        return NextResponse.json(
+            { phoneNumber: cached.phoneNumber, verified: cached.verified },
+            {
+                headers: {
+                    "Cache-Control": "private, max-age=30",
+                    "X-Cache": "HIT",
+                },
+            }
+        );
+    }
+
+    if (!supabaseService) {
+        return NextResponse.json({ phoneNumber: null, verified: false });
+    }
+
+    const { data, error } = await supabaseService
         .from("shout_phone_numbers")
         .select("phone_number, verified")
         .eq("wallet_address", userAddress)
         .maybeSingle();
 
     if (error) {
-        return NextResponse.json({ error: "Failed to fetch phone status" }, { status: 500 });
+        return NextResponse.json(
+            { error: "Failed to fetch phone status" },
+            { status: 500 }
+        );
     }
 
-    return NextResponse.json({
-        phoneNumber: data?.phone_number ?? null,
-        verified: data?.verified ?? false,
-    });
+    const phoneNumber = data?.phone_number ?? null;
+    const verified = data?.verified ?? false;
+    writePhoneStatusCache(userAddress, phoneNumber, verified);
+
+    return NextResponse.json(
+        { phoneNumber, verified },
+        {
+            headers: {
+                "Cache-Control": "private, max-age=30",
+                "X-Cache": "MISS",
+            },
+        }
+    );
 }

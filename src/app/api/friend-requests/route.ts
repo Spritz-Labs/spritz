@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
 import { logAccess } from "@/lib/auditLog";
 import { normalizeAddress } from "@/utils/address";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { supabaseService } from "@/lib/supabaseServer";
 
 /**
  * GET /api/friend-requests — List incoming and/or outgoing friend requests.
@@ -15,7 +12,10 @@ export async function GET(request: NextRequest) {
     const session = await requireAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (!supabaseService) {
+        return NextResponse.json({ incoming: [], outgoing: [] });
+    }
+    const supabase = supabaseService;
     const userAddress = normalizeAddress(session.userAddress);
     const { searchParams } = new URL(request.url);
     const type = searchParams.get("type") ?? "all";
@@ -49,10 +49,13 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch friend requests" }, { status: 500 });
     }
 
-    return NextResponse.json({
-        incoming: incoming.data ?? [],
-        outgoing: outgoing.data ?? [],
-    });
+    return NextResponse.json(
+        {
+            incoming: incoming.data ?? [],
+            outgoing: outgoing.data ?? [],
+        },
+        { headers: { "Cache-Control": "private, max-age=10" } }
+    );
 }
 
 /**
@@ -71,7 +74,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid address" }, { status: 400 });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (!supabaseService) {
+        return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+    }
+    const supabase = supabaseService;
     const fromAddress = normalizeAddress(session.userAddress);
     const normalizedTo = normalizeAddress(toAddress);
 

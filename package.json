@@ -13,6 +13,7 @@
         "cleanup-split-events": "npx tsx scripts/cleanup-split-multiday-events.ts",
         "vercel": "vercel --prod",
         "vercel:preview": "vercel",
+        "rotate:html": "node scripts/build-rotate-html.mjs",
         "contracts:build": "cd contracts && forge build",
         "contracts:deploy:ens-resolver": "bash -lc 'cd contracts && set -a && [ -f .env ] && source .env && set +a && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url \"${MAINNET_RPC_URL:-https://eth.drpc.org/}\" --broadcast --private-key \"$ETH_PRIVATE_KEY\" -vvvv'",
         "contracts:deploy:ens-resolver:drpc": "bash -lc 'cd contracts && set -a && [ -f .env ] && source .env && set +a && forge script script/DeploySpritzENSResolver.s.sol:DeploySpritzENSResolver --rpc-url drpc --broadcast --private-key \"$ETH_PRIVATE_KEY\" -vvvv'",
@@ -101,6 +102,7 @@
         "@types/web-push": "^3.6.4",
         "eslint": "^9",
         "eslint-config-next": "16.0.7",
+        "marked": "^18.0.2",
         "tailwindcss": "^4",
         "typescript": "^5",
         "vercel": "^50.6.1"

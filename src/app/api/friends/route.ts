@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
 import { logAccess } from "@/lib/auditLog";
 import { normalizeAddress } from "@/utils/address";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { supabaseService } from "@/lib/supabaseServer";
 
 /**
  * GET /api/friends — List friends for the authenticated user.
@@ -14,7 +11,10 @@ export async function GET(request: NextRequest) {
     const session = await requireAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (!supabaseService) {
+        return NextResponse.json({ friends: [] });
+    }
+
     const userAddress = normalizeAddress(session.userAddress);
 
     logAccess(request, "friends.list", {
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
         resourceTable: "shout_friends",
     });
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseService
         .from("shout_friends")
         .select("id, user_address, friend_address, nickname, created_at")
         .eq("user_address", userAddress)
@@ -32,5 +32,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch friends" }, { status: 500 });
     }
 
-    return NextResponse.json({ friends: data ?? [] });
+    return NextResponse.json(
+        { friends: data ?? [] },
+        { headers: { "Cache-Control": "private, max-age=10" } }
+    );
 }

@@ -65,6 +65,12 @@ const NAV_ITEMS = [
         icon: "🔗",
         mobileLabel: "ENS",
     },
+    {
+        href: "/admin/performance",
+        label: "Performance",
+        icon: "📈",
+        mobileLabel: "Perf",
+    },
 ];
 
 export function AdminLayout({

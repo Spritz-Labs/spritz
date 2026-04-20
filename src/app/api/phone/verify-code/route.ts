@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { supabaseService } from "@/lib/supabaseServer";
+import { invalidatePhoneStatusCache } from "@/lib/phoneStatusCache";
 
-// Lazy initialization of Supabase client
-let supabase: SupabaseClient | null = null;
-
-function getSupabase(): SupabaseClient | null {
-  if (supabase) return supabase;
-  
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return null;
-  }
-  
-  supabase = createClient(supabaseUrl, supabaseServiceKey);
-  return supabase;
+function getSupabase() {
+  return supabaseService;
 }
 
 // Twilio credentials
@@ -137,6 +125,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to verify phone number" }, { status: 500 });
       }
 
+      invalidatePhoneStatusCache(walletAddress);
+
       // Award points for phone verification
       try {
         await db.rpc("award_points", {
@@ -185,6 +175,8 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    invalidatePhoneStatusCache(walletAddress);
 
     // Award points for phone verification
     try {

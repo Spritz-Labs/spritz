@@ -178,6 +178,8 @@ export function EncryptedImage({
                 <img
                     src={decryptedUrl}
                     alt="Encrypted image"
+                    loading="lazy"
+                    decoding="async"
                     className="max-w-[200px] sm:max-w-[280px] max-h-[300px] object-contain rounded-lg"
                     onLoad={handleImageLoad}
                     onError={handleImageError}

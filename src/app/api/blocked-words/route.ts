@@ -10,6 +10,23 @@ const supabase =
         ? createClient(supabaseUrl, supabaseServiceKey)
         : null;
 
+// Error codes that indicate the table/relation is missing or inaccessible.
+// In all of these cases we treat blocked-words as "not configured" and return [].
+function isMissingTableError(err: unknown): boolean {
+    if (!err || typeof err !== "object") return false;
+    const code = (err as { code?: string }).code;
+    const message = (err as { message?: string }).message || "";
+    return (
+        code === "PGRST106" ||
+        code === "PGRST205" ||
+        code === "42P01" ||
+        code === "42501" || // permission denied for table
+        message.includes("does not exist") ||
+        message.includes("not found") ||
+        message.includes("permission denied")
+    );
+}
+
 export type BlockedWord = {
     id: string;
     word: string;
@@ -49,15 +66,11 @@ export async function GET(request: NextRequest) {
                 .eq("is_active", true)
                 .order("added_at", { ascending: false });
             if (globalErr) {
-                const code = (globalErr as { code?: string }).code;
-                if (code === "PGRST106" || code === "42P01") {
+                if (isMissingTableError(globalErr)) {
                     return NextResponse.json({ words: [] });
                 }
                 console.error("[BlockedWords] Fetch global error:", globalErr);
-                return NextResponse.json(
-                    { error: "Failed to fetch blocked words" },
-                    { status: 500 },
-                );
+                return NextResponse.json({ words: [] });
             }
 
             const roomQuery = supabase
@@ -74,12 +87,15 @@ export async function GET(request: NextRequest) {
             }
             const { data: roomWords, error: roomErr } = await roomQuery;
             if (roomErr) {
-                const code = (roomErr as { code?: string }).code;
-                if (code === "PGRST106" || code === "42P01") {
+                if (isMissingTableError(roomErr)) {
                     return NextResponse.json({
                         words: [...(globalWords || [])],
                     });
                 }
+                console.error("[BlockedWords] Fetch room error:", roomErr);
+                return NextResponse.json({
+                    words: [...(globalWords || [])],
+                });
             }
 
             return NextResponse.json({
@@ -108,22 +124,12 @@ export async function GET(request: NextRequest) {
         const { data, error } = await query;
 
         if (error) {
-            console.error("[BlockedWords] Fetch error:", error);
-            // Table may not exist yet (PGRST106 / 42P01) - return empty list so UI doesn't 500
-            const code = (error as { code?: string }).code;
-            if (
-                code === "PGRST106" ||
-                code === "42P01" ||
-                (error as { message?: string }).message?.includes(
-                    "does not exist",
-                )
-            ) {
+            if (isMissingTableError(error)) {
                 return NextResponse.json({ words: [] });
             }
-            return NextResponse.json(
-                { error: "Failed to fetch blocked words" },
-                { status: 500 },
-            );
+            console.error("[BlockedWords] Fetch error:", error);
+            // Be defensive: never 500 the client for this feature; UI treats empty as "no rules".
+            return NextResponse.json({ words: [] });
         }
 
         return NextResponse.json({ words: data || [] });

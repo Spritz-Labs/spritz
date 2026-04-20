@@ -114,17 +114,42 @@ export function usePushNotifications(userAddress: string | null) {
         throw new Error(`Service worker registration failed after ${MAX_SW_ATTEMPTS} attempts`);
     }, []);
 
-    // Wait for service worker to be active
+    // Wait for service worker to be active. If a new SW is stuck in
+    // "installed"/"waiting" because old clients are still controlling the page,
+    // post SKIP_WAITING so it transitions to "activated".
     const waitForActive = useCallback(async (
         reg: ServiceWorkerRegistration,
-        maxAttempts = 15
+        maxAttempts = 20
     ): Promise<void> => {
+        let skipWaitingSent = false;
         for (let i = 0; i < maxAttempts; i++) {
-            const sw = reg.active || reg.waiting || reg.installing;
             if (reg.active && reg.active.state === "activated") {
                 console.log("[Push] Service worker is active");
                 return;
             }
+
+            // Nudge a waiting SW to activate immediately.
+            if (reg.waiting && !skipWaitingSent) {
+                console.log("[Push] SW is waiting; posting SKIP_WAITING");
+                try {
+                    reg.waiting.postMessage({ type: "SKIP_WAITING" });
+                } catch (err) {
+                    console.warn("[Push] SKIP_WAITING post failed:", err);
+                }
+                skipWaitingSent = true;
+            }
+
+            // If SW is in "installed" state (treated as waiting in some browsers),
+            // also poke it.
+            const installing = reg.installing;
+            if (installing && installing.state === "installed" && !skipWaitingSent) {
+                try {
+                    installing.postMessage({ type: "SKIP_WAITING" });
+                } catch {}
+                skipWaitingSent = true;
+            }
+
+            const sw = reg.active || reg.waiting || reg.installing;
             console.log(
                 `[Push] Waiting for SW to activate... attempt ${i + 1}/${maxAttempts}`,
                 sw?.state

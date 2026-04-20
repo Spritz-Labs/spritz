@@ -35,13 +35,15 @@ export function useEthPrice() {
         try {
             // Try our API first (might have its own caching)
             const response = await fetch("/api/prices?tokens=eth");
-            
+
             if (!response.ok) {
-                throw new Error("Failed to fetch price");
+                throw new Error(
+                    `Price API returned ${response.status}`,
+                );
             }
 
             const data = await response.json();
-            const ethPrice = data.prices?.eth || data.eth;
+            const ethPrice = data.prices?.eth ?? data.eth;
 
             if (typeof ethPrice === "number" && ethPrice > 0) {
                 priceCache = { price: ethPrice, timestamp: now };
@@ -51,16 +53,18 @@ export function useEthPrice() {
 
             throw new Error("Invalid price data");
         } catch (err) {
-            console.error("[useEthPrice] Error fetching price:", err);
-            setError(err instanceof Error ? err.message : "Failed to fetch price");
-            
-            // Fallback to cached price if available
+            const msg = err instanceof Error ? err.message : "Failed to fetch price";
+            setError(msg);
+
+            // Fallback to cached price if available — no need to log an error, we recovered.
             if (priceCache) {
+                console.warn("[useEthPrice] Using cached price after fetch error:", msg);
                 setPrice(priceCache.price);
                 return priceCache.price;
             }
-            
-            // Last resort fallback (only used if no cached price)
+
+            // Last resort fallback (only used if no cached price) — downgrade to warn.
+            console.warn("[useEthPrice] Price fetch failed, using fallback:", msg);
             const fallbackPrice = 3000;
             setPrice(fallbackPrice);
             return fallbackPrice;

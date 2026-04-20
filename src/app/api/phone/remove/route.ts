@@ -1,21 +1,10 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { isAddress } from "viem";
-
-// Initialize Supabase client for server-side (service_role)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const supabase =
-  supabaseUrl && supabaseServiceRoleKey
-    ? createClient(supabaseUrl, supabaseServiceRoleKey)
-    : null;
+import { supabaseService } from "@/lib/supabaseServer";
+import { invalidatePhoneStatusCache } from "@/lib/phoneStatusCache";
 
 export async function POST(req: Request) {
-  console.log("[remove-phone] Request received.");
-
-  // Check Supabase configuration
-  if (!supabase) {
+  if (!supabaseService) {
     console.error("[remove-phone] Supabase is not configured.");
     return NextResponse.json(
       { error: "Supabase not configured. Missing URL or Service Role Key." },
@@ -32,8 +21,7 @@ export async function POST(req: Request) {
 
     const normalizedWalletAddress = walletAddress.toLowerCase();
 
-    // Delete the phone number record
-    const { error: deleteError } = await supabase
+    const { error: deleteError } = await supabaseService
       .from("shout_phone_numbers")
       .delete()
       .eq("wallet_address", normalizedWalletAddress);
@@ -43,23 +31,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Failed to remove phone number" }, { status: 500 });
     }
 
-    console.log("[remove-phone] Phone number removed for:", normalizedWalletAddress);
+    invalidatePhoneStatusCache(normalizedWalletAddress);
+
     return NextResponse.json({ message: "Phone number removed successfully" }, { status: 200 });
   } catch (error: unknown) {
     console.error("[remove-phone] Error:", error);
     return NextResponse.json({ error: "Failed to remove phone number" }, { status: 500 });
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

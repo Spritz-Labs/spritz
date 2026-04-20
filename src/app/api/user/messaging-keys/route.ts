@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { requireAuth } from "@/lib/session";
 import { logAccess } from "@/lib/auditLog";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { supabaseService } from "@/lib/supabaseServer";
 
 /**
  * GET /api/user/messaging-keys — Return the authenticated user's encrypted messaging keys.
@@ -14,7 +11,13 @@ export async function GET(request: NextRequest) {
     const session = await requireAuth(request);
     if (session instanceof NextResponse) return session;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    if (!supabaseService) {
+        return NextResponse.json(
+            { error: "Database not configured" },
+            { status: 503 }
+        );
+    }
+
     const userAddress = session.userAddress.toLowerCase();
 
     logAccess(request, "messaging_keys.read", {
@@ -22,7 +25,7 @@ export async function GET(request: NextRequest) {
         resourceTable: "shout_user_settings",
     });
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseService
         .from("shout_user_settings")
         .select("messaging_public_key, messaging_private_key_encrypted, messaging_backup_encrypted, messaging_backup_salt, messaging_backup_enabled")
         .eq("wallet_address", userAddress)

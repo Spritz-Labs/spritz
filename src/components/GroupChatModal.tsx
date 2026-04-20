@@ -296,25 +296,34 @@ export function GroupChatModal({
             .filter((u) => u.address); // Only include members with addresses
     }, [members, userInboxId, getUserInfo, memberENSData]);
 
+    // Build a single inboxId → address map from `members` and reuse it in every
+    // per-message lookup below. Previously the code called members.find(...)
+    // inside every filter/map iteration (and again inside the render loop),
+    // making this O(messages × members) on every render.
+    const inboxIdToAddress = useMemo(() => {
+        const map = new Map<string, string | undefined>();
+        for (const mem of members) {
+            map.set(mem.inboxId, mem.addresses?.[0]);
+        }
+        return map;
+    }, [members]);
+
     // Filter out messages from blocked users
     const messages = useMemo(() => {
         return allMessages.filter((msg) => {
-            const senderAddress = members.find(
-                (mem) => mem.inboxId === msg.senderInboxId,
-            )?.addresses?.[0];
+            const senderAddress = inboxIdToAddress.get(msg.senderInboxId);
             return !senderAddress || !isUserBlocked(senderAddress);
         });
-    }, [allMessages, members, isUserBlocked]);
+    }, [allMessages, inboxIdToAddress, isUserBlocked]);
 
     const groupSenderAddressesForSns = useMemo(() => {
         const s = new Set<string>();
         for (const m of messages) {
-            const addr = members.find((mem) => mem.inboxId === m.senderInboxId)
-                ?.addresses?.[0];
+            const addr = inboxIdToAddress.get(m.senderInboxId);
             if (addr) s.add(addr);
         }
         return [...s];
-    }, [messages, members]);
+    }, [messages, inboxIdToAddress]);
 
     const solanaSnsForGroupSenders = useSolanaDisplayLabelMap(
         groupSenderAddressesForSns,
@@ -326,11 +335,10 @@ export function GroupChatModal({
                 id: m.id,
                 content: m.content,
                 senderAddress:
-                    members.find((mem) => mem.inboxId === m.senderInboxId)
-                        ?.addresses?.[0] || m.senderInboxId,
+                    inboxIdToAddress.get(m.senderInboxId) || m.senderInboxId,
                 sentAt: m.sentAt,
             })),
-        [messages, members],
+        [messages, inboxIdToAddress],
     );
 
     const handleSelectSearchMessage = useCallback((messageId: string) => {
@@ -353,6 +361,42 @@ export function GroupChatModal({
         });
         return map;
     }, [messages]);
+
+    // Precomputed "read by N other users" count per message id. Previously
+    // computed via readReceipts.filter(...) inside every own-message render,
+    // i.e. O(own_messages × receipts). This does it once per [messages,
+    // readReceipts] change using a suffix-count over sorted read-order values.
+    const readByCountByMessageId = useMemo(() => {
+        const myAddr = userAddress?.toLowerCase() || "";
+        const userMaxReadOrder = new Map<string, number>();
+        for (const r of readReceipts) {
+            const u = r.userAddress.toLowerCase();
+            if (u === myAddr) continue;
+            const order = messageOrderMap[r.lastReadMessageId];
+            if (order === undefined) continue;
+            const cur = userMaxReadOrder.get(u);
+            if (cur === undefined || order > cur) userMaxReadOrder.set(u, order);
+        }
+        const orders = [...userMaxReadOrder.values()].sort((a, b) => a - b);
+        const counts = new Map<string, number>();
+        for (const msg of messages) {
+            const msgOrder = messageOrderMap[msg.id];
+            if (msgOrder === undefined) {
+                counts.set(msg.id, 0);
+                continue;
+            }
+            // binary search for first order >= msgOrder
+            let lo = 0;
+            let hi = orders.length;
+            while (lo < hi) {
+                const mid = (lo + hi) >>> 1;
+                if (orders[mid] < msgOrder) lo = mid + 1;
+                else hi = mid;
+            }
+            counts.set(msg.id, orders.length - lo);
+        }
+        return counts;
+    }, [messages, readReceipts, userAddress, messageOrderMap]);
 
     const fetchPinned = useCallback(async () => {
         if (!group?.id) return;
@@ -532,13 +576,27 @@ export function GroupChatModal({
         }
     }, [isOpen]);
 
-    // Fetch reactions for all messages
+    // Fetch reactions for messages incrementally (only for ids not yet
+    // requested). Previously this sent the ENTIRE id list on every `messages`
+    // update, which doesn't scale in long group threads.
+    const fetchedGroupReactionIdsRef = useRef<Set<string>>(new Set());
     useEffect(() => {
-        const messageIds = messages.map((msg) => msg.id);
-        if (messageIds.length > 0) {
-            fetchMsgReactions(messageIds);
+        const seen = fetchedGroupReactionIdsRef.current;
+        const toFetch: string[] = [];
+        for (const msg of messages) {
+            if (seen.has(msg.id)) continue;
+            seen.add(msg.id);
+            toFetch.push(msg.id);
+        }
+        if (toFetch.length > 0) {
+            fetchMsgReactions(toFetch);
         }
     }, [messages, fetchMsgReactions]);
+
+    // Reset the "already fetched" cache when the group changes.
+    useEffect(() => {
+        fetchedGroupReactionIdsRef.current = new Set();
+    }, [group?.id]);
 
     // Toggle message selection for mobile tap actions
     const handleMessageTap = (messageId: string) => {
@@ -1501,11 +1559,11 @@ export function GroupChatModal({
                                                                     p.messageId,
                                                             );
                                                         const senderAddr =
-                                                            members.find(
-                                                                (m) =>
-                                                                    m.inboxId ===
-                                                                    msg?.senderInboxId,
-                                                            )?.addresses[0];
+                                                            msg
+                                                                ? inboxIdToAddress.get(
+                                                                      msg.senderInboxId,
+                                                                  )
+                                                                : undefined;
                                                         return (
                                                             <div
                                                                 key={
@@ -1746,11 +1804,9 @@ export function GroupChatModal({
                                                               )
                                                             : null;
                                                     const senderAddress =
-                                                        members.find(
-                                                            (m) =>
-                                                                m.inboxId ===
-                                                                msg.senderInboxId,
-                                                        )?.addresses[0];
+                                                        inboxIdToAddress.get(
+                                                            msg.senderInboxId,
+                                                        );
 
                                                     const senderAvatar =
                                                         senderAddress
@@ -2186,23 +2242,10 @@ export function GroupChatModal({
                                                                             {isOwn &&
                                                                                 (() => {
                                                                                     const readByCount =
-                                                                                        readReceipts.filter(
-                                                                                            (
-                                                                                                r,
-                                                                                            ) =>
-                                                                                                r.userAddress.toLowerCase() !==
-                                                                                                    userAddress.toLowerCase() &&
-                                                                                                (messageOrderMap[
-                                                                                                    r
-                                                                                                        .lastReadMessageId
-                                                                                                ] ??
-                                                                                                    -1) >=
-                                                                                                    (messageOrderMap[
-                                                                                                        msg
-                                                                                                            .id
-                                                                                                    ] ??
-                                                                                                        -1),
-                                                                                        ).length;
+                                                                                        readByCountByMessageId.get(
+                                                                                            msg.id,
+                                                                                        ) ??
+                                                                                        0;
                                                                                     return readByCount >
                                                                                         0 ? (
                                                                                         <span className="text-[10px] text-white/70">

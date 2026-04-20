@@ -195,6 +195,18 @@ export function ChannelChatModal({
         return [...s];
     }, [messages]);
 
+    // Map of lowercased sender address → first index in the messages array.
+    // Replaces an O(n²) messages.findIndex(...) inside messages.map(...) below,
+    // which was catastrophic in long threads.
+    const firstIndexBySender = useMemo(() => {
+        const map = new Map<string, number>();
+        for (let i = 0; i < messages.length; i++) {
+            const key = messages[i].sender_address.toLowerCase();
+            if (!map.has(key)) map.set(key, i);
+        }
+        return map;
+    }, [messages]);
+
     const solanaSnsForSenders = useSolanaDisplayLabelMap(
         messageSenderAddressesForSns,
     );
@@ -967,27 +979,31 @@ export function ChannelChatModal({
         }
     }, [isOpen]);
 
+    // Track which sender addresses we've already kicked off a fetch for.
+    // Prior version depended on `localUserInfoCache` which changes identity
+    // every time a fetch resolves → effect re-runs on every resolve.
+    const inFlightUserFetchesRef = useRef<Set<string>>(new Set());
+
     // Fetch user info for message senders not in cache
     useEffect(() => {
         if (!messages || messages.length === 0) return;
 
         const uniqueSenders = new Set<string>();
+        const myAddr = userAddress.toLowerCase();
         messages.forEach((msg) => {
             const sender = msg.sender_address.toLowerCase();
-            // Skip current user
-            if (sender !== userAddress.toLowerCase()) {
-                uniqueSenders.add(sender);
-            }
+            if (sender !== myAddr) uniqueSenders.add(sender);
         });
 
-        // Only fetch for senders not in cache (check both getUserInfo and local cache)
-        const sendersToFetch = Array.from(uniqueSenders).filter(
-            (address) =>
-                !getUserInfo?.(address) && !localUserInfoCache.has(address),
-        );
+        const sendersToFetch: string[] = [];
+        for (const address of uniqueSenders) {
+            if (getUserInfo?.(address)) continue;
+            if (inFlightUserFetchesRef.current.has(address)) continue;
+            sendersToFetch.push(address);
+        }
 
-        // Fetch user info for all unique senders not in cache
         sendersToFetch.forEach((address) => {
+            inFlightUserFetchesRef.current.add(address);
             fetch(`/api/public/user?address=${encodeURIComponent(address)}`)
                 .then((res) => res.json())
                 .then((data) => {
@@ -1013,6 +1029,8 @@ export function ChannelChatModal({
                     }
                 })
                 .catch((err) => {
+                    // Allow a retry on failure
+                    inFlightUserFetchesRef.current.delete(address);
                     console.error(
                         "[ChannelChat] Error fetching user info for",
                         address,
@@ -1020,7 +1038,10 @@ export function ChannelChatModal({
                     );
                 });
         });
-    }, [messages, userAddress, getUserInfo, localUserInfoCache]);
+        // Deliberately NOT depending on localUserInfoCache to avoid re-running
+        // this effect (and dedup logic above) every time a fetch resolves.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages, userAddress, getUserInfo]);
 
     // Focus input when opened
     useEffect(() => {
@@ -1378,16 +1399,26 @@ export function ChannelChatModal({
     >(new Map());
 
     // Fetch agent info when we see agent messages
+    // Track in-flight/completed agent fetches so we don't depend on
+    // `agentInfoCache` (which changes identity on every resolve, causing the
+    // effect to re-run for every cache update).
+    const inFlightAgentFetchesRef = useRef<Set<string>>(new Set());
     useEffect(() => {
-        const agentIds = messages
-            .filter((m) => m.sender_address.startsWith("agent:"))
-            .map((m) => m.sender_address.replace("agent:", ""))
-            .filter((id) => !agentInfoCache.has(id));
+        const toFetch: string[] = [];
+        const seen = new Set<string>();
+        for (const m of messages) {
+            if (!m.sender_address.startsWith("agent:")) continue;
+            const id = m.sender_address.replace("agent:", "");
+            if (seen.has(id)) continue;
+            seen.add(id);
+            if (inFlightAgentFetchesRef.current.has(id)) continue;
+            toFetch.push(id);
+        }
 
-        if (agentIds.length === 0) return;
+        if (toFetch.length === 0) return;
 
-        const uniqueIds = [...new Set(agentIds)];
-        uniqueIds.forEach(async (agentId) => {
+        toFetch.forEach(async (agentId) => {
+            inFlightAgentFetchesRef.current.add(agentId);
             try {
                 const res = await fetch(`/api/public/agents/${agentId}`);
                 if (res.ok) {
@@ -1401,10 +1432,12 @@ export function ChannelChatModal({
                     );
                 }
             } catch (err) {
+                inFlightAgentFetchesRef.current.delete(agentId);
                 console.error("[ChannelChat] Error fetching agent info:", err);
             }
         });
-    }, [messages, agentInfoCache]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [messages]);
 
     // Check if sender is an agent
     const isAgentMessage = (address: string) => address.startsWith("agent:");
@@ -2350,10 +2383,8 @@ export function ChannelChatModal({
                                                 false);
                                         // Only show user popup on the FIRST message from this sender to avoid duplicates
                                         const isFirstMessageFromSender =
-                                            messages.findIndex(
-                                                (m) =>
-                                                    m.sender_address.toLowerCase() ===
-                                                    msg.sender_address.toLowerCase(),
+                                            firstIndexBySender.get(
+                                                msg.sender_address.toLowerCase(),
                                             ) === index;
 
                                         // Check if we need a date divider (comparing to previous message)

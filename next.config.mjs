@@ -147,13 +147,15 @@ const nextConfig = {
                         value: [
                             "default-src 'self'",
                             // Scripts: self + inline (Next.js needs this) + eval (for some libraries) + SDKs
-                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com https://cdn.worldcoin.org https://*.huddle01.com https://alien.org https://*.alien.org",
+                            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live https://va.vercel-scripts.com https://cdn.worldcoin.org https://*.huddle01.com https://alien.org https://*.alien.org https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com",
+                            // script-src-elem explicitly set to match (modern browsers use this for <script src=...> elements)
+                            "script-src-elem 'self' 'unsafe-inline' https://vercel.live https://va.vercel-scripts.com https://cdn.worldcoin.org https://*.huddle01.com https://alien.org https://*.alien.org https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com",
                             // Styles: self + inline (Tailwind, etc.)
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
                             // Images: self + data URIs + external sources
                             "img-src 'self' data: blob: https: http:",
                             // Fonts: self + Google Fonts
-                            "font-src 'self' https://fonts.gstatic.com data:",
+                            "font-src 'self' https://fonts.gstatic.com data: blob:",
                             // Connect: APIs, WebSockets, Waku, etc.
                             "connect-src 'self' https: wss: ws: blob: https://alien.org https://*.alien.org https://sso.alien-api.com https://*.alien-api.com",
                             // Media: self + blob for video/audio

@@ -58,6 +58,29 @@ type FriendsListProps = {
 const FAVORITES_STORAGE_KEY = "spritz_favorite_friends";
 const SEARCH_DEBOUNCE_MS = 250;
 
+// Single global matchMedia subscription so every FriendCard doesn't call
+// window.matchMedia(...) on every render (major perf hit for large lists).
+function useIsMobile(): boolean {
+    const [isMobile, setIsMobile] = useState<boolean>(() => {
+        if (typeof window === "undefined") return false;
+        return window.matchMedia("(max-width: 640px)").matches;
+    });
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        const mql = window.matchMedia("(max-width: 640px)");
+        const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+        setIsMobile(mql.matches);
+        // Safari <14 fallback
+        if (mql.addEventListener) {
+            mql.addEventListener("change", handler);
+            return () => mql.removeEventListener("change", handler);
+        }
+        mql.addListener(handler);
+        return () => mql.removeListener(handler);
+    }, []);
+    return isMobile;
+}
+
 // Helper functions (moved outside component)
 const formatPhoneNumber = (phone: string) => {
     if (phone.length >= 4) {
@@ -126,13 +149,14 @@ type FriendCardProps = {
     isCallActive: boolean;
     hideChat: boolean;
     onToggleExpand: (id: string) => void;
-    onToggleFavorite: () => void;
-    onEditTag: () => void;
-    onEditNote: () => void;
+    onToggleFavorite: (address: string) => void;
+    onEditTag: (friend: Friend) => void;
+    onEditNote: (friend: Friend) => void;
     onCall: (friend: Friend) => void;
     onVideoCall?: (friend: Friend) => void;
     onChat?: (friend: Friend) => void;
     onRemoveClick: (friend: Friend) => void;
+    isMobile: boolean;
     style?: React.CSSProperties;
 };
 
@@ -161,14 +185,26 @@ const FriendCard = memo(function FriendCard({
     onVideoCall,
     onChat,
     onRemoveClick,
+    isMobile,
     style,
 }: FriendCardProps) {
     const hasUnread = unreadCount > 0;
 
-    // Detect mobile/touch device for click behavior
-    const isMobile =
-        typeof window !== "undefined" &&
-        window.matchMedia("(max-width: 640px)").matches;
+    // Bind parent-level stable handlers to this specific friend. These
+    // useCallbacks are stable per-friend, so buttons don't receive a new
+    // function identity on unrelated re-renders.
+    const handleToggleFav = useCallback(
+        () => onToggleFavorite(friend.address),
+        [onToggleFavorite, friend.address]
+    );
+    const handleEditTagClick = useCallback(
+        () => onEditTag(friend),
+        [onEditTag, friend]
+    );
+    const handleEditNoteClick = useCallback(
+        () => onEditNote(friend),
+        [onEditNote, friend]
+    );
 
     return (
         <div id={`friend-card-${friend.id}`} className="group select-none" style={style}>
@@ -182,7 +218,7 @@ const FriendCard = memo(function FriendCard({
                 <div className="flex items-center gap-2.5 sm:gap-3">
                     {/* Favorite Star - hidden on mobile, visible on tablet+ */}
                     <button
-                        onClick={onToggleFavorite}
+                        onClick={handleToggleFav}
                         className={`hidden sm:flex flex-shrink-0 w-6 h-6 items-center justify-center transition-colors ${
                             isFavorite
                                 ? "text-amber-400"
@@ -234,6 +270,8 @@ const FriendCard = memo(function FriendCard({
                                 <img
                                     src={effectiveAvatar}
                                     alt={getDisplayName(friend)}
+                                    loading="lazy"
+                                    decoding="async"
                                     className={`w-11 h-11 sm:w-12 sm:h-12 rounded-full object-cover ${
                                         unreadCount > 0
                                             ? "ring-2 ring-[#FF5500]"
@@ -336,7 +374,7 @@ const FriendCard = memo(function FriendCard({
                                             <span
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onEditTag();
+                                                    handleEditTagClick();
                                                 }}
                                                 className={`flex-shrink-0 flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full transition-colors cursor-pointer ${tagColor.bg} ${tagColor.text}`}
                                                 style={{
@@ -352,7 +390,7 @@ const FriendCard = memo(function FriendCard({
                                                         e.key === " "
                                                     ) {
                                                         e.stopPropagation();
-                                                        onEditTag();
+                                                        handleEditTagClick();
                                                     }
                                                 }}
                                             >
@@ -527,7 +565,7 @@ const FriendCard = memo(function FriendCard({
                                         {friend.nickname}
                                     </p>
                                     <button
-                                        onClick={onEditNote}
+                                        onClick={handleEditNoteClick}
                                         className="text-zinc-500 hover:text-zinc-300 transition-colors"
                                         title="Edit nickname"
                                     >
@@ -725,7 +763,7 @@ const FriendCard = memo(function FriendCard({
                         <div className="grid grid-cols-5 sm:grid-cols-4 gap-1.5 sm:gap-2">
                             {/* Favorite toggle - only on mobile */}
                             <button
-                                onClick={onToggleFavorite}
+                                onClick={handleToggleFav}
                                 className={`sm:hidden py-2.5 px-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 ${
                                     isFavorite
                                         ? "bg-amber-500/20 text-amber-400"
@@ -752,7 +790,7 @@ const FriendCard = memo(function FriendCard({
                                 </svg>
                             </button>
                             <button
-                                onClick={onEditNote}
+                                onClick={handleEditNoteClick}
                                 className="py-2.5 px-2 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5"
                             >
                                 <svg
@@ -773,7 +811,7 @@ const FriendCard = memo(function FriendCard({
                                 </span>
                             </button>
                             <button
-                                onClick={onEditTag}
+                                onClick={handleEditTagClick}
                                 className="py-2.5 px-2 rounded-lg bg-[#FF5500]/10 hover:bg-[#FF5500]/20 text-[#FFBBA7] text-xs sm:text-sm transition-colors flex items-center justify-center gap-1.5"
                             >
                                 <svg
@@ -867,6 +905,7 @@ export function FriendsList({
     pendingRequestsCount = 0,
     onViewRequestsClick,
 }: FriendsListProps) {
+    const isMobile = useIsMobile();
     const [expandedId, setExpandedId] = useState<string | null>(null);
     const [friendToRemove, setFriendToRemove] = useState<Friend | null>(null);
     const [noteModalFriend, setNoteModalFriend] = useState<Friend | null>(null);
@@ -932,6 +971,28 @@ export function FriendsList({
             }
         }
     }, []);
+
+    // Stable signature of friend addresses so effects don't re-fire when the
+    // parent hands us a new `friends` array that contains the same addresses.
+    const friendAddressesKey = useMemo(
+        () =>
+            friends
+                .map((f) => f.address.toLowerCase())
+                .sort()
+                .join(","),
+        [friends]
+    );
+
+    // Set of lowercased friend addresses for O(1) lookups in realtime handlers.
+    const friendAddressSet = useMemo(() => {
+        const s = new Set<string>();
+        for (const f of friends) s.add(f.address.toLowerCase());
+        return s;
+        // Intentionally keyed on the stable signature, not the `friends` array
+        // reference, so the Set isn't rebuilt when parent re-renders with the
+        // same membership.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [friendAddressesKey]);
 
     // Fetch all friend data in parallel (fast!) - batched for large friend lists
     useEffect(() => {
@@ -1110,18 +1171,26 @@ export function FriendsList({
 
         const interval = setInterval(refreshOnline, 30000);
         return () => clearInterval(interval);
-    }, [friends, userAddress]);
+        // Depend on the stable address signature instead of `friends` reference
+        // to avoid re-running the whole batch fetch when the parent passes a
+        // new `friends` array with the same members.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [friendAddressesKey, userAddress]);
 
-    // Toggle favorite with Supabase persistence
+    // Toggle favorite with Supabase persistence.
+    // Uses functional setFavorites so the callback doesn't need `favorites`
+    // in its dep array (which otherwise changes its identity on every toggle,
+    // cascading into re-renders of every memoized row).
     const toggleFavorite = useCallback(
         async (friendAddress: string) => {
             const addressLower = friendAddress.toLowerCase();
-            const isFavorite = favorites.has(addressLower);
+            let wasFavorite = false;
 
-            // Optimistic update
+            // Optimistic update - capture previous state via functional update
             setFavorites((prev) => {
+                wasFavorite = prev.has(addressLower);
                 const newFavorites = new Set(prev);
-                if (isFavorite) {
+                if (wasFavorite) {
                     newFavorites.delete(addressLower);
                 } else {
                     newFavorites.add(addressLower);
@@ -1132,15 +1201,13 @@ export function FriendsList({
             // Persist to Supabase
             if (isSupabaseConfigured && supabase && userAddress) {
                 try {
-                    if (isFavorite) {
-                        // Remove from favorites
+                    if (wasFavorite) {
                         await supabase
                             .from("shout_favorites")
                             .delete()
                             .eq("user_address", userAddress.toLowerCase())
                             .eq("friend_address", addressLower);
                     } else {
-                        // Add to favorites
                         await supabase.from("shout_favorites").insert({
                             user_address: userAddress.toLowerCase(),
                             friend_address: addressLower,
@@ -1153,7 +1220,7 @@ export function FriendsList({
                     // Revert optimistic update on error
                     setFavorites((prev) => {
                         const reverted = new Set(prev);
-                        if (isFavorite) {
+                        if (wasFavorite) {
                             reverted.add(addressLower);
                         } else {
                             reverted.delete(addressLower);
@@ -1172,7 +1239,7 @@ export function FriendsList({
                 });
             }
         },
-        [favorites, userAddress]
+        [userAddress]
     );
 
     const toggleExpand = useCallback((id: string) => {
@@ -1194,6 +1261,19 @@ export function FriendsList({
         setExpandedId(null);
     }, []);
 
+    // Stable parent-level handlers. We pass these to FriendCard which binds
+    // them internally against its own `friend` prop (via useCallback). This
+    // avoids creating fresh arrow functions per render at the map() call site,
+    // which would defeat FriendCard's React.memo and cause every row to
+    // re-render on any parent state change.
+    const handleEditTag = useCallback((friend: Friend) => {
+        setTagModalFriend(friend);
+    }, []);
+    const handleEditNote = useCallback((friend: Friend) => {
+        setNoteText(friend.nickname || "");
+        setNoteModalFriend(friend);
+    }, []);
+
     // Subscribe to realtime status updates
     useEffect(() => {
         if (!isSupabaseConfigured || !supabase || friends.length === 0) return;
@@ -1212,11 +1292,7 @@ export function FriendsList({
                     const newData = payload.new as any;
                     if (
                         newData &&
-                        friends.some(
-                            (f) =>
-                                f.address.toLowerCase() ===
-                                newData.wallet_address
-                        )
+                        friendAddressSet.has(newData.wallet_address)
                     ) {
                         setFriendStatuses((prev) => ({
                             ...prev,
@@ -1246,7 +1322,10 @@ export function FriendsList({
         return () => {
             client.removeChannel(channel);
         };
-    }, [friends]);
+        // Re-subscribe only when membership actually changes (stable signature)
+        // and the address-set identity follows it.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [friendAddressesKey, friendAddressSet]);
 
     // Get all available tags
     const availableTags = useMemo(() => getAllTags(), [getAllTags]);
@@ -1296,45 +1375,59 @@ export function FriendsList({
             );
         }
 
+        // Precompute display names and tag names once per friend so sort's
+        // O(n log n) comparator doesn't re-call getDisplayName/getTag many
+        // times per element.
+        const displayNameCache = new Map<string, string>();
+        const tagNameCache = new Map<string, string>();
+        const addedAtCache = new Map<string, number>();
+        for (const f of result) {
+            const lower = f.address.toLowerCase();
+            displayNameCache.set(lower, getDisplayName(f));
+            tagNameCache.set(lower, getTag(lower)?.tag || "");
+            addedAtCache.set(lower, new Date(f.addedAt).getTime());
+        }
+
         // Sort - favorites always first, then by selected sort
         result.sort((a, b) => {
+            const aLower = a.address.toLowerCase();
+            const bLower = b.address.toLowerCase();
             // Favorites always come first
-            const aFav = favorites.has(a.address.toLowerCase());
-            const bFav = favorites.has(b.address.toLowerCase());
+            const aFav = favorites.has(aLower);
+            const bFav = favorites.has(bLower);
             if (aFav && !bFav) return -1;
             if (!aFav && bFav) return 1;
 
+            const aName = displayNameCache.get(aLower) || "";
+            const bName = displayNameCache.get(bLower) || "";
+
             // Then apply selected sort
             switch (sortBy) {
-                case "online":
-                    const aOnline = onlineStatuses[a.address.toLowerCase()];
-                    const bOnline = onlineStatuses[b.address.toLowerCase()];
+                case "online": {
+                    const aOnline = onlineStatuses[aLower];
+                    const bOnline = onlineStatuses[bLower];
                     if (aOnline && !bOnline) return -1;
                     if (!aOnline && bOnline) return 1;
-                    return getDisplayName(a).localeCompare(getDisplayName(b));
+                    return aName.localeCompare(bName);
+                }
                 case "recent":
                     return (
-                        new Date(b.addedAt).getTime() -
-                        new Date(a.addedAt).getTime()
+                        (addedAtCache.get(bLower) || 0) -
+                        (addedAtCache.get(aLower) || 0)
                     );
-                case "tag":
-                    // Group by tag - friends with tags come first, then by tag name
-                    const aTag = getTag(a.address.toLowerCase());
-                    const bTag = getTag(b.address.toLowerCase());
-                    const aTagName = aTag?.tag || "";
-                    const bTagName = bTag?.tag || "";
-                    // Friends with tags come before those without
+                case "tag": {
+                    const aTagName = tagNameCache.get(aLower) || "";
+                    const bTagName = tagNameCache.get(bLower) || "";
                     if (aTagName && !bTagName) return -1;
                     if (!aTagName && bTagName) return 1;
-                    // Then sort by tag name
                     if (aTagName !== bTagName) {
                         return aTagName.localeCompare(bTagName);
                     }
-                    // Within same tag, sort by name
-                    return getDisplayName(a).localeCompare(getDisplayName(b));
+                    return aName.localeCompare(bName);
+                }
                 case "name":
                 default:
-                    return getDisplayName(a).localeCompare(getDisplayName(b));
+                    return aName.localeCompare(bName);
             }
         });
 
@@ -1376,12 +1469,24 @@ export function FriendsList({
         }
     }, [expandedId, useVirtual, virtualizer]);
 
-    const onlineCount = friends.filter(
-        (f) => onlineStatuses[f.address.toLowerCase()]
-    ).length;
-    const favoritesCount = friends.filter((f) =>
-        favorites.has(f.address.toLowerCase())
-    ).length;
+    const onlineCount = useMemo(
+        () =>
+            friends.reduce(
+                (n, f) =>
+                    onlineStatuses[f.address.toLowerCase()] ? n + 1 : n,
+                0
+            ),
+        [friends, onlineStatuses]
+    );
+    const favoritesCount = useMemo(
+        () =>
+            friends.reduce(
+                (n, f) =>
+                    favorites.has(f.address.toLowerCase()) ? n + 1 : n,
+                0
+            ),
+        [friends, favorites]
+    );
 
     if (friends.length === 0) {
         return (
@@ -1829,17 +1934,11 @@ export function FriendsList({
                                         }
                                         isCallActive={isCallActive}
                                         hideChat={hideChat}
+                                        isMobile={isMobile}
                                         onToggleExpand={toggleExpand}
-                                        onToggleFavorite={() =>
-                                            toggleFavorite(friend.address)
-                                        }
-                                        onEditTag={() =>
-                                            setTagModalFriend(friend)
-                                        }
-                                        onEditNote={() => {
-                                            setNoteText(friend.nickname || "");
-                                            setNoteModalFriend(friend);
-                                        }}
+                                        onToggleFavorite={toggleFavorite}
+                                        onEditTag={handleEditTag}
+                                        onEditNote={handleEditNote}
                                         onCall={onCall}
                                         onVideoCall={onVideoCall}
                                         onChat={onChat}
@@ -1881,15 +1980,11 @@ export function FriendsList({
                                 unreadCount={unreadCounts[addressLower] || 0}
                                 isCallActive={isCallActive}
                                 hideChat={hideChat}
+                                isMobile={isMobile}
                                 onToggleExpand={toggleExpand}
-                                onToggleFavorite={() =>
-                                    toggleFavorite(friend.address)
-                                }
-                                onEditTag={() => setTagModalFriend(friend)}
-                                onEditNote={() => {
-                                    setNoteText(friend.nickname || "");
-                                    setNoteModalFriend(friend);
-                                }}
+                                onToggleFavorite={toggleFavorite}
+                                onEditTag={handleEditTag}
+                                onEditNote={handleEditNote}
                                 onCall={onCall}
                                 onVideoCall={onVideoCall}
                                 onChat={onChat}

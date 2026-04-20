@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
@@ -958,14 +958,32 @@ export function ChatModal({
         markAsRead,
     ]);
 
-    // Load more messages on scroll (pagination)
+    // Keep refs of loading/hasMore flags so loadMoreMessages / handleScroll
+    // have STABLE identities and don't trigger re-subscriptions or re-renders
+    // whenever message state changes. (messagesRef is declared earlier.)
+    const isLoadingMoreRef = useRef(false);
+    useEffect(() => {
+        isLoadingMoreRef.current = isLoadingMore;
+    }, [isLoadingMore]);
+    const hasMoreMessagesRef = useRef(true);
+    useEffect(() => {
+        hasMoreMessagesRef.current = hasMoreMessages;
+    }, [hasMoreMessages]);
+
+    // Load more messages on scroll (pagination). Stable identity via refs.
     const loadMoreMessages = useCallback(async () => {
-        if (isLoadingMore || !hasMoreMessages || messages.length === 0) return;
+        const currentMessages = messagesRef.current;
+        if (
+            isLoadingMoreRef.current ||
+            !hasMoreMessagesRef.current ||
+            currentMessages.length === 0
+        )
+            return;
 
         setIsLoadingMore(true);
         try {
             // Get the oldest message timestamp as the cursor
-            const oldestMessage = messages[0]; // Messages are sorted chronologically
+            const oldestMessage = currentMessages[0]; // chronological
             const beforeTimestamp = oldestMessage.sentAt.toISOString();
 
             const result = await fetchOlderMessages(peerAddress, beforeTimestamp);
@@ -1002,25 +1020,40 @@ export function ChatModal({
         } finally {
             setIsLoadingMore(false);
         }
-    }, [isLoadingMore, hasMoreMessages, messages, peerAddress, fetchOlderMessages]);
+    }, [peerAddress, fetchOlderMessages]);
 
-    // Handle scroll to load more messages
-    // With flex-col-reverse: scrollTop=0 is at BOTTOM (newest), scrolling UP increases scrollTop
+    // Throttled scroll handler using requestAnimationFrame. Prior version fired
+    // on every scroll event (reading layout + potentially calling load-more
+    // each frame). Stable identity via refs.
+    const scrollRafRef = useRef<number | null>(null);
     const handleScroll = useCallback(() => {
-        const container = messagesContainerRef.current;
-        if (!container) return;
+        if (scrollRafRef.current !== null) return;
+        scrollRafRef.current = requestAnimationFrame(() => {
+            scrollRafRef.current = null;
+            const container = messagesContainerRef.current;
+            if (!container) return;
 
-        // Load more when scrolled near the TOP (older messages) - scrollTop approaches max
-        const scrollMax = container.scrollHeight - container.clientHeight;
-        if (
-            !isLoadingMore &&
-            hasMoreMessages &&
-            scrollMax - container.scrollTop < 100
-        ) {
-            previousScrollHeightRef.current = container.scrollHeight;
-            loadMoreMessages();
-        }
-    }, [isLoadingMore, hasMoreMessages, loadMoreMessages]);
+            // flex-col-reverse: scrollTop=0 at BOTTOM (newest).
+            const scrollMax = container.scrollHeight - container.clientHeight;
+            if (
+                !isLoadingMoreRef.current &&
+                hasMoreMessagesRef.current &&
+                scrollMax - container.scrollTop < 100
+            ) {
+                previousScrollHeightRef.current = container.scrollHeight;
+                loadMoreMessages();
+            }
+        });
+    }, [loadMoreMessages]);
+    useEffect(
+        () => () => {
+            if (scrollRafRef.current !== null) {
+                cancelAnimationFrame(scrollRafRef.current);
+                scrollRafRef.current = null;
+            }
+        },
+        []
+    );
 
     // Preserve scroll position after loading more messages
     useEffect(() => {
@@ -1532,24 +1565,63 @@ export function ChatModal({
     const isGifMessage = (content: string) => content.startsWith("[GIF]");
     const getGifUrl = (content: string) => content.replace("[GIF]", "");
 
-    // Fetch reactions for pixel art messages
-    useEffect(() => {
-        const pixelArtUrls = messages
-            .filter((msg) => isPixelArtMessage(msg.content))
-            .map((msg) => getPixelArtUrl(msg.content));
+    // Deduplicate messages by id and filter out decryption failures.
+    // This runs ONCE per change to `messages` instead of on every render, and
+    // the dedupedMessages array identity is stable when messages don't change.
+    const dedupedMessages = useMemo(() => {
+        const seen = new Set<string>();
+        const out: Message[] = [];
+        for (const m of messages) {
+            if (m.content === DECRYPTION_FAILED_MARKER) continue;
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            out.push(m);
+        }
+        return out;
+    }, [messages]);
 
-        if (pixelArtUrls.length > 0) {
-            fetchReactions(pixelArtUrls);
+    // Track which reaction sets we've already requested so we only fetch
+    // reactions for NEW messages. Prevents sending the entire message-id list
+    // on every `messages` update (huge payloads in long threads).
+    const fetchedReactionIdsRef = useRef<Set<string>>(new Set());
+    const fetchedPixelArtUrlsRef = useRef<Set<string>>(new Set());
+
+    // Fetch reactions for pixel art messages (incrementally)
+    useEffect(() => {
+        const seen = fetchedPixelArtUrlsRef.current;
+        const toFetch: string[] = [];
+        for (const msg of messages) {
+            if (!isPixelArtMessage(msg.content)) continue;
+            const url = getPixelArtUrl(msg.content);
+            if (seen.has(url)) continue;
+            seen.add(url);
+            toFetch.push(url);
+        }
+        if (toFetch.length > 0) {
+            fetchReactions(toFetch);
         }
     }, [messages, fetchReactions]);
 
-    // Fetch reactions for all messages
+    // Fetch reactions for messages (incrementally - only new IDs)
     useEffect(() => {
-        const messageIds = messages.map((msg) => msg.id);
-        if (messageIds.length > 0) {
-            fetchMsgReactions(messageIds);
+        const seen = fetchedReactionIdsRef.current;
+        const toFetch: string[] = [];
+        for (const msg of messages) {
+            if (seen.has(msg.id)) continue;
+            seen.add(msg.id);
+            toFetch.push(msg.id);
+        }
+        if (toFetch.length > 0) {
+            fetchMsgReactions(toFetch);
         }
     }, [messages, fetchMsgReactions]);
+
+    // Clear the "already fetched" caches when the peer changes so we refetch
+    // reactions when switching between conversations.
+    useEffect(() => {
+        fetchedReactionIdsRef.current = new Set();
+        fetchedPixelArtUrlsRef.current = new Set();
+    }, [peerAddress]);
 
     // Handle reaction click
     const handleReaction = async (ipfsUrl: string, emoji: string) => {
@@ -2016,19 +2088,9 @@ export function ChatModal({
 
                                 {/* Messages container - flows bottom to top with column-reverse */}
                                 <div className="space-y-3">
-                                    {/* Deduplicate messages by ID and filter out decryption failures */}
+                                    {/* Dedupe + filter is memoized above (dedupedMessages) */}
                                     {(() => {
-                                        const deduped = Array.from(
-                                            new Map(
-                                                messages
-                                                    .filter(
-                                                        (m) =>
-                                                            m.content !==
-                                                            DECRYPTION_FAILED_MARKER
-                                                    )
-                                                    .map((m) => [m.id, m])
-                                            ).values()
-                                        );
+                                        const deduped = dedupedMessages;
                                         let lastDate: string | null = null;
 
                                         return deduped.map((msg, index) => {
