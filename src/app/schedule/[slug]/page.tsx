@@ -142,6 +142,41 @@ const ERC20_ABI = [
     },
 ] as const;
 
+// Multicall3 is deployed at the same address on every EVM chain
+const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11" as const;
+const MULTICALL3_ABI = [
+    {
+        name: "aggregate3",
+        type: "function",
+        inputs: [
+            {
+                name: "calls",
+                type: "tuple[]",
+                components: [
+                    { name: "target", type: "address" },
+                    { name: "allowFailure", type: "bool" },
+                    { name: "callData", type: "bytes" },
+                ],
+            },
+        ],
+        outputs: [
+            {
+                name: "returnData",
+                type: "tuple[]",
+                components: [
+                    { name: "success", type: "bool" },
+                    { name: "returnData", type: "bytes" },
+                ],
+            },
+        ],
+    },
+] as const;
+
+// Spritz platform treasury — receives 1% of paid Priority Sessions
+const SPRITZ_TREASURY_ADDRESS = (process.env.NEXT_PUBLIC_SPRITZ_TREASURY_ADDRESS ||
+    "0x007e483cf6df009db5ec571270b454764d954d95") as `0x${string}`;
+const PLATFORM_FEE_BPS = 100; // 1% = 100 basis points
+
 export default function SchedulePage({
     params,
 }: {
@@ -434,10 +469,12 @@ export default function SchedulePage({
             return;
         }
         const payToAddress = profile.scheduling.payToAddress as `0x${string}`;
-        const amountInUSDC = profile.scheduling.priceCents / 100;
+        const totalCents = profile.scheduling.priceCents;
+        const totalAmount = parseUnits((totalCents / 100).toString(), 6);
 
-        // USDC has 6 decimals
-        const amount = parseUnits(amountInUSDC.toString(), 6);
+        // Split: 1% to Spritz treasury, 99% to host
+        const feeAmount = (totalAmount * BigInt(PLATFORM_FEE_BPS)) / 10_000n;
+        const hostAmount = totalAmount - feeAmount;
 
         try {
             // Switch network first if needed
@@ -456,17 +493,43 @@ export default function SchedulePage({
                 setIsSwitchingNetwork(false);
             }
 
-            // Encode the ERC20 transfer call
-            const data = encodeFunctionData({
+            // Encode both ERC20 transfers
+            const hostTransferData = encodeFunctionData({
                 abi: ERC20_ABI,
                 functionName: "transfer",
-                args: [payToAddress, amount],
+                args: [payToAddress, hostAmount],
             });
 
-            sendTransaction({
-                to: usdcAddress,
-                data,
-            });
+            if (feeAmount > 0n) {
+                // Batch both transfers via Multicall3 (single tx, single approval)
+                const feeTransferData = encodeFunctionData({
+                    abi: ERC20_ABI,
+                    functionName: "transfer",
+                    args: [SPRITZ_TREASURY_ADDRESS, feeAmount],
+                });
+
+                const multicallData = encodeFunctionData({
+                    abi: MULTICALL3_ABI,
+                    functionName: "aggregate3",
+                    args: [
+                        [
+                            { target: usdcAddress, allowFailure: false, callData: hostTransferData },
+                            { target: usdcAddress, allowFailure: false, callData: feeTransferData },
+                        ],
+                    ],
+                });
+
+                sendTransaction({
+                    to: MULTICALL3_ADDRESS,
+                    data: multicallData,
+                });
+            } else {
+                // No fee (e.g. amount too small) — single transfer to host
+                sendTransaction({
+                    to: usdcAddress,
+                    data: hostTransferData,
+                });
+            }
         } catch (err) {
             console.error("Payment error:", err);
             setPaymentError(
@@ -1335,6 +1398,31 @@ export default function SchedulePage({
                                         )}
                                     </span>
                                 </div>
+                                {(() => {
+                                    const totalCents = profile.scheduling.priceCents;
+                                    const feeCents = Math.ceil((totalCents * PLATFORM_FEE_BPS) / 10_000);
+                                    const hostCents = totalCents - feeCents;
+                                    return feeCents > 0 ? (
+                                        <>
+                                            <div className="border-t border-zinc-700/50 mt-3 pt-3 flex items-center justify-between text-sm">
+                                                <span className="text-zinc-500">
+                                                    Host receives
+                                                </span>
+                                                <span className="text-zinc-400">
+                                                    ${(hostCents / 100).toFixed(2)} USDC
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between text-sm mt-1">
+                                                <span className="text-zinc-500">
+                                                    Platform fee (1%)
+                                                </span>
+                                                <span className="text-zinc-500">
+                                                    ${(feeCents / 100).toFixed(2)} USDC
+                                                </span>
+                                            </div>
+                                        </>
+                                    ) : null;
+                                })()}
                                 <div className="border-t border-zinc-700 mt-4 pt-4 flex items-center justify-between">
                                     <span className="text-white font-medium">
                                         Total
