@@ -218,11 +218,19 @@ function simpleHttpProbe(
             body: opts.body,
             timeoutMs: opts.timeoutMs ?? 5000,
         });
-        const statusOk =
-            res.ok ||
-            (res.status !== null && (opts.treatStatus?.(res.status) ?? false));
+        const acceptedByTreat =
+            res.status !== null && (opts.treatStatus?.(res.status) ?? false);
+        const statusOk = res.ok || acceptedByTreat;
+        // When treatStatus explicitly accepted a 4xx (e.g. Huddle01's 401
+        // liveness ping), don't let classify() downgrade the result to
+        // "degraded" just because the HTTP code is ≥ 400. The probe author
+        // has declared that status code means "service alive", so we pass
+        // a synthetic 200 to classify and keep the real code on the result
+        // (via httpStatus) for display / debugging.
+        const statusForClassify =
+            acceptedByTreat && !res.ok ? 200 : res.status;
         return {
-            status: classify(statusOk, res.latencyMs, res.status, {
+            status: classify(statusOk, res.latencyMs, statusForClassify, {
                 degradedMs: opts.degradedMs,
             }),
             latencyMs: res.latencyMs,
