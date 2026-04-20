@@ -3501,7 +3501,7 @@ function DashboardContent({
                 onNotNeeded={() => setCanShowUsernamePrompt(true)}
             />
 
-            <div className="min-h-screen bg-zinc-950 flex flex-col">
+            <div className="min-h-dvh bg-zinc-950 flex flex-col overflow-x-hidden">
                 {/* Header */}
                 <header className="border-b border-zinc-800 bg-zinc-950 sm:bg-zinc-900/95 backdrop-blur-lg sticky top-0 z-40 safe-area-pt px-2">
                     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 safe-area-pl safe-area-pr">

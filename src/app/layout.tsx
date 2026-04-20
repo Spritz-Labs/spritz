@@ -148,8 +148,9 @@ export const viewport: Viewport = {
     themeColor: "#FF5500",
     width: "device-width",
     initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
+    // WCAG 1.4.4: allow pinch-zoom; disabling it breaks low-vision users on
+    // small phones. PWA still works; we keep viewport-fit for notch/safe areas.
+    maximumScale: 5,
     viewportFit: "cover",
 };
 

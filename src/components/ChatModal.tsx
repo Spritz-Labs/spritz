@@ -1792,7 +1792,7 @@ export function ChatModal({
                         className={`fixed z-50 ${
                             isFullscreen
                                 ? "inset-0"
-                                : "left-4 right-4 top-16 bottom-32 sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
+                                : "left-4 right-4 top-16 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-full sm:max-w-lg sm:max-h-[65vh] sm:h-[550px]"
                         }`}
                     >
                         <div

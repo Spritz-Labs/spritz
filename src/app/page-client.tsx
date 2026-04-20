@@ -12,7 +12,6 @@ import { WalletConnect } from "@/components/WalletConnect";
 import { AlienAuth } from "@/components/AlienAuth";
 import { Dashboard } from "@/components/Dashboard";
 import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
-import { Globe } from "@/components/Globe";
 import { SpritzLogo } from "@/components/SpritzLogo";
 import { OfflineScreen } from "@/components/OfflineScreen";
 import { WalletConnectionStatus } from "@/components/WalletConnectionStatus";
@@ -28,6 +27,21 @@ import {
     SOLANA_AUTH_CREDENTIALS_KEY,
     AUTH_TTL,
 } from "@/lib/authStorage";
+import dynamic from "next/dynamic";
+
+/** PERF: cobe is ~50kb+ — load only on the marketing shell, not the authenticated app */
+const Globe = dynamic(
+    () => import("@/components/Globe").then((m) => m.Globe),
+    {
+        ssr: false,
+        loading: () => (
+            <div
+                className="w-[min(90vw,600px)] aspect-square max-h-[70vh]"
+                aria-hidden
+            />
+        ),
+    },
+);
 
 // Check if there's a saved wallet session we should wait for
 function hasSavedWalletSession(): boolean {
@@ -778,7 +792,7 @@ export default function Home() {
         const showRecovery = authTimeout || siweError;
 
         return (
-            <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+            <div className="min-h-dvh bg-zinc-950 flex items-center justify-center p-4 safe-area-inset">
                 <div className="flex flex-col items-center justify-center text-center max-w-md">
                     <div
                         className={`mb-4 ${
@@ -820,7 +834,7 @@ export default function Home() {
                         </div>
                     )}
                 </div>
-            </main>
+            </div>
         );
     }
 
@@ -834,7 +848,7 @@ export default function Home() {
         const chainLabel = isSolana ? "Solana" : "Ethereum";
 
         return (
-            <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+            <div className="min-h-dvh bg-zinc-950 flex items-center justify-center p-4 safe-area-inset">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -916,7 +930,7 @@ export default function Home() {
                         </p>
                     </div>
                 </motion.div>
-            </main>
+            </div>
         );
     }
 
@@ -925,7 +939,7 @@ export default function Home() {
         // After login from event/register or other deep link: show "Taking you back..." (redirect runs in useEffect above)
         if (isSafeRedirect(redirectAfterLogin)) {
             return (
-                <main className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+                <div className="min-h-dvh bg-zinc-950 flex items-center justify-center p-4 safe-area-inset">
                     <div className="flex flex-col items-center justify-center text-center max-w-md">
                         <div className="animate-pulse">
                             <SpritzLogo
@@ -940,7 +954,7 @@ export default function Home() {
                             Taking you back…
                         </p>
                     </div>
-                </main>
+                </div>
             );
         }
 
@@ -982,10 +996,7 @@ export default function Home() {
     }
 
     return (
-        <main
-            className="relative min-h-screen gradient-bg overflow-hidden"
-            role="main"
-        >
+        <div className="relative min-h-dvh gradient-bg overflow-x-hidden">
             {/* PWA Install Prompt for mobile users */}
             <PWAInstallPrompt />
 
@@ -1014,7 +1025,7 @@ export default function Home() {
             </div>
 
             {/* Content */}
-            <div className="relative z-10 flex flex-col items-center min-h-screen px-4 pt-6 md:pt-12 pb-6 md:pb-12 safe-area-inset">
+            <div className="relative z-10 flex flex-col items-center min-h-dvh px-4 pt-6 md:pt-12 pb-6 md:pb-12 safe-area-inset">
                 {/* Header - at top */}
                 <header className="text-center mb-8 md:mb-12 mt-12 md:mt-16">
                     <motion.div
@@ -1253,6 +1264,6 @@ export default function Home() {
                     </motion.div>
                 </motion.div>
             </div>
-        </main>
+        </div>
     );
 }

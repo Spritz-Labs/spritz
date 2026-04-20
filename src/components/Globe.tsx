@@ -43,15 +43,19 @@ export function Globe({
 
         let phi = 0;
 
+        const isNarrow = typeof window !== "undefined" && window.innerWidth < 768;
         const globe = createGlobe(canvasRef.current, {
-            devicePixelRatio: 2,
+            // Mobile GPUs: cap DPR — full @2x on a 600px canvas is heavy for INP/LCP
+            devicePixelRatio: isNarrow
+                ? Math.min(1.5, window.devicePixelRatio || 1)
+                : 2,
             width: actualSize * 2,
             height: actualSize * 2,
             phi: 0,
             theta: 0.3,
             dark: 1,
             diffuse: 3, // Increased diffuse lighting
-            mapSamples: 16000,
+            mapSamples: isNarrow ? 10000 : 16000,
             mapBrightness: 12, // Much brighter map for mobile visibility
             baseColor: [0.5, 0.5, 0.6], // Brighter base color
             markerColor: [255 / 255, 85 / 255, 0 / 255], // #FF5500 orange
