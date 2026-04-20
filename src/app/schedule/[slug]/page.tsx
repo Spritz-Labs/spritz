@@ -473,7 +473,7 @@ export default function SchedulePage({
         const totalAmount = parseUnits((totalCents / 100).toString(), 6);
 
         // Split: 1% to Spritz treasury, 99% to host
-        const feeAmount = (totalAmount * BigInt(PLATFORM_FEE_BPS)) / 10_000n;
+        const feeAmount = (totalAmount * BigInt(PLATFORM_FEE_BPS)) / BigInt(10_000);
         const hostAmount = totalAmount - feeAmount;
 
         try {
