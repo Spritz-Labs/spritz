@@ -1,8 +1,22 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
-import { normalizeAddress } from "@/utils/address";
+
+/**
+ * usePhoneVerification
+ *
+ * This hook is mounted in at least 5 components at the same time (Dashboard,
+ * QRCodeModal, AddFriendModal, PhoneVerificationModal, …). Before this file
+ * was migrated to React Query every mount issued its own
+ * `GET /api/phone/status` request, which is the workload that was blowing
+ * up the Supabase connection pool.
+ *
+ * The migration keeps the public API identical — consumers don't need to
+ * change — but dedupes the GET via a shared React Query cache and only
+ * revalidates every 30s (matching the server's in-memory cache TTL).
+ */
 
 type PhoneData = {
     id: string;
@@ -20,38 +34,79 @@ type VerificationState =
     | "verified"
     | "error";
 
+type PhoneStatus = {
+    phoneNumber: string | null;
+    verified: boolean;
+};
+
+const PHONE_STATUS_KEY = (address: string | null) =>
+    ["phone-status", address?.toLowerCase() ?? null] as const;
+
+async function fetchPhoneStatus(): Promise<PhoneStatus> {
+    const res = await fetch("/api/phone/status", { credentials: "include" });
+    if (!res.ok) {
+        // Surface no-phone as an empty status, not an error, so the UI can
+        // render the "add phone" prompt without bubbling up a toast.
+        return { phoneNumber: null, verified: false };
+    }
+    const data = await res.json();
+    return {
+        phoneNumber: data.phoneNumber ?? null,
+        verified: Boolean(data.verified),
+    };
+}
+
 export function usePhoneVerification(userAddress: string | null) {
-    const [phoneNumber, setPhoneNumber] = useState<string | null>(null);
-    const [isVerified, setIsVerified] = useState(false);
+    const queryClient = useQueryClient();
+
+    // Only the status fetch goes through React Query — mutations below stay
+    // imperative so the call-sites that depend on their boolean return value
+    // don't need to change.
+    const query = useQuery({
+        queryKey: PHONE_STATUS_KEY(userAddress),
+        queryFn: fetchPhoneStatus,
+        enabled: Boolean(userAddress),
+        // Matches the server-side cache TTL in /api/phone/status.
+        staleTime: 30_000,
+        gcTime: 5 * 60_000,
+        refetchOnWindowFocus: false,
+        refetchOnMount: false,
+    });
+
     const [state, setState] = useState<VerificationState>("idle");
     const [error, setError] = useState<string | null>(null);
     const [codeExpiresAt, setCodeExpiresAt] = useState<Date | null>(null);
+    // Local phone-number override so the UI reflects what the user just typed
+    // before the server round-trip completes.
+    const [pendingPhone, setPendingPhone] = useState<string | null>(null);
 
-    const fetchPhoneStatus = useCallback(async () => {
-        if (!userAddress) return;
+    const phoneNumber = pendingPhone ?? query.data?.phoneNumber ?? null;
+    const isVerified = Boolean(query.data?.verified);
 
-        try {
-            const res = await fetch("/api/phone/status", { credentials: "include" });
-            if (!res.ok) return;
-            const data = await res.json();
-            if (data.phoneNumber) {
-                setPhoneNumber(data.phoneNumber);
-                setIsVerified(data.verified);
-                if (data.verified) {
-                    setState("verified");
-                }
-            }
-        } catch {
-            // Phone status unavailable — non-critical
-        }
-    }, [userAddress]);
-
-    // Fetch on mount
+    // Promote `state` to "verified" when the cached status says so. Done in
+    // an effect (not inline during render) to keep the render pure.
     useEffect(() => {
-        fetchPhoneStatus();
-    }, [fetchPhoneStatus]);
+        if (isVerified && state === "idle") {
+            setState("verified");
+        }
+    }, [isVerified, state]);
 
-    // Send verification code
+    const invalidateStatus = useCallback(() => {
+        queryClient.invalidateQueries({
+            queryKey: PHONE_STATUS_KEY(userAddress),
+        });
+    }, [queryClient, userAddress]);
+
+    const setStatusCache = useCallback(
+        (next: PhoneStatus) => {
+            queryClient.setQueryData<PhoneStatus>(
+                PHONE_STATUS_KEY(userAddress),
+                next
+            );
+        },
+        [queryClient, userAddress]
+    );
+
     const sendCode = useCallback(
         async (phone: string): Promise<boolean> => {
             if (!userAddress) {
@@ -70,7 +125,7 @@ export function usePhoneVerification(userAddress: string | null) {
                         walletAddress: userAddress,
                         phoneNumber: phone,
                     }),
-                    credentials: "include", // Important for session cookie
+                    credentials: "include",
                 });
 
                 const data = await response.json();
@@ -81,13 +136,15 @@ export function usePhoneVerification(userAddress: string | null) {
                     return false;
                 }
 
-                setPhoneNumber(phone);
+                setPendingPhone(phone);
                 setCodeExpiresAt(new Date(data.expiresAt));
                 setState("sent");
                 return true;
             } catch (err) {
                 console.error("[usePhoneVerification] Send code error:", err);
-                setError("Failed to send verification code. Please try again.");
+                setError(
+                    "Failed to send verification code. Please try again."
+                );
                 setState("error");
                 return false;
             }
@@ -95,7 +152,6 @@ export function usePhoneVerification(userAddress: string | null) {
         [userAddress]
     );
 
-    // Verify the code
     const verifyCode = useCallback(
         async (code: string): Promise<boolean> => {
             if (!userAddress) {
@@ -114,19 +170,24 @@ export function usePhoneVerification(userAddress: string | null) {
                         walletAddress: userAddress,
                         code,
                     }),
-                    credentials: "include", // Important for session cookie
+                    credentials: "include",
                 });
 
                 const data = await response.json();
 
                 if (!response.ok) {
                     setError(data.error || "Failed to verify code");
-                    setState("sent"); // Go back to sent state so they can try again
+                    setState("sent");
                     return false;
                 }
 
-                setPhoneNumber(data.phoneNumber);
-                setIsVerified(true);
+                // Optimistic cache update — avoids a follow-up fetch and keeps
+                // every other consumer of this hook in sync immediately.
+                setStatusCache({
+                    phoneNumber: data.phoneNumber ?? pendingPhone,
+                    verified: true,
+                });
+                setPendingPhone(null);
                 setState("verified");
                 return true;
             } catch (err) {
@@ -136,18 +197,15 @@ export function usePhoneVerification(userAddress: string | null) {
                 return false;
             }
         },
-        [userAddress]
+        [userAddress, setStatusCache, pendingPhone]
     );
 
-    // Lookup user by phone number
     const lookupByPhone = useCallback(
         async (phone: string): Promise<PhoneData | null> => {
             if (!isSupabaseConfigured || !supabase) return null;
 
-            const client = supabase; // TypeScript narrowing
-            if (!client) return null;
+            const client = supabase;
 
-            // Normalize the phone number for lookup
             let normalized = phone.replace(/[^\d+]/g, "");
             if (!normalized.startsWith("+")) {
                 if (normalized.length === 10) {
@@ -185,39 +243,35 @@ export function usePhoneVerification(userAddress: string | null) {
         []
     );
 
-    // Remove phone number
     const removePhone = useCallback(async (): Promise<boolean> => {
         if (!userAddress) {
             setError("Wallet not connected");
             return false;
         }
 
-        setState("sending"); // Reuse sending state for loading indicator
+        setState("sending");
         setError(null);
 
         try {
             const response = await fetch("/api/phone/remove", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    walletAddress: userAddress,
-                }),
-                credentials: "include", // Important for session cookie
+                body: JSON.stringify({ walletAddress: userAddress }),
+                credentials: "include",
             });
 
             const data = await response.json();
 
             if (!response.ok) {
                 setError(data.error || "Failed to remove phone number");
-                setState("verified"); // Go back to verified state
+                setState("verified");
                 return false;
             }
 
-            // Clear local state
-            setPhoneNumber(null);
-            setIsVerified(false);
-            setState("idle");
+            setStatusCache({ phoneNumber: null, verified: false });
+            setPendingPhone(null);
             setCodeExpiresAt(null);
+            setState("idle");
             return true;
         } catch (err) {
             console.error("[usePhoneVerification] Remove phone error:", err);
@@ -225,24 +279,20 @@ export function usePhoneVerification(userAddress: string | null) {
             setState("verified");
             return false;
         }
-    }, [userAddress]);
+    }, [userAddress, setStatusCache]);
 
-    // Reset state (for changing number)
     const reset = useCallback(() => {
         setState("idle");
         setError(null);
         setCodeExpiresAt(null);
     }, []);
 
-    // Start change number flow (resets verified status locally to show input)
     const startChangeNumber = useCallback(() => {
         setState("idle");
         setError(null);
         setCodeExpiresAt(null);
-        // Don't clear phoneNumber or isVerified - they'll update after new verification
     }, []);
 
-    // Clear error
     const clearError = useCallback(() => setError(null), []);
 
     return {
@@ -259,6 +309,6 @@ export function usePhoneVerification(userAddress: string | null) {
         startChangeNumber,
         reset,
         clearError,
-        refresh: fetchPhoneStatus,
+        refresh: invalidateStatus,
     };
 }

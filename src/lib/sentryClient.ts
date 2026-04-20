@@ -41,12 +41,14 @@ function redactUrl(url: string): string {
     }
 }
 
-let initialized = false;
-
 /**
  * Report an error to Sentry when NEXT_PUBLIC_SENTRY_DSN is set.
  * Context is redacted (no wallet addresses or tokens).
  * Safe to call from error boundaries; no-op when DSN is missing.
+ *
+ * Since instrumentation-client.ts already initialises @sentry/nextjs on boot,
+ * this helper just forwards to the already-initialised SDK instead of doing
+ * a second init (which would cause duplicate events).
  */
 export function captureClientException(
     error: Error,
@@ -59,36 +61,18 @@ export function captureClientException(
             safeContext[k] = typeof v === "string" ? redactPii(v) : v;
         }
     }
-    // Use browser SDK only to avoid pulling server/Prisma code (same DSN works)
-    import("@sentry/browser")
+    // Dynamic import keeps @sentry/nextjs out of the critical-path bundle when
+    // the DSN isn't configured (e.g. local dev).
+    import("@sentry/nextjs")
         .then((Sentry) => {
-            if (!initialized) {
-                Sentry.init({
-                    dsn: DSN,
-                    sendDefaultPii: false,
-                    beforeSend(event) {
-                        if (event.request?.url) {
-                            event.request.url = redactUrl(event.request.url);
-                        }
-                        if (event.extra) {
-                            const extra: Record<string, unknown> = {};
-                            for (const [k, v] of Object.entries(event.extra)) {
-                                extra[k] =
-                                    typeof v === "string" ? redactPii(v) : v;
-                            }
-                            event.extra = extra;
-                        }
-                        return event;
-                    },
-                    tracesSampleRate: 0,
-                    replaysSessionSampleRate: 0,
-                    replaysOnErrorSampleRate: 0,
-                });
-                initialized = true;
-            }
             Sentry.captureException(error, { extra: safeContext });
         })
         .catch(() => {
-            // Ignore load/report errors
+            // Ignore load/report errors — not actionable and we don't want
+            // to recursively trigger another error from error handling.
         });
 }
+
+// Re-export for consumers that want to avoid an extra redirection and the
+// PII-redaction wrapper above.
+export { redactUrl };
