@@ -580,24 +580,49 @@ const PROBES: ProbeDef[] = [
             const key = process.env.RESEND_API_KEY;
             if (!key) return null;
             return async () => {
-                const res = await timedFetch("https://api.resend.com/domains", {
+                // Resend has two API-key tiers:
+                //   - Full access: can read /domains, /api-keys, etc.
+                //   - Sending only: can ONLY POST /emails and GET /emails/:id.
+                // Spritz uses a Sending-only key (correct, minimal scope),
+                // so /domains returns 401 with a body like
+                //   { name: "restricted_api_key", message: "...only send emails" }
+                // which is "service healthy, key correctly scoped" — NOT an
+                // outage. We treat that as up. Any other 401 (e.g. name:
+                // "validation_error" / "API key is invalid") means the key
+                // is bad and we flag it as down with an actionable message.
+                const url = "https://api.resend.com/domains";
+                const res = await timedFetch(url, {
                     headers: { authorization: `Bearer ${key}` },
                     timeoutMs: 5000,
                 });
-                // 401 here means the service is reachable but our API key
-                // is invalid/revoked — this is actionable (rotate the key),
-                // so we want a specific message instead of the generic
-                // "HTTP 401" that simpleHttpProbe would produce.
-                if (res.status === 401) {
+
+                const body = (res.bodyText ?? "").toLowerCase();
+                const isRestrictedKey =
+                    /restricted[_ ]api[_ ]key/.test(body) ||
+                    /only\s+send\s+emails/.test(body) ||
+                    /this\s+api\s+key\s+is\s+restricted/.test(body);
+
+                if (res.status === 401 || res.status === 403) {
+                    if (isRestrictedKey) {
+                        return {
+                            status: classify(true, res.latencyMs, 200),
+                            latencyMs: res.latencyMs,
+                            httpStatus: res.status,
+                            message:
+                                "Sending-only API key (correct) — /domains scope not granted, sending works.",
+                            probedUrl: url,
+                        };
+                    }
                     return {
                         status: "down" as Status,
                         latencyMs: res.latencyMs,
-                        httpStatus: 401,
+                        httpStatus: res.status,
                         message:
                             "API key rejected — RESEND_API_KEY is invalid or revoked. Rotate at resend.com/api-keys.",
-                        probedUrl: "https://api.resend.com/domains",
+                        probedUrl: url,
                     };
                 }
+
                 return {
                     status: classify(res.ok, res.latencyMs, res.status),
                     latencyMs: res.latencyMs,
@@ -605,7 +630,7 @@ const PROBES: ProbeDef[] = [
                     message: res.ok
                         ? `HTTP ${res.status}`
                         : res.error || `HTTP ${res.status}`,
-                    probedUrl: "https://api.resend.com/domains",
+                    probedUrl: url,
                 };
             };
         },
