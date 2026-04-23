@@ -15,6 +15,7 @@ import {
 } from "@simplewebauthn/browser";
 import { type Address } from "viem";
 import { createLogger } from "@/lib/logger";
+import { refreshSessionSafely } from "@/lib/sessionRefresh";
 
 const log = createLogger("Passkey");
 
@@ -307,34 +308,22 @@ export function PasskeyProvider({ children }: { children: ReactNode }) {
         if (typeof window === "undefined") return;
 
         const handleVisibilityChange = async () => {
-            if (document.visibilityState === "visible" && state.isAuthenticated) {
-                log.debug("[Passkey] App became visible, refreshing session...");
-                // Try to extend the session
-                try {
-                    const res = await fetch("/api/auth/session", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                    });
-                    if (res.ok) {
-                        log.debug("[Passkey] Session refreshed on visibility change");
-                    } else if (res.status === 401) {
-                        // Session expired - user needs to re-authenticate
-                        log.debug("[Passkey] Session expired, user needs to re-authenticate");
-                        localStorage.removeItem(SESSION_STORAGE_KEY);
-                        localStorage.removeItem(USER_ADDRESS_KEY);
-                        setState({
-                            isLoading: false,
-                            isAuthenticated: false,
-                            smartAccountAddress: null,
-                            error: "Session expired. Please sign in again.",
-                            hasStoredSession: false,
-                            warning: null,
-                        });
-                    }
-                } catch (e) {
-                    log.warn("[Passkey] Failed to refresh session on visibility change:", e);
-                }
+            if (document.visibilityState !== "visible" || !state.isAuthenticated) return;
+            log.debug("[Passkey] App became visible, refreshing session...");
+
+            const result = await refreshSessionSafely();
+            if (result === "expired") {
+                log.debug("[Passkey] Session confirmed expired, clearing auth state");
+                localStorage.removeItem(SESSION_STORAGE_KEY);
+                localStorage.removeItem(USER_ADDRESS_KEY);
+                setState({
+                    isLoading: false,
+                    isAuthenticated: false,
+                    smartAccountAddress: null,
+                    error: "Session expired. Please sign in again.",
+                    hasStoredSession: false,
+                    warning: null,
+                });
             }
         };
 

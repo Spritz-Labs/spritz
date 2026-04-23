@@ -10,6 +10,7 @@ import React, {
     type ReactNode,
 } from "react";
 import { type Address } from "viem";
+import { refreshSessionSafely } from "@/lib/sessionRefresh";
 
 // Storage keys
 const EMAIL_STORAGE_KEY = "spritz_email_auth";
@@ -311,36 +312,24 @@ export function EmailAuthProvider({ children }: { children: ReactNode }) {
         if (typeof window === "undefined") return;
 
         const handleVisibilityChange = async () => {
-            if (document.visibilityState === "visible" && state.isAuthenticated) {
-                console.log("[EmailAuthProvider] App became visible, refreshing session...");
-                // Try to extend the session
-                try {
-                    const res = await fetch("/api/auth/session", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                    });
-                    if (res.ok) {
-                        console.log("[EmailAuthProvider] Session refreshed on visibility change");
-                    } else if (res.status === 401) {
-                        // Session expired - user needs to re-authenticate
-                        console.log("[EmailAuthProvider] Session expired, user needs to re-authenticate");
-                        localStorage.removeItem(EMAIL_STORAGE_KEY);
-                        localStorage.removeItem(EMAIL_ADDRESS_STORAGE_KEY);
-                        localStorage.removeItem(EMAIL_SESSION_KEY);
-                        setState({
-                            isLoading: false,
-                            isAuthenticated: false,
-                            email: null,
-                            smartAccountAddress: null,
-                            error: "Session expired. Please sign in again.",
-                            hasStoredEmail: false,
-                            step: "email",
-                        });
-                    }
-                } catch (e) {
-                    console.warn("[EmailAuthProvider] Failed to refresh session on visibility change:", e);
-                }
+            if (document.visibilityState !== "visible" || !state.isAuthenticated) return;
+            console.log("[EmailAuthProvider] App became visible, refreshing session...");
+
+            const result = await refreshSessionSafely();
+            if (result === "expired") {
+                console.log("[EmailAuthProvider] Session confirmed expired, clearing auth state");
+                localStorage.removeItem(EMAIL_STORAGE_KEY);
+                localStorage.removeItem(EMAIL_ADDRESS_STORAGE_KEY);
+                localStorage.removeItem(EMAIL_SESSION_KEY);
+                setState({
+                    isLoading: false,
+                    isAuthenticated: false,
+                    email: null,
+                    smartAccountAddress: null,
+                    error: "Session expired. Please sign in again.",
+                    hasStoredEmail: false,
+                    step: "email",
+                });
             }
         };
 

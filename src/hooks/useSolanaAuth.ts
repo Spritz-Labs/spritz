@@ -10,6 +10,7 @@ import {
     AUTH_TTL,
     type AuthCredentials,
 } from "@/lib/authStorage";
+import { refreshSessionSafely } from "@/lib/sessionRefresh";
 
 // User state returned from authentication
 export type SolanaAuthState = {
@@ -200,30 +201,18 @@ export function useSolanaAuthImplementation() {
         if (typeof window === "undefined") return;
 
         const handleVisibilityChange = async () => {
-            if (document.visibilityState === "visible" && state.isAuthenticated) {
-                console.log("[SolanaAuth] App became visible, refreshing session...");
-                // Try to extend the session
-                try {
-                    const res = await fetch("/api/auth/session", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        credentials: "include",
-                    });
-                    if (res.ok) {
-                        console.log("[SolanaAuth] Session refreshed on visibility change");
-                    } else if (res.status === 401) {
-                        // Session expired - user needs to re-authenticate
-                        console.log("[SolanaAuth] Session expired, user needs to re-authenticate");
-                        setState((prev) => ({
-                            ...prev,
-                            isAuthenticated: false,
-                            user: null,
-                            error: "Session expired. Please sign in again.",
-                        }));
-                    }
-                } catch (e) {
-                    console.warn("[SolanaAuth] Failed to refresh session on visibility change:", e);
-                }
+            if (document.visibilityState !== "visible" || !state.isAuthenticated) return;
+            console.log("[SolanaAuth] App became visible, refreshing session...");
+
+            const result = await refreshSessionSafely();
+            if (result === "expired") {
+                console.log("[SolanaAuth] Session confirmed expired, clearing auth state");
+                setState((prev) => ({
+                    ...prev,
+                    isAuthenticated: false,
+                    user: null,
+                    error: "Session expired. Please sign in again.",
+                }));
             }
         };
 
