@@ -772,6 +772,7 @@ function DashboardContent({
         outgoingRequests,
         friends,
         isLoading: isFriendsLoading,
+        isSending: isSendingFriendRequest,
         error: friendsError,
         sendFriendRequest,
         acceptRequest,
@@ -2857,7 +2858,11 @@ function DashboardContent({
         addressOrENS: string,
         memo?: string
     ): Promise<boolean> => {
-        return await sendFriendRequest(addressOrENS, memo);
+        const success = await sendFriendRequest(addressOrENS, memo);
+        if (success) {
+            sonnerToast.success("Friend request sent!");
+        }
+        return success;
     };
 
     const handleCall = async (
@@ -6013,7 +6018,7 @@ function DashboardContent({
                     clearFriendsError();
                 }}
                 onAdd={handleSendFriendRequest}
-                isLoading={isFriendsLoading}
+                isLoading={isSendingFriendRequest}
                 error={friendsError}
                 initialValue={
                     typeof window !== "undefined"
@@ -6289,7 +6294,7 @@ function DashboardContent({
                 reachUsername={reachUsername || null}
                 avatar={effectiveAvatar}
                 onAddFriend={handleSendFriendRequest}
-                isAddingFriend={isFriendsLoading}
+                isAddingFriend={isSendingFriendRequest}
                 addFriendError={friendsError}
             />
 

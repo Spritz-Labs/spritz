@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { QRCodeSVG } from "qrcode.react";
+import { toast } from "sonner";
 
 export type UserCardFriend = {
     id: string;
@@ -162,7 +163,14 @@ export function UserCardModal({
         if (!onAddFriend || addingFriend) return;
         setAddingFriend(true);
         try {
-            await onAddFriend(peerAddress);
+            const success = await onAddFriend(peerAddress);
+            if (success) {
+                toast.success("Friend request sent!");
+            } else {
+                toast.error("Could not send friend request");
+            }
+        } catch {
+            toast.error("Failed to send friend request");
         } finally {
             setAddingFriend(false);
         }

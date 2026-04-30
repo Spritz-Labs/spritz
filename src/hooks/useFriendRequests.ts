@@ -59,6 +59,7 @@ export function useFriendRequests(userAddress: string | null) {
     );
     const [friends, setFriends] = useState<Friend[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const { resolveAddressOrENS } = useENS();
     const isResolvingRef = useRef(false);
@@ -285,6 +286,7 @@ export function useFriendRequests(userAddress: string | null) {
             return { friendsData };
         } catch (err) {
             console.error("Error fetching friend data:", err);
+            setError("Failed to load contacts. Pull down to retry.");
             return null;
         } finally {
             setIsLoading(false);
@@ -364,7 +366,7 @@ export function useFriendRequests(userAddress: string | null) {
         };
     }, [fetchData, resolveENSInBackground]);
 
-    // Real-time subscription for friend requests
+    // Real-time subscription for friend requests AND friends table
     useEffect(() => {
         if (!userAddress || !isSupabaseConfigured || !supabase) return;
 
@@ -380,6 +382,10 @@ export function useFriendRequests(userAddress: string | null) {
             c.length === 1
                 ? `from_address=eq.${c[0]}`
                 : `from_address=in.(${c.join(",")})`;
+        const userAddrFilter =
+            c.length === 1
+                ? `user_address=eq.${c[0]}`
+                : `user_address=in.(${c.join(",")})`;
 
         const channel = supabase
             .channel("friend_requests_changes")
@@ -402,6 +408,18 @@ export function useFriendRequests(userAddress: string | null) {
                     schema: "public",
                     table: "shout_friend_requests",
                     filter: fromFilter,
+                },
+                () => {
+                    fetchData();
+                },
+            )
+            .on(
+                "postgres_changes",
+                {
+                    event: "*",
+                    schema: "public",
+                    table: "shout_friends",
+                    filter: userAddrFilter,
                 },
                 () => {
                     fetchData();
@@ -440,6 +458,11 @@ export function useFriendRequests(userAddress: string | null) {
                 return false;
             }
 
+            if (isSending) {
+                return false;
+            }
+
+            setIsSending(true);
             setIsLoading(true);
             setError(null);
 
@@ -469,7 +492,6 @@ export function useFriendRequests(userAddress: string | null) {
                         "[sendFriendRequest] Friend check warning:",
                         friendCheckError,
                     );
-                    // Don't fail, just continue - table might not exist yet
                 }
 
                 if (existingFriend) {
@@ -494,7 +516,6 @@ export function useFriendRequests(userAddress: string | null) {
                         "[sendFriendRequest] Request check warning:",
                         requestCheckError,
                     );
-                    // Don't fail, just continue
                 }
 
                 console.log(
@@ -573,7 +594,18 @@ export function useFriendRequests(userAddress: string | null) {
                     );
                 }
 
-                await fetchData();
+                // Optimistic update: immediately add to outgoing requests
+                if (insertData && insertData[0]) {
+                    setOutgoingRequests((prev) => [...prev, {
+                        ...insertData[0],
+                        toEnsName: null,
+                        toSnsName: null,
+                        toAvatar: null,
+                        toUsername: null,
+                    }]);
+                }
+
+                fetchData();
                 console.log("[sendFriendRequest] Success!");
                 return true;
             } catch (err) {
@@ -586,9 +618,10 @@ export function useFriendRequests(userAddress: string | null) {
                 return false;
             } finally {
                 setIsLoading(false);
+                setIsSending(false);
             }
         },
-        [userAddress, fetchData],
+        [userAddress, isSending, fetchData],
     );
 
     // Accept friend request
@@ -778,6 +811,7 @@ export function useFriendRequests(userAddress: string | null) {
         outgoingRequests,
         friends,
         isLoading,
+        isSending,
         error,
         sendFriendRequest,
         acceptRequest,
