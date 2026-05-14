@@ -18,6 +18,12 @@ const NAV_ITEMS = [
     { href: "/admin", label: "Invites", icon: "🎟️", mobileLabel: "Invites" },
     { href: "/admin/users", label: "Users", icon: "👥", mobileLabel: "Users" },
     {
+        href: "/admin/developer-keys",
+        label: "Dev API Keys",
+        icon: "🔑",
+        mobileLabel: "API Keys",
+    },
+    {
         href: "/admin/chats",
         label: "Chats",
         icon: "💬",
