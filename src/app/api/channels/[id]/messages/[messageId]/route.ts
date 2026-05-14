@@ -147,19 +147,21 @@ export async function DELETE(
             );
         }
 
-        // Check if user owns message OR is channel creator/admin
-        const { data: channel } = await supabase
-            .from("shout_channels")
-            .select("creator_address")
-            .eq("id", channelId)
-            .single();
+        // Check if user owns message OR has moderation permissions
+        const { data: memberData } = await supabase
+            .from("shout_channel_members")
+            .select("role")
+            .eq("channel_id", channelId)
+            .ilike("user_address", normalizedAddress)
+            .maybeSingle();
 
         const isOwner = message.sender_address.toLowerCase() === normalizedAddress;
-        const isChannelCreator = channel?.creator_address?.toLowerCase() === normalizedAddress;
+        const memberRole = memberData?.role;
+        const isChannelMod = memberRole === "owner" || memberRole === "admin" || memberRole === "moderator";
 
         // Check global admin
         let isGlobalAdmin = false;
-        if (!isOwner && !isChannelCreator) {
+        if (!isOwner && !isChannelMod) {
             const { data: adminData } = await supabase
                 .from("shout_admins")
                 .select("wallet_address")
@@ -168,7 +170,7 @@ export async function DELETE(
             isGlobalAdmin = !!adminData;
         }
 
-        if (!isOwner && !isChannelCreator && !isGlobalAdmin) {
+        if (!isOwner && !isChannelMod && !isGlobalAdmin) {
             return NextResponse.json(
                 { error: "You can only delete your own messages" },
                 { status: 403 }

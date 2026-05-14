@@ -454,10 +454,11 @@ export async function POST(request: NextRequest) {
             channel.waku_content_topic = correctTopic;
         }
 
-        // Auto-join the creator
+        // Auto-join the creator as owner
         await supabase.from("shout_channel_members").insert({
             channel_id: channel.id,
             user_address: creatorAddress.toLowerCase(),
+            role: "owner",
         });
 
         return NextResponse.json({ channel });

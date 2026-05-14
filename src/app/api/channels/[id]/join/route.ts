@@ -138,6 +138,21 @@ export async function POST(
             );
         }
 
+        // Check if user is banned from this channel
+        const { data: banRecord } = await supabase
+            .from("shout_channel_bans")
+            .select("id")
+            .eq("channel_id", channel.id)
+            .ilike("user_address", normalizedAddress)
+            .maybeSingle();
+
+        if (banRecord) {
+            return NextResponse.json(
+                { error: "You are banned from this channel" },
+                { status: 403 },
+            );
+        }
+
         // Staff-only channels: only admins or moderators may join
         if (channel.access_level === "staff") {
             const allAddrs = [normalizedAddress];
