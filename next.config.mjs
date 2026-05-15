@@ -102,6 +102,10 @@ const withPWA = withPWAInit({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    // TypeScript is checked locally (npm run lint / tsc --noEmit) and in CI.
+    // Skip it during the Next.js build to avoid OOM on Vercel's 8GB machines.
+    typescript: { ignoreBuildErrors: true },
+
     // Disable the development indicator in the corner
     devIndicators: false,
 
