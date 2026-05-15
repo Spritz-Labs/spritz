@@ -53,9 +53,10 @@ import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { SocialsModal } from "./SocialsModal";
 import { useSocials } from "@/hooks/useSocials";
 import { toast as sonnerToast } from "sonner";
+import { reportError } from "@/lib/reportError";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { GroupChatModal } from "./GroupChatModal";
-// GroupsList rendered inline via UnifiedChatList
+// GroupsList functionality absorbed into UnifiedChatList
 import { GroupCallUI } from "./GroupCallUI";
 import { IncomingGroupCallModal } from "./IncomingGroupCallModal";
 import { type XMTPGroup } from "@/context/WakuProvider";
@@ -83,11 +84,11 @@ import { LoggingErrorBoundary } from "./LoggingErrorBoundary";
 const AgentsSection = dynamic(() => import("./AgentsSection").then((m) => m.AgentsSection));
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
-// GoLiveModal removed — streaming UI not yet wired
+// GoLiveModal used via ProfileAvatarModal, not needed here
 import { ProfileAvatarModal } from "./ProfileAvatarModal";
 import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
-// Stream type unused for now
+// Stream type used in useStreams hook return, not needed directly here
 const WalletModal = dynamic(() => import("./WalletModal").then((m) => m.WalletModal));
 import { walletCacheKey, normalizeAddress } from "@/utils/address";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
@@ -1216,8 +1217,8 @@ function DashboardContent({
                         const modData = await modRes.json();
                         isStaff = modData.permissions?.isModerator || modData.permissions?.isAdmin;
                     }
-                } catch {
-                    // Silent fail
+                } catch (err) {
+                    reportError(err, { context: "checkModerationPerms", silent: true });
                 }
             }
 
@@ -1254,8 +1255,8 @@ function DashboardContent({
                     body: JSON.stringify({ userAddress }),
                 });
                 fetchJoinedChannels();
-            } catch {
-                // Silent fail - not critical
+            } catch (err) {
+                reportError(err, { context: "autoJoinChannel", silent: true });
             }
         };
 
@@ -2270,8 +2271,8 @@ function DashboardContent({
             if (res.ok) {
                 setJoinedTokenChats(data.chats || []);
             }
-        } catch {
-            // Silent
+        } catch (err) {
+            reportError(err, { context: "handleTokenChatJoined", silent: true });
         }
     };
 
@@ -3005,8 +3006,8 @@ function DashboardContent({
                             if (res.ok && data.channel) {
                                 setSelectedChannel(data.channel);
                             }
-                        } catch {
-                            // Ignore; user can retry
+                        } catch (err) {
+                            reportError(err, { context: "openChannel", silent: true });
                         }
                     }
                     break;
@@ -5097,7 +5098,8 @@ function DashboardContent({
                                                             data.error || "Failed to create room"
                                                         );
                                                     }
-                                                } catch {
+                                                } catch (err) {
+                                                    reportError(err, { context: "createRoom" });
                                                     alert("Failed to create room");
                                                 }
                                             }}
