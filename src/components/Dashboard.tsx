@@ -2306,18 +2306,6 @@ function DashboardContent({
     const [unlockError, setUnlockError] = useState("");
 
     // Handler to open a group chat (shows password modal if group is password-protected and not unlocked)
-    // TODO: wire into UnifiedChatList to enforce password check
-    const _handleOpenGroup = (group: XMTPGroup) => {
-        if (group.passwordProtected && !group.symmetricKey) {
-            setGroupPendingUnlock(group);
-            setUnlockPassword("");
-            setUnlockError("");
-            return;
-        }
-        setSelectedGroup(group);
-        markGroupAsRead(group.id);
-    };
-
     // Fetch active group calls when groups change
     useEffect(() => {
         if (groups.length > 0) {
@@ -2386,34 +2374,6 @@ function DashboardContent({
         }
         await leaveCall();
         await leaveGroupCall();
-    };
-
-    // Handler to join an existing group call
-    // TODO: wire into GroupCallUI / notification handler
-    const _handleJoinGroupCall = async (groupId: string) => {
-        if (!isCallConfigured) {
-            alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
-            return;
-        }
-
-        const activeCall = activeGroupCalls[groupId];
-        if (!activeCall) return;
-
-        // Join the group call signaling
-        const call = await joinGroupCall(activeCall.id);
-        if (!call) {
-            console.error("[Dashboard] Failed to join group call");
-            return;
-        }
-
-        // Dismiss the incoming call modal if open
-        dismissIncomingCall();
-
-        // Join the Agora channel
-        const success = await joinCall(call.channelName, undefined, call.isVideo);
-        if (success && userSettings.soundEnabled) {
-            notifyCallConnected();
-        }
     };
 
     // Handler to join from incoming call notification
