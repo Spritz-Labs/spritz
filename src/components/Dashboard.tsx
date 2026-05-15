@@ -1,13 +1,6 @@
 "use client";
 
-import {
-    useState,
-    useEffect,
-    useRef,
-    useMemo,
-    useCallback,
-    startTransition,
-} from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, startTransition } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
@@ -27,7 +20,9 @@ import { CallHistory } from "./CallHistory";
 import { ScheduledCalls } from "./ScheduledCalls";
 import { NewScheduledCallModal } from "./NewScheduledCallModal";
 import { useCallHistory } from "@/hooks/useCallHistory";
-const BrowseChannelsModal = dynamic(() => import("./BrowseChannelsModal").then(m => m.BrowseChannelsModal));
+const BrowseChannelsModal = dynamic(() =>
+    import("./BrowseChannelsModal").then((m) => m.BrowseChannelsModal)
+);
 import { ChannelChatModal } from "./ChannelChatModal";
 import { useChannels } from "@/hooks/useChannels";
 import { useSmartWallet } from "@/hooks/useSmartWallet";
@@ -47,10 +42,12 @@ import { isHuddle01Configured, createHuddle01Room } from "@/config/huddle01";
 import { supabase, isSupabaseConfigured } from "@/config/supabase";
 import { StatusModal } from "./StatusModal";
 import dynamic from "next/dynamic";
-const SettingsModal = dynamic(() => import("./SettingsModal").then(m => m.SettingsModal));
+const SettingsModal = dynamic(() => import("./SettingsModal").then((m) => m.SettingsModal));
 import { BugReportModal } from "./BugReportModal";
 import { RegistrationPreferencesModal } from "./RegistrationPreferencesModal";
-const GlobalSearchModal = dynamic(() => import("./GlobalSearchModal").then(m => m.GlobalSearchModal));
+const GlobalSearchModal = dynamic(() =>
+    import("./GlobalSearchModal").then((m) => m.GlobalSearchModal)
+);
 import { QRCodeModal } from "./QRCodeModal";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { SocialsModal } from "./SocialsModal";
@@ -65,10 +62,7 @@ import { type XMTPGroup } from "@/context/WakuProvider";
 import { useGroupCallSignaling } from "@/hooks/useGroupCallSignaling";
 import { useGroupInvitations } from "@/hooks/useGroupInvitations";
 import { GroupInvitations } from "./GroupInvitations";
-import {
-    verifyGroupPassword,
-    deriveKeyFromPassword,
-} from "@/lib/groupPassword";
+import { verifyGroupPassword, deriveKeyFromPassword } from "@/lib/groupPassword";
 import { usePresence } from "@/hooks/usePresence";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
 // Session lock removed - all wallet/vault operations require signatures anyway
@@ -85,15 +79,16 @@ import { AlphaChatModal } from "./AlphaChatModal";
 import { useAlphaChat } from "@/hooks/useAlphaChat";
 import { Leaderboard } from "./Leaderboard";
 import { SpritzLogo } from "./SpritzLogo";
-const AgentsSection = dynamic(() => import("./AgentsSection").then(m => m.AgentsSection));
+import { LoggingErrorBoundary } from "./LoggingErrorBoundary";
+const AgentsSection = dynamic(() => import("./AgentsSection").then((m) => m.AgentsSection));
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
-const GoLiveModal = dynamic(() => import("./GoLiveModal").then(m => m.GoLiveModal));
+const GoLiveModal = dynamic(() => import("./GoLiveModal").then((m) => m.GoLiveModal));
 import { ProfileAvatarModal } from "./ProfileAvatarModal";
 import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
 import type { Stream } from "@/app/api/streams/route";
-const WalletModal = dynamic(() => import("./WalletModal").then(m => m.WalletModal));
+const WalletModal = dynamic(() => import("./WalletModal").then((m) => m.WalletModal));
 import { walletCacheKey, normalizeAddress } from "@/utils/address";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
 import { useChatPinned } from "@/hooks/useChatPinned";
@@ -105,12 +100,18 @@ import { UserCardModal } from "./UserCardModal";
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 import { BlockUserModal, ReportUserModal } from "./MuteBlockReportModals";
 import { LocationChatPicker } from "./LocationChatPicker";
-const LocationChatModal = dynamic(() => import("./LocationChatModal").then(m => m.LocationChatModal));
+const LocationChatModal = dynamic(() =>
+    import("./LocationChatModal").then((m) => m.LocationChatModal)
+);
 import { type LocationChat } from "@/hooks/useLocationChat";
 import type { JoinedLocationChat } from "@/app/api/location-chats/joined/route";
-const CreateTokenChatModal = dynamic(() => import("./CreateTokenChatModal").then(m => m.CreateTokenChatModal));
-const BrowseTokenChatsModal = dynamic(() => import("./BrowseTokenChatsModal").then(m => m.BrowseTokenChatsModal));
-const TokenChatModal = dynamic(() => import("./TokenChatModal").then(m => m.TokenChatModal));
+const CreateTokenChatModal = dynamic(() =>
+    import("./CreateTokenChatModal").then((m) => m.CreateTokenChatModal)
+);
+const BrowseTokenChatsModal = dynamic(() =>
+    import("./BrowseTokenChatsModal").then((m) => m.BrowseTokenChatsModal)
+);
+const TokenChatModal = dynamic(() => import("./TokenChatModal").then((m) => m.TokenChatModal));
 import type { TokenChat } from "@/app/api/token-chats/route";
 
 import { type WalletType } from "@/hooks/useWalletType";
@@ -164,14 +165,11 @@ function DashboardContent({
 }: DashboardProps) {
     const isSolanaUser = walletType === "solana";
     // Users who need a passkey to access Smart Wallet (non-wallet auth methods)
-    const needsPasskeyForWallet =
-        isEmailUser || isSolanaUser || isWorldIdUser || isAlienIdUser;
+    const needsPasskeyForWallet = isEmailUser || isSolanaUser || isWorldIdUser || isAlienIdUser;
     // EVM address for hooks that require it
     // For Solana users, pass null to disable EVM-specific features
     const evmAddress = isSolanaUser ? null : (userAddress as `0x${string}`);
-    const { smartWallet } = useSmartWallet(
-        isSolanaUser ? null : (userAddress as string)
-    );
+    const { smartWallet } = useSmartWallet(isSolanaUser ? null : (userAddress as string));
     // Connected wallet address (for admin/alpha checks when user signed in with email etc.)
     const { address: connectedWalletAddress } = useAccount();
     const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
@@ -183,30 +181,22 @@ function DashboardContent({
     const [isSocialsModalOpen, setIsSocialsModalOpen] = useState(false);
     const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
     const [isInvitesModalOpen, setIsInvitesModalOpen] = useState(false);
-    const [isRegistrationPrefsOpen, setIsRegistrationPrefsOpen] =
-        useState(false);
+    const [isRegistrationPrefsOpen, setIsRegistrationPrefsOpen] = useState(false);
     const [showWakuSuccess, setShowWakuSuccess] = useState(false);
     const [showSolanaBanner, setShowSolanaBanner] = useState(true);
     const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
     // Profile / Go Live modal (avatar click: two tabs)
-    const [isProfileAvatarModalOpen, setIsProfileAvatarModalOpen] =
-        useState(false);
-    const [profileAvatarInitialTab, setProfileAvatarInitialTab] = useState<
-        "profile" | "goLive"
-    >("profile");
+    const [isProfileAvatarModalOpen, setIsProfileAvatarModalOpen] = useState(false);
+    const [profileAvatarInitialTab, setProfileAvatarInitialTab] = useState<"profile" | "goLive">(
+        "profile"
+    );
 
     // User card (Telegram-style profile when clicking another user's avatar)
     const [userCardAddress, setUserCardAddress] = useState<string | null>(null);
 
     // Bottom navigation tab state - default to chats
-    type NavTab =
-        | "wallet"
-        | "agents"
-        | "friends"
-        | "chats"
-        | "calls"
-        | "leaderboard";
+    type NavTab = "wallet" | "agents" | "friends" | "chats" | "calls" | "leaderboard";
     const [activeNavTab, setActiveNavTab] = useState<NavTab>("chats");
     const [chatListResetKey, setChatListResetKey] = useState(0);
     const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
@@ -216,11 +206,8 @@ function DashboardContent({
     const [betaAppliedAt, setBetaAppliedAt] = useState<string | null>(null);
     const [isCheckingBetaStatus, setIsCheckingBetaStatus] = useState(false);
     const walletBetaCheckInitiated = useRef(false); // Prevent multiple checks
-    const [currentCallFriend, setCurrentCallFriend] =
-        useState<FriendsListFriend | null>(null);
-    const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(
-        null
-    );
+    const [currentCallFriend, setCurrentCallFriend] = useState<FriendsListFriend | null>(null);
+    const [chatFriend, setChatFriend] = useState<FriendsListFriend | null>(null);
     const [userENS, setUserENS] = useState<{
         ensName: string | null;
         snsName: string | null;
@@ -234,9 +221,7 @@ function DashboardContent({
     const profileMenuRef = useRef<HTMLDivElement>(null);
 
     // Passkey credential ID for messaging key derivation
-    const [passkeyCredentialId, setPasskeyCredentialId] = useState<
-        string | null
-    >(null);
+    const [passkeyCredentialId, setPasskeyCredentialId] = useState<string | null>(null);
 
     // Fetch passkey credential ID for passkey users
     useEffect(() => {
@@ -247,9 +232,7 @@ function DashboardContent({
 
         const sb = supabase;
         if (!sb) {
-            console.warn(
-                "[Dashboard] Supabase not configured, cannot fetch passkey credential"
-            );
+            console.warn("[Dashboard] Supabase not configured, cannot fetch passkey credential");
             return;
         }
 
@@ -267,10 +250,7 @@ function DashboardContent({
                     setPasskeyCredentialId(data.credential_id);
                 }
             } catch (err) {
-                console.warn(
-                    "[Dashboard] Could not fetch passkey credential:",
-                    err
-                );
+                console.warn("[Dashboard] Could not fetch passkey credential:", err);
             }
         };
 
@@ -289,9 +269,9 @@ function DashboardContent({
     const [selectedGroup, setSelectedGroup] = useState<XMTPGroup | null>(null);
 
     // Custom avatar cache for friends
-    const [friendCustomAvatars, setFriendCustomAvatars] = useState<
-        Record<string, string | null>
-    >({});
+    const [friendCustomAvatars, setFriendCustomAvatars] = useState<Record<string, string | null>>(
+        {}
+    );
 
     // Group call state
     const [groupCallDuration, setGroupCallDuration] = useState(0);
@@ -311,12 +291,8 @@ function DashboardContent({
     } = useGroupCallSignaling(userAddress);
 
     // Group invitations
-    const {
-        pendingInvitations,
-        sendInvitations,
-        acceptInvitation,
-        declineInvitation,
-    } = useGroupInvitations(userAddress);
+    const { pendingInvitations, sendInvitations, acceptInvitation, declineInvitation } =
+        useGroupInvitations(userAddress);
 
     // Pinned chats (pin to top of list)
     const { pinnedIds, setChatPinned } = useChatPinned(userAddress);
@@ -330,8 +306,7 @@ function DashboardContent({
             const ua = navigator.userAgent;
             const isIOS =
                 /iPad|iPhone|iPod/.test(ua) ||
-                (navigator.platform === "MacIntel" &&
-                    navigator.maxTouchPoints > 1);
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
             const isChrome = /CriOS/.test(ua); // CriOS = Chrome on iOS
             setIsIOSChrome(isIOS && isChrome);
         }
@@ -340,18 +315,14 @@ function DashboardContent({
     // Close profile menu when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (
-                profileMenuRef.current &&
-                !profileMenuRef.current.contains(event.target as Node)
-            ) {
+            if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
                 setIsProfileMenuOpen(false);
             }
         };
 
         if (isProfileMenuOpen) {
             document.addEventListener("mousedown", handleClickOutside);
-            return () =>
-                document.removeEventListener("mousedown", handleClickOutside);
+            return () => document.removeEventListener("mousedown", handleClickOutside);
         }
     }, [isProfileMenuOpen]);
 
@@ -422,12 +393,12 @@ function DashboardContent({
     const actualAuthMethod = isPasskeyUser
         ? "passkey"
         : isEmailUser
-        ? "email"
-        : isWorldIdUser
-        ? "world_id"
-        : isAlienIdUser
-        ? "alien_id"
-        : walletType; // Traditional wallet: evm or solana
+          ? "email"
+          : isWorldIdUser
+            ? "world_id"
+            : isAlienIdUser
+              ? "alien_id"
+              : walletType; // Traditional wallet: evm or solana
 
     const {
         dailyBonusAvailable,
@@ -450,11 +421,7 @@ function DashboardContent({
 
     // Show notification when daily bonus is available (only once per session)
     useEffect(() => {
-        if (
-            dailyBonusAvailable &&
-            !dailyBonusClaimed &&
-            !hasShownBonusModal.current
-        ) {
+        if (dailyBonusAvailable && !dailyBonusClaimed && !hasShownBonusModal.current) {
             hasShownBonusModal.current = true;
             setShowDailyBonusModal(true);
         }
@@ -492,8 +459,7 @@ function DashboardContent({
     // Check primary address, smart wallet, and connected wallet so admins work with any sign-in method
     const adminAdditionalAddresses = useMemo(() => {
         const addrs: (string | null)[] = [];
-        if (smartWallet?.smartWalletAddress)
-            addrs.push(smartWallet.smartWalletAddress);
+        if (smartWallet?.smartWalletAddress) addrs.push(smartWallet.smartWalletAddress);
         if (
             connectedWalletAddress &&
             connectedWalletAddress.toLowerCase() !== userAddress?.toLowerCase()
@@ -518,10 +484,7 @@ function DashboardContent({
         return addrs;
     }, [userAddress, smartWallet?.smartWalletAddress, connectedWalletAddress]);
 
-    const { isAdmin, isSuperAdmin } = useAdminCheck(
-        userAddress,
-        adminAdditionalAddresses
-    );
+    const { isAdmin, isSuperAdmin } = useAdminCheck(userAddress, adminAdditionalAddresses);
 
     // Beta access is passed from SIWE auth (or fall back to hook for non-EVM users)
     // Use || so if EITHER source says true, access is granted (more forgiving for cache issues)
@@ -595,9 +558,7 @@ function DashboardContent({
     useEffect(() => {
         // Award points for existing username if not already claimed
         if (reachUsername && !hasClaimed("username_claimed")) {
-            console.log(
-                "[Points] Awarding retroactive points for existing username"
-            );
+            console.log("[Points] Awarding retroactive points for existing username");
             awardUserPoints("username_claimed");
         }
     }, [reachUsername, hasClaimed, awardUserPoints]);
@@ -605,9 +566,7 @@ function DashboardContent({
     useEffect(() => {
         // Award points for existing socials if not already claimed
         if (socialCount > 0 && !hasClaimed("social_added")) {
-            console.log(
-                "[Points] Awarding retroactive points for existing socials"
-            );
+            console.log("[Points] Awarding retroactive points for existing socials");
             awardUserPoints("social_added");
         }
     }, [socialCount, hasClaimed, awardUserPoints]);
@@ -642,11 +601,7 @@ function DashboardContent({
     useEffect(() => {
         if (typeof window === "undefined") return;
         const mq = window.matchMedia("(max-width: 640px)");
-        const update = () =>
-            setHideCallVideoInChatList(
-                isPWA ||
-                    mq.matches
-            );
+        const update = () => setHideCallVideoInChatList(isPWA || mq.matches);
         update();
         mq.addEventListener("change", update);
         return () => mq.removeEventListener("change", update);
@@ -655,9 +610,7 @@ function DashboardContent({
     // Sync contacts function
     const handleSyncContacts = async () => {
         if (!isPWA) {
-            alert(
-                "Contacts sync is only available in the PWA app. Please install the app first."
-            );
+            alert("Contacts sync is only available in the PWA app. Please install the app first.");
             return;
         }
 
@@ -683,9 +636,7 @@ function DashboardContent({
                 if (firstInvite) {
                     await shareInvite(firstInvite.code);
                 } else {
-                    alert(
-                        "No available invite codes. Please generate more invites first."
-                    );
+                    alert("No available invite codes. Please generate more invites first.");
                 }
             }
         } catch (error) {
@@ -695,9 +646,7 @@ function DashboardContent({
             if (firstInvite) {
                 await shareInvite(firstInvite.code);
             } else {
-                alert(
-                    "Failed to sync contacts. Please try sharing an invite manually."
-                );
+                alert("Failed to sync contacts. Please try sharing an invite manually.");
             }
         } finally {
             setIsSyncingContacts(false);
@@ -707,8 +656,7 @@ function DashboardContent({
     // Alpha Channel (check membership for EOA, smart wallet, and connected wallet so any sign-in method is recognized)
     const alphaAdditionalAddresses = useMemo(() => {
         const addrs: (string | null)[] = [];
-        if (smartWallet?.smartWalletAddress)
-            addrs.push(smartWallet.smartWalletAddress);
+        if (smartWallet?.smartWalletAddress) addrs.push(smartWallet.smartWalletAddress);
         if (
             connectedWalletAddress &&
             connectedWalletAddress.toLowerCase() !== userAddress?.toLowerCase()
@@ -784,18 +732,14 @@ function DashboardContent({
         clearError: clearFriendsError,
         isConfigured: isSupabaseConfigured,
         refresh: refreshFriends,
-    } = useFriendRequests(
-        userAddress ? normalizeAddress(userAddress) : null,
-    );
+    } = useFriendRequests(userAddress ? normalizeAddress(userAddress) : null);
 
     // Fetch custom avatars for friends (batched for large friend lists)
     useEffect(() => {
         if (friends.length === 0 || !isSupabaseConfigured || !supabase) return;
 
         const client = supabase; // Capture for closure (after null check)
-        const addresses = friends.map((f) =>
-            normalizeAddress(f.friend_address)
-        );
+        const addresses = friends.map((f) => normalizeAddress(f.friend_address));
 
         const fetchCustomAvatars = async () => {
             try {
@@ -806,9 +750,7 @@ function DashboardContent({
                     const batch = addresses.slice(i, i + BATCH_SIZE);
                     const { data } = await client
                         .from("shout_user_settings")
-                        .select(
-                            "wallet_address, custom_avatar_url, use_custom_avatar"
-                        )
+                        .select("wallet_address, custom_avatar_url, use_custom_avatar")
                         .in("wallet_address", batch);
 
                     if (data) {
@@ -818,10 +760,7 @@ function DashboardContent({
                                 custom_avatar_url: string | null;
                                 use_custom_avatar: boolean;
                             }) => {
-                                if (
-                                    row.use_custom_avatar &&
-                                    row.custom_avatar_url
-                                ) {
+                                if (row.use_custom_avatar && row.custom_avatar_url) {
                                     avatars[walletCacheKey(row.wallet_address)] =
                                         row.custom_avatar_url;
                                 }
@@ -831,10 +770,7 @@ function DashboardContent({
                 }
                 setFriendCustomAvatars(avatars);
             } catch (err) {
-                console.error(
-                    "[Dashboard] Error fetching custom avatars:",
-                    err
-                );
+                console.error("[Dashboard] Error fetching custom avatars:", err);
             }
         };
 
@@ -880,8 +816,8 @@ function DashboardContent({
                         const name = data.user.ens_name
                             ? data.user.ens_name
                             : data.user.username
-                            ? `@${data.user.username}`
-                            : data.user.display_name || null;
+                              ? `@${data.user.username}`
+                              : data.user.display_name || null;
                         const userInfo = {
                             name,
                             avatar: data.user.avatar_url || null,
@@ -896,11 +832,7 @@ function DashboardContent({
                     }
                 })
                 .catch((err) => {
-                    console.error(
-                        "[Dashboard] Error fetching user info for",
-                        address,
-                        err
-                    );
+                    console.error("[Dashboard] Error fetching user info for", address, err);
                 });
         });
     }, [alphaChat.messages, userAddress, friends, chatsUserInfoRefreshKey]); // chatsUserInfoRefreshKey: refetch other users' avatars when switching to chats tab
@@ -971,19 +903,11 @@ function DashboardContent({
             return userSettings.customAvatarUrl;
         }
         return userENS.avatar;
-    }, [
-        userSettings.useCustomAvatar,
-        userSettings.customAvatarUrl,
-        userENS.avatar,
-    ]);
+    }, [userSettings.useCustomAvatar, userSettings.customAvatarUrl, userENS.avatar]);
 
     // Separate effect to award ENS points - only runs when hasClaimed state is ready
     useEffect(() => {
-        if (
-            userENS.ensName &&
-            !ensPointsAttemptedRef.current &&
-            !hasClaimed("ens_primary")
-        ) {
+        if (userENS.ensName && !ensPointsAttemptedRef.current && !hasClaimed("ens_primary")) {
             ensPointsAttemptedRef.current = true;
             awardUserPoints("ens_primary");
         }
@@ -997,23 +921,22 @@ function DashboardContent({
 
     // Track which provider is currently being used for the active call
     // null = no call, "agora" = centralized, "huddle01" = decentralized
-    const [currentCallProvider, setCurrentCallProvider] = useState<
-        "agora" | "huddle01" | null
-    >(null);
+    const [currentCallProvider, setCurrentCallProvider] = useState<"agora" | "huddle01" | null>(
+        null
+    );
 
     // Determine which provider to use for UI based on current call
     // When in a call, use the provider that was actually joined
     // When not in a call, default to user's preferred settings
-    const useDecentralized =
-        userSettings.decentralizedCalls && isHuddle01Configured;
+    const useDecentralized = userSettings.decentralizedCalls && isHuddle01Configured;
     const activeCall =
         currentCallProvider === "agora"
             ? agoraCall
             : currentCallProvider === "huddle01"
-            ? huddle01Call
-            : useDecentralized
-            ? huddle01Call
-            : agoraCall;
+              ? huddle01Call
+              : useDecentralized
+                ? huddle01Call
+                : agoraCall;
 
     // Destructure from active provider
     const {
@@ -1069,14 +992,8 @@ function DashboardContent({
     const [isRejectingCall, setIsRejectingCall] = useState(false);
 
     // Live streaming
-    const {
-        liveStreams,
-        currentStream,
-        createStream,
-        goLive,
-        endStream,
-        fetchLiveStreams,
-    } = useStreams(userAddress);
+    const { liveStreams, currentStream, createStream, goLive, endStream, fetchLiveStreams } =
+        useStreams(userAddress);
 
     // Public channels
     const {
@@ -1091,8 +1008,7 @@ function DashboardContent({
         onNewChannelMessage,
         setActiveChannel,
     } = useChannels(userAddress, {
-        alsoAddresses:
-            channelLookupAddresses.length > 0 ? channelLookupAddresses : undefined,
+        alsoAddresses: channelLookupAddresses.length > 0 ? channelLookupAddresses : undefined,
     });
     // For POAP scan: use Smart Wallet (passkey) + identity so we check both
     const poapAddresses = useMemo(() => {
@@ -1104,8 +1020,7 @@ function DashboardContent({
         return Array.from(set);
     }, [userAddress, isSolanaUser, smartWallet?.smartWalletAddress]);
     const [isBrowseChannelsOpen, setIsBrowseChannelsOpen] = useState(false);
-    const [browseChannelsInitialCreate, setBrowseChannelsInitialCreate] =
-        useState(false);
+    const [browseChannelsInitialCreate, setBrowseChannelsInitialCreate] = useState(false);
     const [showNewChatMenu, setShowNewChatMenu] = useState(false);
     const [showLocationChatPicker, setShowLocationChatPicker] = useState(false);
     // Token chat state
@@ -1116,10 +1031,8 @@ function DashboardContent({
     const [isTokenChatOpen, setIsTokenChatOpen] = useState(false);
     const [joinedTokenChats, setJoinedTokenChats] = useState<TokenChat[]>([]);
 
-    const [selectedChannel, setSelectedChannel] =
-        useState<PublicChannel | null>(null);
-    const [selectedLocationChat, setSelectedLocationChat] =
-        useState<LocationChat | null>(null);
+    const [selectedChannel, setSelectedChannel] = useState<PublicChannel | null>(null);
+    const [selectedLocationChat, setSelectedLocationChat] = useState<LocationChat | null>(null);
     const [joinedLocationChats, setJoinedLocationChats] = useState<JoinedLocationChat[]>([]);
 
     // Fetch joined location chats
@@ -1144,17 +1057,13 @@ function DashboardContent({
     }, [userAddress, fetchJoinedLocationChats]);
 
     // Global chat icon from app settings
-    const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(
-        null
-    );
+    const [globalChatIconUrl, setGlobalChatIconUrl] = useState<string | null>(null);
 
     // Fetch global chat icon
     useEffect(() => {
         async function fetchGlobalChatIcon() {
             try {
-                const res = await fetch(
-                    "/api/admin/settings?key=global_chat_icon"
-                );
+                const res = await fetch("/api/admin/settings?key=global_chat_icon");
                 if (res.ok) {
                     const data = await res.json();
                     if (data.settings?.value?.icon_url) {
@@ -1177,9 +1086,7 @@ function DashboardContent({
             hasPendingJoinHandled.current = true;
 
             // Check for pending channel join (from invite link when not logged in)
-            const pendingChannelId = localStorage.getItem(
-                "spritz_pending_channel_join"
-            );
+            const pendingChannelId = localStorage.getItem("spritz_pending_channel_join");
             if (pendingChannelId) {
                 localStorage.removeItem("spritz_pending_channel_join");
                 try {
@@ -1193,10 +1100,7 @@ function DashboardContent({
                         setSelectedChannel(allChannels.channel);
                     }
                 } catch (err) {
-                    console.error(
-                        "[Dashboard] Error joining pending channel:",
-                        err
-                    );
+                    console.error("[Dashboard] Error joining pending channel:", err);
                 }
             }
 
@@ -1205,34 +1109,25 @@ function DashboardContent({
             if (openChannelId) {
                 localStorage.removeItem("spritz_open_channel");
                 // Find the channel in joinedChannels or fetch it
-                const channel = joinedChannels.find(
-                    (c) => c.id === openChannelId
-                );
+                const channel = joinedChannels.find((c) => c.id === openChannelId);
                 if (channel) {
                     setSelectedChannel(channel);
                 } else {
                     // Fetch and set it
                     try {
-                        const res = await fetch(
-                            `/api/public/channels/${openChannelId}`
-                        );
+                        const res = await fetch(`/api/public/channels/${openChannelId}`);
                         const data = await res.json();
                         if (data.channel) {
                             setSelectedChannel(data.channel);
                         }
                     } catch (err) {
-                        console.error(
-                            "[Dashboard] Error opening channel:",
-                            err
-                        );
+                        console.error("[Dashboard] Error opening channel:", err);
                     }
                 }
             }
 
             // Check for pending location chat join (from invite link when not logged in)
-            const pendingLocationChatId = localStorage.getItem(
-                "spritz_pending_location_chat_join"
-            );
+            const pendingLocationChatId = localStorage.getItem("spritz_pending_location_chat_join");
             if (pendingLocationChatId) {
                 localStorage.removeItem("spritz_pending_location_chat_join");
                 try {
@@ -1246,10 +1141,7 @@ function DashboardContent({
                         setSelectedLocationChat(data.chat);
                     }
                 } catch (err) {
-                    console.error(
-                        "[Dashboard] Error joining pending location chat:",
-                        err
-                    );
+                    console.error("[Dashboard] Error joining pending location chat:", err);
                 }
             }
 
@@ -1258,18 +1150,13 @@ function DashboardContent({
             if (openLocationChatId) {
                 localStorage.removeItem("spritz_open_location_chat");
                 try {
-                    const res = await fetch(
-                        `/api/location-chats/${openLocationChatId}`
-                    );
+                    const res = await fetch(`/api/location-chats/${openLocationChatId}`);
                     const data = await res.json();
                     if (data.chat) {
                         setSelectedLocationChat(data.chat);
                     }
                 } catch (err) {
-                    console.error(
-                        "[Dashboard] Error opening location chat:",
-                        err
-                    );
+                    console.error("[Dashboard] Error opening location chat:", err);
                 }
             }
 
@@ -1282,13 +1169,19 @@ function DashboardContent({
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ userAddress }),
                     });
-                    const joinData = joinRes.ok ? await joinRes.json().catch(() => ({})) : await joinRes.json().catch(() => ({}));
+                    const joinData = joinRes.ok
+                        ? await joinRes.json().catch(() => ({}))
+                        : await joinRes.json().catch(() => ({}));
                     if (joinRes.ok || joinData.alreadyMember) {
-                        const settingsRes = await fetch(`/api/token-chats/${pendingTokenChatId}/settings`);
+                        const settingsRes = await fetch(
+                            `/api/token-chats/${pendingTokenChatId}/settings`
+                        );
                         const settingsData = await settingsRes.json();
                         if (settingsData.chat) {
                             setJoinedTokenChats((prev) =>
-                                prev.some((c) => c.id === settingsData.chat.id) ? prev : [...prev, settingsData.chat]
+                                prev.some((c) => c.id === settingsData.chat.id)
+                                    ? prev
+                                    : [...prev, settingsData.chat]
                             );
                             setSelectedTokenChat(settingsData.chat);
                             setIsTokenChatOpen(true);
@@ -1296,7 +1189,10 @@ function DashboardContent({
                         }
                     } else {
                         localStorage.removeItem("spritz_pending_token_chat_join");
-                        const msg = joinData.error || joinData.message || "Couldn't join (e.g. token balance requirement). Try again from the invite link.";
+                        const msg =
+                            joinData.error ||
+                            joinData.message ||
+                            "Couldn't join (e.g. token balance requirement). Try again from the invite link.";
                         sonnerToast.error(msg);
                     }
                 } catch (err) {
@@ -1355,15 +1251,23 @@ function DashboardContent({
 
             try {
                 // Check if already joined
-                const res = await fetch(`/api/channels?userAddress=${encodeURIComponent(userAddress)}&joined=true`);
+                const res = await fetch(
+                    `/api/channels?userAddress=${encodeURIComponent(userAddress)}&joined=true`
+                );
                 const data = await res.json();
-                const alreadyJoined = data.channels?.some((c: { name: string }) => c.name === "The Bunker");
+                const alreadyJoined = data.channels?.some(
+                    (c: { name: string }) => c.name === "The Bunker"
+                );
                 if (alreadyJoined) return;
 
                 // Find the Bunker channel ID from all channels
-                const allRes = await fetch(`/api/channels?userAddress=${encodeURIComponent(userAddress)}`);
+                const allRes = await fetch(
+                    `/api/channels?userAddress=${encodeURIComponent(userAddress)}`
+                );
                 const allData = await allRes.json();
-                const bunker = allData.channels?.find((c: { name: string; access_level?: string }) => c.name === "The Bunker");
+                const bunker = allData.channels?.find(
+                    (c: { name: string; access_level?: string }) => c.name === "The Bunker"
+                );
                 if (!bunker) return;
 
                 // Auto-join
@@ -1384,21 +1288,19 @@ function DashboardContent({
     // Screen Wake Lock - prevents screen from dimming during calls and active chats
     // This helps maintain WebSocket connections and improves PWA experience
     const isInActiveCall =
-        callState === "joining" ||
-        callState === "connected" ||
-        !!currentGroupCall;
+        callState === "joining" || callState === "connected" || !!currentGroupCall;
     const isInActiveChat = !!chatFriend || !!selectedGroup || !!selectedChannel;
-    const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } =
-        useWakeLock(isInActiveCall || isInActiveChat);
+    const { isActive: isWakeLockActive, isSupported: isWakeLockSupported } = useWakeLock(
+        isInActiveCall || isInActiveChat
+    );
 
     // Log wake lock status for debugging (only once when state changes)
     useEffect(() => {
         if (isWakeLockSupported && (isInActiveCall || isInActiveChat)) {
-            console.log(
-                "[Dashboard] Wake lock:",
-                isWakeLockActive ? "active" : "inactive",
-                { isInActiveCall, isInActiveChat }
-            );
+            console.log("[Dashboard] Wake lock:", isWakeLockActive ? "active" : "inactive", {
+                isInActiveCall,
+                isInActiveChat,
+            });
         }
     }, [isWakeLockActive, isWakeLockSupported, isInActiveCall, isInActiveChat]);
 
@@ -1413,9 +1315,7 @@ function DashboardContent({
     const initializeWaku = wakuContext?.initialize ?? (() => Promise.resolve());
 
     // Track last message times for sorting chats (persisted to localStorage)
-    const [lastMessageTimes, setLastMessageTimes] = useState<
-        Record<string, number>
-    >(() => {
+    const [lastMessageTimes, setLastMessageTimes] = useState<Record<string, number>>(() => {
         if (typeof window === "undefined") return {};
         try {
             const stored = localStorage.getItem(
@@ -1428,9 +1328,7 @@ function DashboardContent({
     });
 
     // Track last message previews for chat list display (persisted to localStorage)
-    const [lastMessagePreviews, setLastMessagePreviews] = useState<
-        Record<string, string>
-    >(() => {
+    const [lastMessagePreviews, setLastMessagePreviews] = useState<Record<string, string>>(() => {
         if (typeof window === "undefined") return {};
         try {
             const stored = localStorage.getItem(
@@ -1446,12 +1344,7 @@ function DashboardContent({
     // without tracked times yet. This provides initial ordering based on actual messages.
     const hasScannedMessages = useRef(false);
     useEffect(() => {
-        if (
-            typeof window === "undefined" ||
-            !userAddress ||
-            hasScannedMessages.current
-        )
-            return;
+        if (typeof window === "undefined" || !userAddress || hasScannedMessages.current) return;
         hasScannedMessages.current = true;
 
         try {
@@ -1493,36 +1386,38 @@ function DashboardContent({
                     if (match) {
                         // DM topic format: dm-{addr1}-{addr2} sorted alphabetically
                         const dmPair = match[1];
-                        const addresses = dmPair
-                            .split("-")
-                            .filter((a) => a.startsWith("0x"));
+                        const addresses = dmPair.split("-").filter((a) => a.startsWith("0x"));
                         // Find the peer address (not our address)
-                        const peerAddr = addresses.find(
-                            (a) => a.toLowerCase() !== userAddrLower
-                        );
+                        const peerAddr = addresses.find((a) => a.toLowerCase() !== userAddrLower);
                         if (peerAddr) {
                             const key = peerAddr.toLowerCase();
-                            if (
-                                !lastMessageTimes[key] ||
-                                latestTime > lastMessageTimes[key]
-                            ) {
+                            if (!lastMessageTimes[key] || latestTime > lastMessageTimes[key]) {
                                 timeUpdates[key] = latestTime;
                             }
                             // Extract preview from latest message (if not already set)
                             if (!lastMessagePreviews[key] && latestMsg?.content) {
                                 const isOwn =
-                                    latestMsg.senderInboxId?.toLowerCase() ===
-                                    userAddrLower;
+                                    latestMsg.senderInboxId?.toLowerCase() === userAddrLower;
                                 const content = latestMsg.content;
                                 // Simple preview formatting
                                 let preview = content;
-                                if (preview.startsWith("VOICE:") || preview.startsWith("ENCRYPTED_VOICE:")) preview = "Voice message";
-                                else if (preview.startsWith("PIXEL_ART:") || preview.startsWith("data:image/png;base64,")) preview = "Pixel art";
+                                if (
+                                    preview.startsWith("VOICE:") ||
+                                    preview.startsWith("ENCRYPTED_VOICE:")
+                                )
+                                    preview = "Voice message";
+                                else if (
+                                    preview.startsWith("PIXEL_ART:") ||
+                                    preview.startsWith("data:image/png;base64,")
+                                )
+                                    preview = "Pixel art";
                                 else if (preview.startsWith("ENCRYPTED_IMAGE:")) preview = "Photo";
-                                else if (preview.startsWith("LOCATION:")) preview = "Shared a location";
+                                else if (preview.startsWith("LOCATION:"))
+                                    preview = "Shared a location";
                                 else if (preview.startsWith("GIF:")) preview = "GIF";
                                 const maxLen = isOwn ? 46 : 50;
-                                if (preview.length > maxLen) preview = preview.slice(0, maxLen) + "...";
+                                if (preview.length > maxLen)
+                                    preview = preview.slice(0, maxLen) + "...";
                                 previewUpdates[key] = (isOwn ? "You: " : "") + preview;
                             }
                         }
@@ -1532,10 +1427,7 @@ function DashboardContent({
                     if (match) {
                         const groupId = match[1];
                         const key = `group-${groupId}`;
-                        if (
-                            !lastMessageTimes[key] ||
-                            latestTime > lastMessageTimes[key]
-                        ) {
+                        if (!lastMessageTimes[key] || latestTime > lastMessageTimes[key]) {
                             timeUpdates[key] = latestTime;
                         }
                     }
@@ -1627,13 +1519,15 @@ function DashboardContent({
                         const prefix = isOwn ? "You: " : "";
                         if (msg.content) {
                             // Plaintext content (welcome/broadcast/system)
-                            const text = msg.content.length > 50
-                                ? msg.content.slice(0, 50) + "..."
-                                : msg.content;
+                            const text =
+                                msg.content.length > 50
+                                    ? msg.content.slice(0, 50) + "..."
+                                    : msg.content;
                             previewUpdates[peerAddress] = prefix + text;
                         } else {
                             // Encrypted message - show type-based placeholder
-                            const typeLabel = msg.message_type === "text" ? "Message" : msg.message_type;
+                            const typeLabel =
+                                msg.message_type === "text" ? "Message" : msg.message_type;
                             previewUpdates[peerAddress] = prefix + (typeLabel || "Message");
                         }
                     }
@@ -1677,9 +1571,7 @@ function DashboardContent({
         });
 
         if (Object.keys(updates).length > 0) {
-            startTransition(() =>
-                setLastMessageTimes((prev) => ({ ...prev, ...updates }))
-            );
+            startTransition(() => setLastMessageTimes((prev) => ({ ...prev, ...updates })));
         }
 
         prevUnreadCountsRef.current = { ...unreadCounts };
@@ -1703,8 +1595,7 @@ function DashboardContent({
     const onNewMessage = wakuContext?.onNewMessage ?? (() => () => {});
     const prefetchMessages = wakuContext?.prefetchMessages ?? (() => {});
     const canMessageBatch =
-        wakuContext?.canMessageBatch ??
-        (() => Promise.resolve({} as Record<string, boolean>));
+        wakuContext?.canMessageBatch ?? (() => Promise.resolve({} as Record<string, boolean>));
     const revokeAllInstallations =
         wakuContext?.revokeAllInstallations ?? (() => Promise.resolve(false));
     // Group methods
@@ -1726,15 +1617,12 @@ function DashboardContent({
             }));
     const unlockGroupWithPassword =
         wakuContext?.unlockGroupWithPassword ??
-        (() =>
-            Promise.resolve({ success: false, error: "Waku not available" }));
-    const addGroupMembers =
-        wakuContext?.addGroupMembers ?? (() => Promise.resolve(false));
+        (() => Promise.resolve({ success: false, error: "Waku not available" }));
+    const addGroupMembers = wakuContext?.addGroupMembers ?? (() => Promise.resolve(false));
     const leaveGroup = wakuContext?.leaveGroup ?? (() => Promise.resolve());
 
     // State for reconnecting (kept for API compatibility)
-    const [isRevokingInstallations, setIsRevokingInstallations] =
-        useState(false);
+    const [isRevokingInstallations, setIsRevokingInstallations] = useState(false);
 
     // Check if the error is a connection error
     const isInstallationLimitError =
@@ -1764,17 +1652,11 @@ function DashboardContent({
     } | null>(null);
 
     // Track which friends can receive Waku messages
-    const [friendsWakuStatus, setFriendsWakuStatus] = useState<
-        Record<string, boolean>
-    >({});
+    const [friendsWakuStatus, setFriendsWakuStatus] = useState<Record<string, boolean>>({});
 
     // Auto-initialize Waku after a short delay
     useEffect(() => {
-        if (
-            !isWakuInitialized &&
-            !isWakuInitializing &&
-            !wakuAutoInitAttempted.current
-        ) {
+        if (!isWakuInitialized && !isWakuInitializing && !wakuAutoInitAttempted.current) {
             wakuAutoInitAttempted.current = true;
             // Small delay to let the UI settle, then initialize Waku
             const timer = setTimeout(() => {
@@ -1857,9 +1739,7 @@ function DashboardContent({
             const cached = userInfoCache.get(key);
 
             // Check friends list for name info
-            const friend = friends.find(
-                (f) => walletCacheKey(f.friend_address) === key
-            );
+            const friend = friends.find((f) => walletCacheKey(f.friend_address) === key);
 
             // Build display name with priority: local nickname > ENS > SNS > username
             const getDisplayNameForFriend = () => {
@@ -1894,14 +1774,7 @@ function DashboardContent({
             // Return null if not found (will be fetched by useEffect)
             return null;
         },
-        [
-            userAddress,
-            friends,
-            reachUsername,
-            userENS,
-            effectiveAvatar,
-            userInfoCache,
-        ]
+        [userAddress, friends, reachUsername, userENS, effectiveAvatar, userInfoCache]
     );
 
     // Convert friends to the format FriendsList expects - memoized to prevent unnecessary re-renders
@@ -1931,8 +1804,7 @@ function DashboardContent({
     // Normalize to a valid Date or null (invalid/missing values sort to bottom)
     const toValidLastMessageAt = useCallback((value: unknown): Date | null => {
         if (value == null) return null;
-        const d =
-            value instanceof Date ? value : new Date(value as string | number);
+        const d = value instanceof Date ? value : new Date(value as string | number);
         const t = d.getTime();
         return Number.isFinite(t) ? d : null;
     }, []);
@@ -1954,14 +1826,10 @@ function DashboardContent({
                 type: "dm",
                 name:
                     friend.nickname ||
-                    (friend.reachUsername
-                        ? `@${friend.reachUsername}`
-                        : null) ||
+                    (friend.reachUsername ? `@${friend.reachUsername}` : null) ||
                     friend.ensName ||
                     friend.snsName ||
-                    `${friend.address.slice(0, 6)}...${friend.address.slice(
-                        -4
-                    )}`,
+                    `${friend.address.slice(0, 6)}...${friend.address.slice(-4)}`,
                 avatar: friend.avatar,
                 lastMessage: lastMessagePreviews[addressKey] || null,
                 lastMessageAt,
@@ -1983,8 +1851,7 @@ function DashboardContent({
             type: "global",
             name: "Spritz Global",
             avatar: globalChatIconUrl,
-            lastMessage:
-                lastMessagePreviews["global-spritz"] || "Community chat",
+            lastMessage: lastMessagePreviews["global-spritz"] || "Community chat",
             lastMessageAt: toValidLastMessageAt(globalLastMsgTime),
             unreadCount: alphaUnreadCount,
             isPinned: pinnedIds.has("global-spritz"),
@@ -2034,9 +1901,7 @@ function DashboardContent({
                 type: "group",
                 name: group.name,
                 avatar: null,
-                lastMessage:
-                    lastMessagePreviews[groupKey] ||
-                    `${group.memberCount || 0} members`,
+                lastMessage: lastMessagePreviews[groupKey] || `${group.memberCount || 0} members`,
                 lastMessageAt,
                 unreadCount: 0,
                 isPinned: pinnedIds.has(groupKey),
@@ -2054,8 +1919,8 @@ function DashboardContent({
             const lastMessageAt = lastMsgTime
                 ? toValidLastMessageAt(lastMsgTime)
                 : locChat.last_message_at
-                ? toValidLastMessageAt(locChat.last_message_at)
-                : toValidLastMessageAt(locChat.joined_at);
+                  ? toValidLastMessageAt(locChat.last_message_at)
+                  : toValidLastMessageAt(locChat.joined_at);
             items.push({
                 id: locationKey,
                 type: "location",
@@ -2128,34 +1993,31 @@ function DashboardContent({
     // Format a message content string into a short preview for the chat list.
     // Handles special message types (voice, pixel art, images, locations, etc.)
     // isOwn: true adds "You: " prefix so you can tell who sent the last message at a glance.
-    const formatMessagePreview = useCallback(
-        (content: string, isOwn: boolean): string => {
-            const prefix = isOwn ? "You: " : "";
-            let text = content;
+    const formatMessagePreview = useCallback((content: string, isOwn: boolean): string => {
+        const prefix = isOwn ? "You: " : "";
+        let text = content;
 
-            // Detect special message types and show friendly labels
-            if (text.startsWith("VOICE:") || text.startsWith("ENCRYPTED_VOICE:")) {
-                text = "Voice message";
-            } else if (text.startsWith("PIXEL_ART:") || text.startsWith("data:image/png;base64,")) {
-                text = "Pixel art";
-            } else if (text.startsWith("ENCRYPTED_IMAGE:")) {
-                text = "Photo";
-            } else if (text.startsWith("LOCATION:")) {
-                text = "Shared a location";
-            } else if (text.startsWith("GIF:") || text.match(/^https?:\/\/.*\.(gif|giphy)/i)) {
-                text = "GIF";
-            }
+        // Detect special message types and show friendly labels
+        if (text.startsWith("VOICE:") || text.startsWith("ENCRYPTED_VOICE:")) {
+            text = "Voice message";
+        } else if (text.startsWith("PIXEL_ART:") || text.startsWith("data:image/png;base64,")) {
+            text = "Pixel art";
+        } else if (text.startsWith("ENCRYPTED_IMAGE:")) {
+            text = "Photo";
+        } else if (text.startsWith("LOCATION:")) {
+            text = "Shared a location";
+        } else if (text.startsWith("GIF:") || text.match(/^https?:\/\/.*\.(gif|giphy)/i)) {
+            text = "GIF";
+        }
 
-            // Truncate to keep preview compact
-            const maxLen = isOwn ? 46 : 50; // Account for "You: " prefix
-            if (text.length > maxLen) {
-                text = text.slice(0, maxLen) + "...";
-            }
+        // Truncate to keep preview compact
+        const maxLen = isOwn ? 46 : 50; // Account for "You: " prefix
+        if (text.length > maxLen) {
+            text = text.slice(0, maxLen) + "...";
+        }
 
-            return prefix + text;
-        },
-        []
-    );
+        return prefix + text;
+    }, []);
 
     // Function to update last message time and preview when user sends a message (non-urgent to keep list responsive)
     const updateLastMessageTime = useCallback(
@@ -2192,10 +2054,7 @@ function DashboardContent({
             );
 
             if (friend) {
-                console.log(
-                    "[Dashboard] Opening chat from URL param:",
-                    chatAddress
-                );
+                console.log("[Dashboard] Opening chat from URL param:", chatAddress);
                 setChatFriend(friend);
 
                 // Clean up the URL without reloading
@@ -2213,10 +2072,7 @@ function DashboardContent({
         const addParam = urlParams.get("add");
 
         if (addParam) {
-            console.log(
-                "[Dashboard] Opening Add Friend modal from URL param:",
-                addParam
-            );
+            console.log("[Dashboard] Opening Add Friend modal from URL param:", addParam);
             setIsAddFriendOpen(true);
 
             // Clean up the URL without reloading
@@ -2231,16 +2087,11 @@ function DashboardContent({
 
         const handleServiceWorkerMessage = (event: MessageEvent) => {
             if (event.data?.type === "OPEN_CHAT" && event.data.senderAddress) {
-                console.log(
-                    "[Dashboard] Received OPEN_CHAT from SW:",
-                    event.data.senderAddress
-                );
+                console.log("[Dashboard] Received OPEN_CHAT from SW:", event.data.senderAddress);
 
                 // Find the friend with this address
                 const friend = friendsListData.find(
-                    (f) =>
-                        f.address.toLowerCase() ===
-                        event.data.senderAddress.toLowerCase()
+                    (f) => f.address.toLowerCase() === event.data.senderAddress.toLowerCase()
                 );
 
                 if (friend) {
@@ -2249,16 +2100,10 @@ function DashboardContent({
             }
         };
 
-        navigator.serviceWorker?.addEventListener(
-            "message",
-            handleServiceWorkerMessage
-        );
+        navigator.serviceWorker?.addEventListener("message", handleServiceWorkerMessage);
 
         return () => {
-            navigator.serviceWorker?.removeEventListener(
-                "message",
-                handleServiceWorkerMessage
-            );
+            navigator.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
         };
     }, [friendsListData]);
 
@@ -2319,17 +2164,9 @@ function DashboardContent({
     ): Promise<boolean> => {
         setIsCreatingGroup(true);
         try {
-            const result = await createGroup(
-                memberAddresses,
-                groupName,
-                emoji,
-                password
-            );
+            const result = await createGroup(memberAddresses, groupName, emoji, password);
             if (!result.success || !result.groupId) {
-                console.error(
-                    "[Dashboard] Failed to create group:",
-                    result.error
-                );
+                console.error("[Dashboard] Failed to create group:", result.error);
                 return false;
             }
 
@@ -2383,7 +2220,7 @@ function DashboardContent({
         const fetchTokenChats = async () => {
             try {
                 const res = await fetch(
-                    `/api/token-chats?userAddress=${userAddress.toLowerCase()}&mode=my`,
+                    `/api/token-chats?userAddress=${userAddress.toLowerCase()}&mode=my`
                 );
                 const data = await res.json();
                 if (res.ok && data.chats) {
@@ -2426,7 +2263,7 @@ function DashboardContent({
             if (res.ok && data.chat) {
                 // Refresh the list
                 const listRes = await fetch(
-                    `/api/token-chats?userAddress=${userAddress?.toLowerCase()}&mode=my`,
+                    `/api/token-chats?userAddress=${userAddress?.toLowerCase()}&mode=my`
                 );
                 const listData = await listRes.json();
                 if (listRes.ok) {
@@ -2451,7 +2288,7 @@ function DashboardContent({
         // Refresh joined list
         try {
             const res = await fetch(
-                `/api/token-chats?userAddress=${userAddress?.toLowerCase()}&mode=my`,
+                `/api/token-chats?userAddress=${userAddress?.toLowerCase()}&mode=my`
             );
             const data = await res.json();
             if (res.ok) {
@@ -2472,16 +2309,9 @@ function DashboardContent({
         password: string
     ): Promise<boolean> => {
         try {
-            const valid = await verifyGroupPassword(
-                password,
-                passwordSalt,
-                passwordHash
-            );
+            const valid = await verifyGroupPassword(password, passwordSalt, passwordHash);
             if (!valid) return false;
-            const symmetricKey = await deriveKeyFromPassword(
-                password,
-                passwordSalt
-            );
+            const symmetricKey = await deriveKeyFromPassword(password, passwordSalt);
             await handleJoinGroupFromInvite(groupId, {
                 name: groupName,
                 symmetricKey,
@@ -2495,8 +2325,7 @@ function DashboardContent({
     };
 
     // Password prompt when opening a locked (password-protected) group
-    const [groupPendingUnlock, setGroupPendingUnlock] =
-        useState<XMTPGroup | null>(null);
+    const [groupPendingUnlock, setGroupPendingUnlock] = useState<XMTPGroup | null>(null);
     const [unlockPassword, setUnlockPassword] = useState("");
     const [unlockError, setUnlockError] = useState("");
 
@@ -2543,15 +2372,9 @@ function DashboardContent({
     }, [currentGroupCall]);
 
     // Handler to start a group call
-    const handleStartGroupCall = async (
-        groupId: string,
-        groupName: string,
-        isVideo: boolean
-    ) => {
+    const handleStartGroupCall = async (groupId: string, groupName: string, isVideo: boolean) => {
         if (!isCallConfigured) {
-            alert(
-                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID."
-            );
+            alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
             return;
         }
 
@@ -2591,9 +2414,7 @@ function DashboardContent({
     // Handler to join an existing group call
     const handleJoinGroupCall = async (groupId: string) => {
         if (!isCallConfigured) {
-            alert(
-                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID."
-            );
+            alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
             return;
         }
 
@@ -2611,11 +2432,7 @@ function DashboardContent({
         dismissIncomingCall();
 
         // Join the Agora channel
-        const success = await joinCall(
-            call.channelName,
-            undefined,
-            call.isVideo
-        );
+        const success = await joinCall(call.channelName, undefined, call.isVideo);
         if (success && userSettings.soundEnabled) {
             notifyCallConnected();
         }
@@ -2636,11 +2453,7 @@ function DashboardContent({
         }
 
         // Join the Agora channel
-        const success = await joinCall(
-            call.channelName,
-            undefined,
-            call.isVideo
-        );
+        const success = await joinCall(call.channelName, undefined, call.isVideo);
         if (success && userSettings.soundEnabled) {
             notifyCallConnected();
         }
@@ -2673,9 +2486,7 @@ function DashboardContent({
     // Find caller info from friends list
     const incomingCallFriend = incomingCall
         ? friendsListData.find(
-              (f) =>
-                  f.address.toLowerCase() ===
-                  incomingCall.caller_address.toLowerCase()
+              (f) => f.address.toLowerCase() === incomingCall.caller_address.toLowerCase()
           )
         : null;
 
@@ -2705,9 +2516,7 @@ function DashboardContent({
             // Play ring sound if enabled
             if (userSettings.soundEnabled) {
                 const callerName =
-                    incomingCallFriend?.ensName ||
-                    incomingCallFriend?.nickname ||
-                    "Someone";
+                    incomingCallFriend?.ensName || incomingCallFriend?.nickname || "Someone";
                 startRinging(callerName);
             }
         } else {
@@ -2749,10 +2558,7 @@ function DashboardContent({
 
             // Skip notification if we're already viewing this conversation
             if (chatFriend?.address.toLowerCase() === senderAddressLower) {
-                console.log(
-                    "[Dashboard] Skipping notification - chat is open for:",
-                    senderAddress
-                );
+                console.log("[Dashboard] Skipping notification - chat is open for:", senderAddress);
                 return;
             }
 
@@ -2779,10 +2585,7 @@ function DashboardContent({
             // Show toast notification in-app
             setToast({
                 sender: senderName,
-                message:
-                    content.length > 50
-                        ? content.slice(0, 50) + "..."
-                        : content,
+                message: content.length > 50 ? content.slice(0, 50) + "..." : content,
             });
 
             // Auto-hide after 4 seconds
@@ -2824,8 +2627,7 @@ function DashboardContent({
 
                 // Find sender info
                 const senderInfo = getAlphaUserInfo(senderAddress);
-                const senderName =
-                    senderInfo?.name || formatAddress(senderAddress);
+                const senderName = senderInfo?.name || formatAddress(senderAddress);
 
                 // Play sound and show browser notification (if sound enabled)
                 if (userSettings.soundEnabled) {
@@ -2835,10 +2637,7 @@ function DashboardContent({
                 // Show toast notification in-app
                 setToast({
                     sender: `${senderName} • ${channelName}`,
-                    message:
-                        content.length > 50
-                            ? content.slice(0, 50) + "..."
-                            : content,
+                    message: content.length > 50 ? content.slice(0, 50) + "..." : content,
                 });
 
                 // Auto-hide after 4 seconds
@@ -2866,14 +2665,9 @@ function DashboardContent({
         return success;
     };
 
-    const handleCall = async (
-        friend: FriendsListFriend,
-        withVideo: boolean = false
-    ) => {
+    const handleCall = async (friend: FriendsListFriend, withVideo: boolean = false) => {
         if (!isCallConfigured) {
-            alert(
-                "Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID."
-            );
+            alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
             return;
         }
 
@@ -2884,8 +2678,7 @@ function DashboardContent({
 
         // Determine the channel/room name based on call provider
         let channelName: string;
-        const useDecentralizedForCall =
-            userSettings.decentralizedCalls && isHuddle01Configured;
+        const useDecentralizedForCall = userSettings.decentralizedCalls && isHuddle01Configured;
 
         // Set the provider BEFORE making the call so UI uses correct state
         const provider = useDecentralizedForCall ? "huddle01" : "agora";
@@ -2908,21 +2701,13 @@ function DashboardContent({
             console.log("[Dashboard] Huddle01 room created:", channelName);
         } else {
             // Generate a unique channel name for Agora based on both addresses (sorted for consistency)
-            const addresses = [
-                userAddress.toLowerCase(),
-                friend.address.toLowerCase(),
-            ].sort();
-            channelName = `spritz_${addresses[0].slice(
-                2,
-                10
-            )}_${addresses[1].slice(2, 10)}`;
+            const addresses = [userAddress.toLowerCase(), friend.address.toLowerCase()].sort();
+            channelName = `spritz_${addresses[0].slice(2, 10)}_${addresses[1].slice(2, 10)}`;
         }
 
         // Create signaling record to notify the callee
         const callerDisplayName =
-            userENS.ensName ||
-            userENS.snsName ||
-            (reachUsername ? `@${reachUsername}` : undefined);
+            userENS.ensName || userENS.snsName || (reachUsername ? `@${reachUsername}` : undefined);
         const callRecord = await startCall(
             friend.address,
             channelName,
@@ -2942,9 +2727,7 @@ function DashboardContent({
 
         // Check if the call was rejected during the wait
         if (remoteHangup) {
-            console.log(
-                "[Dashboard] Call was rejected (likely DND) - not joining"
-            );
+            console.log("[Dashboard] Call was rejected (likely DND) - not joining");
             // Log as missed call - they didn't answer
             await logCall({
                 calleeAddress: friend.address,
@@ -2966,24 +2749,15 @@ function DashboardContent({
         // Join the call using the selected provider
         let success: boolean;
         if (provider === "huddle01") {
-            success = await huddle01Call.joinCall(
-                channelName,
-                undefined,
-                withVideo
-            );
+            success = await huddle01Call.joinCall(channelName, undefined, withVideo);
 
             // If Huddle01 fails, fall back to Agora
             if (!success && isAgoraConfigured) {
-                console.log(
-                    "[Dashboard] Huddle01 failed, falling back to Agora..."
-                );
+                console.log("[Dashboard] Huddle01 failed, falling back to Agora...");
                 setCurrentCallProvider("agora");
 
                 // Generate Agora channel name
-                const addresses = [
-                    userAddress.toLowerCase(),
-                    friend.address.toLowerCase(),
-                ].sort();
+                const addresses = [userAddress.toLowerCase(), friend.address.toLowerCase()].sort();
                 const agoraChannelName = `spritz_${addresses[0].slice(
                     2,
                     10
@@ -2999,27 +2773,18 @@ function DashboardContent({
                 );
 
                 if (fallbackRecord) {
-                    success = await agoraCall.joinCall(
-                        agoraChannelName,
-                        undefined,
-                        withVideo
-                    );
+                    success = await agoraCall.joinCall(agoraChannelName, undefined, withVideo);
                     if (success) {
                         setToast({
                             sender: "Spritz",
-                            message:
-                                "Using centralized call (Huddle01 unavailable)",
+                            message: "Using centralized call (Huddle01 unavailable)",
                         });
                         setTimeout(() => setToast(null), 4000);
                     }
                 }
             }
         } else {
-            success = await agoraCall.joinCall(
-                channelName,
-                undefined,
-                withVideo
-            );
+            success = await agoraCall.joinCall(channelName, undefined, withVideo);
         }
 
         if (success) {
@@ -3073,33 +2838,24 @@ function DashboardContent({
 
             // Set the provider BEFORE joining so UI uses correct state
             let provider: "huddle01" | "agora" =
-                isDecentralizedCall && isHuddle01Configured
-                    ? "huddle01"
-                    : "agora";
+                isDecentralizedCall && isHuddle01Configured ? "huddle01" : "agora";
             setCurrentCallProvider(provider);
 
             // Use the appropriate call provider based on the channel type
             let success: boolean;
             if (provider === "huddle01") {
-                success = await huddle01Call.joinCall(
-                    channelName,
-                    undefined,
-                    withVideo
-                );
+                success = await huddle01Call.joinCall(channelName, undefined, withVideo);
 
                 // If Huddle01 fails, fall back to Agora (caller will need to retry with Agora)
                 if (!success && isAgoraConfigured) {
-                    console.log(
-                        "[Dashboard] Huddle01 failed to accept, falling back to Agora..."
-                    );
+                    console.log("[Dashboard] Huddle01 failed to accept, falling back to Agora...");
                     setCurrentCallProvider("agora");
                     provider = "agora";
                     // For incoming calls, we can't change the channel - the caller needs to reinitiate
                     // Just show a message
                     setToast({
                         sender: "Spritz",
-                        message:
-                            "Decentralized call failed. Ask caller to try again.",
+                        message: "Decentralized call failed. Ask caller to try again.",
                     });
                     setTimeout(() => setToast(null), 4000);
                     setCurrentCallFriend(null);
@@ -3107,11 +2863,7 @@ function DashboardContent({
                     return;
                 }
             } else {
-                success = await agoraCall.joinCall(
-                    channelName,
-                    undefined,
-                    withVideo
-                );
+                success = await agoraCall.joinCall(channelName, undefined, withVideo);
             }
 
             if (success && userSettings.soundEnabled) {
@@ -3131,8 +2883,7 @@ function DashboardContent({
             await logCall({
                 callerAddress: incomingCall.caller_address, // They called us
                 calleeAddress: userAddress, // We are the callee
-                callType:
-                    (incomingCall.call_type as "audio" | "video") || "audio",
+                callType: (incomingCall.call_type as "audio" | "video") || "audio",
                 status: "declined",
             });
         }
@@ -3152,27 +2903,18 @@ function DashboardContent({
             setCurrentCallProvider(null);
             clearRemoteHangup();
         }
-    }, [
-        remoteHangup,
-        leaveCall,
-        clearRemoteHangup,
-        notifyCallEnded,
-        userSettings.soundEnabled,
-    ]);
+    }, [remoteHangup, leaveCall, clearRemoteHangup, notifyCallEnded, userSettings.soundEnabled]);
 
     // Timeout for outgoing calls - mark as missed if no answer within 45 seconds
     useEffect(() => {
         if (!outgoingCall || !currentCallFriend) return;
 
         const timeout = setTimeout(async () => {
-            console.log(
-                "[Dashboard] Outgoing call timed out - marking as missed"
-            );
+            console.log("[Dashboard] Outgoing call timed out - marking as missed");
             // Log as missed call
             await logCall({
                 calleeAddress: currentCallFriend.address,
-                callType:
-                    (outgoingCall.call_type as "audio" | "video") || "audio",
+                callType: (outgoingCall.call_type as "audio" | "video") || "audio",
                 status: "missed",
             });
             // Cancel the outgoing call
@@ -3182,10 +2924,7 @@ function DashboardContent({
             setCurrentCallProvider(null);
             // Show notification
             setToast({
-                sender:
-                    currentCallFriend.ensName ||
-                    currentCallFriend.nickname ||
-                    "Friend",
+                sender: currentCallFriend.ensName || currentCallFriend.nickname || "Friend",
                 message: "didn't answer",
             });
             setTimeout(() => setToast(null), 4000);
@@ -3198,24 +2937,17 @@ function DashboardContent({
     useEffect(() => {
         if (!incomingCall || callState !== "idle") return;
 
-        console.log(
-            "[Dashboard] Incoming call timeout started for call:",
-            incomingCall.id
-        );
+        console.log("[Dashboard] Incoming call timeout started for call:", incomingCall.id);
 
         const timeout = setTimeout(async () => {
-            console.log(
-                "[Dashboard] Incoming call timed out - auto-dismissing"
-            );
+            console.log("[Dashboard] Incoming call timed out - auto-dismissing");
             stopRinging();
             // Log as missed from callee perspective
             if (incomingCall.caller_address && userAddress) {
                 await logCall({
                     callerAddress: incomingCall.caller_address,
                     calleeAddress: userAddress,
-                    callType:
-                        (incomingCall.call_type as "audio" | "video") ||
-                        "audio",
+                    callType: (incomingCall.call_type as "audio" | "video") || "audio",
                     status: "missed",
                 });
             }
@@ -3240,9 +2972,7 @@ function DashboardContent({
         if (currentCallId) {
             const endTime = new Date();
             const durationSeconds = callStartTime
-                ? Math.round(
-                      (endTime.getTime() - callStartTime.getTime()) / 1000
-                  )
+                ? Math.round((endTime.getTime() - callStartTime.getTime()) / 1000)
                 : duration;
             await updateCall(currentCallId, {
                 endedAt: endTime.toISOString(),
@@ -3311,9 +3041,7 @@ function DashboardContent({
             switch (chat.type) {
                 case "dm":
                     // Find the friend and open chat
-                    const friend = friendsListData.find(
-                        (f) => `dm-${f.address}` === chat.id
-                    );
+                    const friend = friendsListData.find((f) => `dm-${f.address}` === chat.id);
                     if (friend) {
                         setChatFriend(friend);
                         markAsRead(friend.address);
@@ -3324,9 +3052,7 @@ function DashboardContent({
                     break;
                 case "channel": {
                     const channelId = chat.id.replace("channel-", "");
-                    let channel = joinedChannels.find(
-                        (c) => c.id === channelId
-                    );
+                    const channel = joinedChannels.find((c) => c.id === channelId);
                     if (channel) {
                         setSelectedChannel(channel);
                     } else {
@@ -3364,9 +3090,7 @@ function DashboardContent({
                 }
                 case "location": {
                     const locationId = chat.id.replace("location-", "");
-                    const locChat = joinedLocationChats.find(
-                        (lc) => lc.id === locationId
-                    );
+                    const locChat = joinedLocationChats.find((lc) => lc.id === locationId);
                     if (locChat) {
                         // Convert JoinedLocationChat to LocationChat format for the modal
                         setSelectedLocationChat({
@@ -3399,7 +3123,15 @@ function DashboardContent({
                 }
             }
         },
-        [friendsListData, joinedChannels, groups, joinedLocationChats, joinedTokenChats, markAsRead, userAddress]
+        [
+            friendsListData,
+            joinedChannels,
+            groups,
+            joinedLocationChats,
+            joinedTokenChats,
+            markAsRead,
+            userAddress,
+        ]
     );
 
     const handleUnlockGroupSubmit = async () => {
@@ -3419,9 +3151,7 @@ function DashboardContent({
         );
         if (result.success) {
             const fetchedGroups = await getGroups();
-            const updated = fetchedGroups.find(
-                (g) => g.id === groupPendingUnlock.id
-            );
+            const updated = fetchedGroups.find((g) => g.id === groupPendingUnlock.id);
             setGroupPendingUnlock(null);
             setUnlockPassword("");
             if (updated) {
@@ -3437,9 +3167,7 @@ function DashboardContent({
     const handleUnifiedCallClick = useCallback(
         (chat: UnifiedChatItem) => {
             if (chat.type !== "dm") return;
-            const friend = friendsListData.find(
-                (f) => `dm-${f.address}` === chat.id
-            );
+            const friend = friendsListData.find((f) => `dm-${f.address}` === chat.id);
             if (friend) {
                 handleCall(friend);
             }
@@ -3451,9 +3179,7 @@ function DashboardContent({
     const handleUnifiedVideoClick = useCallback(
         (chat: UnifiedChatItem) => {
             if (chat.type !== "dm") return;
-            const friend = friendsListData.find(
-                (f) => `dm-${f.address}` === chat.id
-            );
+            const friend = friendsListData.find((f) => `dm-${f.address}` === chat.id);
             if (friend) {
                 handleVideoCall(friend);
             }
@@ -3465,12 +3191,12 @@ function DashboardContent({
     const messagingAuthType = isPasskeyUser
         ? "passkey"
         : isEmailUser
-        ? "email"
-        : isWorldIdUser || isAlienIdUser
-        ? "digitalid"
-        : isSolanaUser
-        ? "solana"
-        : "wallet";
+          ? "email"
+          : isWorldIdUser || isAlienIdUser
+            ? "digitalid"
+            : isSolanaUser
+              ? "solana"
+              : "wallet";
 
     // Onboarding flow orchestration:
     // 1. Encryption upgrade modal shows first (if needed)
@@ -3483,12 +3209,7 @@ function DashboardContent({
             <MessagingKeyRestoreBanner
                 userAddress={userAddress}
                 authType={
-                    messagingAuthType as
-                        | "wallet"
-                        | "passkey"
-                        | "email"
-                        | "digitalid"
-                        | "solana"
+                    messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"
                 }
                 onOpenSettings={() => setIsSettingsModalOpen(true)}
             />
@@ -3496,12 +3217,7 @@ function DashboardContent({
             <MessagingKeyUpgradeBanner
                 userAddress={userAddress}
                 authType={
-                    messagingAuthType as
-                        | "wallet"
-                        | "passkey"
-                        | "email"
-                        | "digitalid"
-                        | "solana"
+                    messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"
                 }
                 onDismiss={() => setCanShowUsernamePrompt(true)}
                 onNotNeeded={() => setCanShowUsernamePrompt(true)}
@@ -3544,9 +3260,7 @@ function DashboardContent({
                                         />
                                     )}
                                     {/* Live badge when streaming */}
-                                    {currentStream?.status === "live" && (
-                                        <LiveBadge />
-                                    )}
+                                    {currentStream?.status === "live" && <LiveBadge />}
                                     {/* Camera icon when not live */}
                                     {currentStream?.status !== "live" && (
                                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-red-500 rounded-md flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -3568,11 +3282,7 @@ function DashboardContent({
                                 </button>
                                 <div className="relative" ref={profileMenuRef}>
                                     <button
-                                        onClick={() =>
-                                            setIsProfileMenuOpen(
-                                                !isProfileMenuOpen
-                                            )
-                                        }
+                                        onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                                         className="text-left hover:opacity-80 transition-opacity"
                                     >
                                         <h1 className="text-white font-bold flex items-center gap-1">
@@ -3581,9 +3291,7 @@ function DashboardContent({
                                             </span>
                                             {userENS.ensName ||
                                                 userENS.snsName ||
-                                                (reachUsername
-                                                    ? `@${reachUsername}`
-                                                    : "Spritz")}
+                                                (reachUsername ? `@${reachUsername}` : "Spritz")}
                                             {userSettings.isDnd && (
                                                 <span className="text-xs bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded-full">
                                                     DND
@@ -3604,8 +3312,7 @@ function DashboardContent({
                                             </svg>
                                         </h1>
                                         <p className="text-zinc-500 text-sm">
-                                            {userSettings.statusText ||
-                                                formatAddress(userAddress)}
+                                            {userSettings.statusText || formatAddress(userAddress)}
                                         </p>
                                     </button>
 
@@ -3633,19 +3340,14 @@ function DashboardContent({
                                                 style={{
                                                     // Ensure menu doesn't get cut off on small screens
                                                     // Use dvh for iOS Safari dynamic viewport height
-                                                    maxHeight:
-                                                        "min(calc(100dvh - 140px), 700px)",
+                                                    maxHeight: "min(calc(100dvh - 140px), 700px)",
                                                 }}
                                             >
                                                 {/* 1. Invite Friends */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setIsQRCodeModalOpen(
-                                                            true
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setIsQRCodeModalOpen(true);
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left"
                                                 >
@@ -3677,15 +3379,9 @@ function DashboardContent({
                                                 {/* 2. Go Live */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setProfileAvatarInitialTab(
-                                                            "goLive"
-                                                        );
-                                                        setIsProfileAvatarModalOpen(
-                                                            true
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setProfileAvatarInitialTab("goLive");
+                                                        setIsProfileAvatarModalOpen(true);
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
@@ -3717,12 +3413,8 @@ function DashboardContent({
                                                 {/* 3. Username */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setIsUsernameModalOpen(
-                                                            true
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setIsUsernameModalOpen(true);
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
@@ -3760,15 +3452,15 @@ function DashboardContent({
                                                                 reachUsername
                                                                     ? "text-emerald-400"
                                                                     : isUsernameFetching
-                                                                    ? "text-zinc-600"
-                                                                    : "text-zinc-500"
+                                                                      ? "text-zinc-600"
+                                                                      : "text-zinc-500"
                                                             }`}
                                                         >
                                                             {isUsernameFetching
                                                                 ? "Loading..."
                                                                 : reachUsername
-                                                                ? `@${reachUsername}`
-                                                                : "Claim a username (+10 pts)"}
+                                                                  ? `@${reachUsername}`
+                                                                  : "Claim a username (+10 pts)"}
                                                         </p>
                                                     </div>
                                                     {reachUsername && (
@@ -3791,12 +3483,8 @@ function DashboardContent({
                                                 {/* 3. Email */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setIsEmailModalOpen(
-                                                            true
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setIsEmailModalOpen(true);
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
@@ -3861,12 +3549,8 @@ function DashboardContent({
                                                 {/* 4. Phone */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setIsPhoneModalOpen(
-                                                            true
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setIsPhoneModalOpen(true);
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
@@ -3931,12 +3615,8 @@ function DashboardContent({
                                                 {/* Socials */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setIsSocialsModalOpen(
-                                                            true
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setIsSocialsModalOpen(true);
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
@@ -4011,9 +3691,7 @@ function DashboardContent({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                                 />
                                                             </svg>
@@ -4046,11 +3724,7 @@ function DashboardContent({
                                                         href="https://www.sns.id/"
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        onClick={() =>
-                                                            setIsProfileMenuOpen(
-                                                                false
-                                                            )
-                                                        }
+                                                        onClick={() => setIsProfileMenuOpen(false)}
                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                     >
                                                         <div className="w-8 h-8 rounded-lg bg-[#FB8D22]/20 flex items-center justify-center">
@@ -4063,9 +3737,7 @@ function DashboardContent({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                                 />
                                                             </svg>
@@ -4092,9 +3764,7 @@ function DashboardContent({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                                 />
                                                             </svg>
@@ -4104,9 +3774,7 @@ function DashboardContent({
                                                                 ENS
                                                             </p>
                                                             <p className="text-emerald-400 text-xs truncate">
-                                                                {
-                                                                    userENS.ensName
-                                                                }
+                                                                {userENS.ensName}
                                                             </p>
                                                         </div>
                                                         <svg
@@ -4129,11 +3797,7 @@ function DashboardContent({
                                                         href="https://app.ens.domains/"
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        onClick={() =>
-                                                            setIsProfileMenuOpen(
-                                                                false
-                                                            )
-                                                        }
+                                                        onClick={() => setIsProfileMenuOpen(false)}
                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                     >
                                                         <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center">
@@ -4146,9 +3810,7 @@ function DashboardContent({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"
                                                                 />
                                                             </svg>
@@ -4167,27 +3829,20 @@ function DashboardContent({
                                                 {/* 7. Points & Ranks - Combined */}
                                                 <button
                                                     onClick={() => {
-                                                        setIsProfileMenuOpen(
-                                                            false
-                                                        );
-                                                        setActiveNavTab(
-                                                            "leaderboard"
-                                                        );
+                                                        setIsProfileMenuOpen(false);
+                                                        setActiveNavTab("leaderboard");
                                                     }}
                                                     className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                 >
                                                     <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                                                        <span className="text-lg">
-                                                            🏆
-                                                        </span>
+                                                        <span className="text-lg">🏆</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="text-white text-sm font-medium">
                                                             Points & Ranks
                                                         </p>
                                                         <p className="text-amber-400 text-xs">
-                                                            {userPoints.toLocaleString()}{" "}
-                                                            pts · View
+                                                            {userPoints.toLocaleString()} pts · View
                                                             leaderboard
                                                         </p>
                                                     </div>
@@ -4210,11 +3865,7 @@ function DashboardContent({
                                                 {isAdmin && (
                                                     <Link
                                                         href="/admin"
-                                                        onClick={() =>
-                                                            setIsProfileMenuOpen(
-                                                                false
-                                                            )
-                                                        }
+                                                        onClick={() => setIsProfileMenuOpen(false)}
                                                         className="w-full px-4 py-3 flex items-center gap-3 hover:bg-zinc-800 transition-colors text-left border-t border-zinc-800"
                                                     >
                                                         <div
@@ -4237,9 +3888,7 @@ function DashboardContent({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
                                                                 />
                                                             </svg>
@@ -4321,12 +3970,10 @@ function DashboardContent({
                                     </svg>
                                     <p className="text-amber-200 text-sm">
                                         <span className="font-medium">
-                                            Voice calls require Safari on
-                                            iPhone.
+                                            Voice calls require Safari on iPhone.
                                         </span>
                                         <span className="text-amber-300/70 ml-1 hidden sm:inline">
-                                            Open this page in Safari for the
-                                            best experience.
+                                            Open this page in Safari for the best experience.
                                         </span>
                                     </p>
                                 </div>
@@ -4356,19 +4003,83 @@ function DashboardContent({
                 {/* Main Content */}
                 <main className="flex-1 max-w-4xl mx-auto px-4 py-8 w-full">
                     {/* Network Banner - Show if not on mainnet (disabled for now due to state sync issues) */}
-                    {false &&
-                        !isOnMainnet &&
-                        chain &&
-                        !dismissNetworkBanner && (
-                            <motion.div
-                                initial={{ opacity: 0, y: -10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4"
-                            >
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-start gap-3 flex-1">
+                    {false && !isOnMainnet && chain && !dismissNetworkBanner && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-xl p-4"
+                        >
+                            <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-start gap-3 flex-1">
+                                    <svg
+                                        className="w-5 h-5 text-orange-400 mt-0.5 shrink-0"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                        />
+                                    </svg>
+                                    <div>
+                                        <p className="text-orange-200 font-medium">
+                                            App shows: {chain?.name}
+                                        </p>
+                                        <p className="text-orange-200/70 text-sm mt-1">
+                                            If your wallet is already on Mainnet, try refreshing the
+                                            page or dismiss this.
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => window.location.reload()}
+                                        className="py-2 px-3 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
+                                    >
+                                        Refresh
+                                    </button>
+                                    <button
+                                        onClick={handleSwitchToMainnet}
+                                        disabled={isSwitchingNetwork}
+                                        className="py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
+                                    >
+                                        {isSwitchingNetwork ? (
+                                            <>
+                                                <svg
+                                                    className="w-4 h-4 animate-spin"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                >
+                                                    <circle
+                                                        className="opacity-25"
+                                                        cx="12"
+                                                        cy="12"
+                                                        r="10"
+                                                        stroke="currentColor"
+                                                        strokeWidth="4"
+                                                    />
+                                                    <path
+                                                        className="opacity-75"
+                                                        fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                    />
+                                                </svg>
+                                                Switching...
+                                            </>
+                                        ) : (
+                                            "Switch"
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => setDismissNetworkBanner(true)}
+                                        className="p-2 rounded-lg hover:bg-zinc-700 text-orange-400 hover:text-white transition-colors"
+                                        title="Dismiss"
+                                    >
                                         <svg
-                                            className="w-5 h-5 text-orange-400 mt-0.5 shrink-0"
+                                            className="w-4 h-4"
                                             fill="none"
                                             viewBox="0 0 24 24"
                                             stroke="currentColor"
@@ -4377,86 +4088,14 @@ function DashboardContent({
                                                 strokeLinecap="round"
                                                 strokeLinejoin="round"
                                                 strokeWidth={2}
-                                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                                                d="M6 18L18 6M6 6l12 12"
                                             />
                                         </svg>
-                                        <div>
-                                            <p className="text-orange-200 font-medium">
-                                                App shows: {chain?.name}
-                                            </p>
-                                            <p className="text-orange-200/70 text-sm mt-1">
-                                                If your wallet is already on
-                                                Mainnet, try refreshing the page
-                                                or dismiss this.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            onClick={() =>
-                                                window.location.reload()
-                                            }
-                                            className="py-2 px-3 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium transition-colors"
-                                        >
-                                            Refresh
-                                        </button>
-                                        <button
-                                            onClick={handleSwitchToMainnet}
-                                            disabled={isSwitchingNetwork}
-                                            className="py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2 whitespace-nowrap"
-                                        >
-                                            {isSwitchingNetwork ? (
-                                                <>
-                                                    <svg
-                                                        className="w-4 h-4 animate-spin"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                    >
-                                                        <circle
-                                                            className="opacity-25"
-                                                            cx="12"
-                                                            cy="12"
-                                                            r="10"
-                                                            stroke="currentColor"
-                                                            strokeWidth="4"
-                                                        />
-                                                        <path
-                                                            className="opacity-75"
-                                                            fill="currentColor"
-                                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                                        />
-                                                    </svg>
-                                                    Switching...
-                                                </>
-                                            ) : (
-                                                "Switch"
-                                            )}
-                                        </button>
-                                        <button
-                                            onClick={() =>
-                                                setDismissNetworkBanner(true)
-                                            }
-                                            className="p-2 rounded-lg hover:bg-zinc-700 text-orange-400 hover:text-white transition-colors"
-                                            title="Dismiss"
-                                        >
-                                            <svg
-                                                className="w-4 h-4"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M6 18L18 6M6 6l12 12"
-                                                />
-                                            </svg>
-                                        </button>
-                                    </div>
+                                    </button>
                                 </div>
-                            </motion.div>
-                        )}
+                            </div>
+                        </motion.div>
+                    )}
 
                     {/* Status Banners */}
                     {!isSupabaseConfigured && (
@@ -4484,8 +4123,8 @@ function DashboardContent({
                                         Database Not Connected
                                     </p>
                                     <p className="text-amber-200/70 text-sm mt-1">
-                                        Set Supabase environment variables to
-                                        enable friend requests.
+                                        Set Supabase environment variables to enable friend
+                                        requests.
                                     </p>
                                 </div>
                             </div>
@@ -4547,15 +4186,12 @@ function DashboardContent({
                                                 Solana Wallet Connected
                                             </p>
                                             <p className="text-[#FFF0E0]/70 text-sm mt-1">
-                                                Voice calls and encrypted chat
-                                                are available! Some features may
-                                                vary from EVM wallets.
+                                                Voice calls and encrypted chat are available! Some
+                                                features may vary from EVM wallets.
                                             </p>
                                         </div>
                                         <button
-                                            onClick={() =>
-                                                setShowSolanaBanner(false)
-                                            }
+                                            onClick={() => setShowSolanaBanner(false)}
                                             className="text-[#FFF0E0]/50 hover:text-[#FFF0E0] transition-colors"
                                         >
                                             <svg
@@ -4601,18 +4237,14 @@ function DashboardContent({
                                         />
                                     </svg>
                                     <div>
-                                        <p className="text-[#FFF0E0] font-medium">
-                                            Encrypted Chat
-                                        </p>
+                                        <p className="text-[#FFF0E0] font-medium">Encrypted Chat</p>
                                         <p className="text-[#FFF0E0]/70 text-sm mt-1">
                                             {isWakuInitializing
                                                 ? "Connecting..."
                                                 : "Enable encrypted peer-to-peer messaging."}
                                         </p>
                                         {wakuError && (
-                                            <p className="text-red-400 text-sm mt-1">
-                                                {wakuError}
-                                            </p>
+                                            <p className="text-red-400 text-sm mt-1">{wakuError}</p>
                                         )}
                                     </div>
                                 </div>
@@ -4620,10 +4252,7 @@ function DashboardContent({
                                     {isInstallationLimitError && (
                                         <button
                                             onClick={handleRevokeInstallations}
-                                            disabled={
-                                                isRevokingInstallations ||
-                                                isWakuInitializing
-                                            }
+                                            disabled={isRevokingInstallations || isWakuInitializing}
                                             className="py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
                                         >
                                             {isRevokingInstallations ? (
@@ -4681,8 +4310,7 @@ function DashboardContent({
                                                             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                                                         />
                                                     </svg>
-                                                    {wakuInitStatus ||
-                                                        "Connecting..."}
+                                                    {wakuInitStatus || "Connecting..."}
                                                 </>
                                             ) : wakuError ? (
                                                 "Retry"
@@ -4800,9 +4428,7 @@ function DashboardContent({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
                                                                 />
                                                             </svg>
@@ -4814,9 +4440,7 @@ function DashboardContent({
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() =>
-                                                    setIsAddFriendOpen(true)
-                                                }
+                                                onClick={() => setIsAddFriendOpen(true)}
                                                 disabled={!isSupabaseConfigured}
                                                 className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white text-sm font-medium transition-all hover:shadow-lg hover:shadow-[#FB8D22]/25 flex items-center justify-center sm:justify-start gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                                                 title="Add friend"
@@ -4834,9 +4458,7 @@ function DashboardContent({
                                                         d="M12 4v16m8-8H4"
                                                     />
                                                 </svg>
-                                                <span className="hidden sm:inline">
-                                                    Add
-                                                </span>
+                                                <span className="hidden sm:inline">Add</span>
                                             </button>
                                         </div>
                                     </div>
@@ -4850,9 +4472,7 @@ function DashboardContent({
                                                 Contacts ({contacts.length})
                                             </h3>
                                             <button
-                                                onClick={() =>
-                                                    setShowContactsList(false)
-                                                }
+                                                onClick={() => setShowContactsList(false)}
                                                 className="text-zinc-500 hover:text-white text-sm"
                                             >
                                                 Hide
@@ -4860,10 +4480,9 @@ function DashboardContent({
                                         </div>
                                         <div className="space-y-2 max-h-48 overflow-y-auto">
                                             {contacts.map((contact, idx) => {
-                                                const firstInvite =
-                                                    invites.find(
-                                                        (inv) => !inv.used_by
-                                                    );
+                                                const firstInvite = invites.find(
+                                                    (inv) => !inv.used_by
+                                                );
 
                                                 return (
                                                     <div
@@ -4872,21 +4491,16 @@ function DashboardContent({
                                                     >
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-white text-sm font-medium truncate">
-                                                                {contact.name ||
-                                                                    "Unknown"}
+                                                                {contact.name || "Unknown"}
                                                             </p>
                                                             {contact.phone && (
                                                                 <p className="text-zinc-400 text-xs truncate">
-                                                                    {
-                                                                        contact.phone
-                                                                    }
+                                                                    {contact.phone}
                                                                 </p>
                                                             )}
                                                             {contact.email && (
                                                                 <p className="text-zinc-400 text-xs truncate">
-                                                                    {
-                                                                        contact.email
-                                                                    }
+                                                                    {contact.email}
                                                                 </p>
                                                             )}
                                                         </div>
@@ -4934,9 +4548,7 @@ function DashboardContent({
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={
-                                                        handleClaimDailyBonus
-                                                    }
+                                                    onClick={handleClaimDailyBonus}
                                                     disabled={isClaimingBonus}
                                                     className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs sm:text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
                                                 >
@@ -4969,17 +4581,11 @@ function DashboardContent({
                                         unreadCounts={unreadCounts}
                                         hideChat={false}
                                         friendsWakuStatus={friendsWakuStatus}
-                                        onAddFriendClick={() =>
-                                            setIsAddFriendOpen(true)
-                                        }
-                                        pendingRequestsCount={
-                                            incomingRequests.length
-                                        }
+                                        onAddFriendClick={() => setIsAddFriendOpen(true)}
+                                        pendingRequestsCount={incomingRequests.length}
                                         onViewRequestsClick={() =>
                                             document
-                                                .getElementById(
-                                                    "friend-requests-section"
-                                                )
+                                                .getElementById("friend-requests-section")
                                                 ?.scrollIntoView({
                                                     behavior: "smooth",
                                                 })
@@ -5010,10 +4616,9 @@ function DashboardContent({
                                     <div className="p-4">
                                         <div className="flex gap-3 overflow-x-auto pb-2">
                                             {liveStreams.map((stream) => {
-                                                const streamerInfo =
-                                                    getAlphaUserInfo(
-                                                        stream.user_address
-                                                    );
+                                                const streamerInfo = getAlphaUserInfo(
+                                                    stream.user_address
+                                                );
                                                 return (
                                                     <a
                                                         key={stream.id}
@@ -5023,9 +4628,7 @@ function DashboardContent({
                                                         <div className="relative">
                                                             {streamerInfo?.avatar ? (
                                                                 <img
-                                                                    src={
-                                                                        streamerInfo.avatar
-                                                                    }
+                                                                    src={streamerInfo.avatar}
                                                                     alt=""
                                                                     className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500 group-hover:ring-4 transition-all"
                                                                 />
@@ -5035,10 +4638,7 @@ function DashboardContent({
                                                                         streamerInfo?.name ||
                                                                         stream.user_address
                                                                     )
-                                                                        .slice(
-                                                                            0,
-                                                                            2
-                                                                        )
+                                                                        .slice(0, 2)
                                                                         .toUpperCase()}
                                                                 </div>
                                                             )}
@@ -5064,10 +4664,7 @@ function DashboardContent({
                                 <div className="px-3 py-3 sm:px-5 sm:py-4 sm:border-b sm:border-zinc-800 bg-blue-500/5">
                                     <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-3">
-                                            <span
-                                                className="text-2xl sm:text-3xl"
-                                                aria-hidden
-                                            >
+                                            <span className="text-2xl sm:text-3xl" aria-hidden>
                                                 💬
                                             </span>
                                             <div>
@@ -5082,9 +4679,7 @@ function DashboardContent({
                                         <div className="flex items-center gap-1 sm:gap-2">
                                             {/* Mark all as read - show when any unread */}
                                             {(alphaUnreadCount > 0 ||
-                                                unifiedChats.some(
-                                                    (c) => c.unreadCount > 0
-                                                )) && (
+                                                unifiedChats.some((c) => c.unreadCount > 0)) && (
                                                 <button
                                                     onClick={async () => {
                                                         if (alphaChat.isMember)
@@ -5114,9 +4709,7 @@ function DashboardContent({
                                             {/* Search Toggle Button */}
                                             <button
                                                 onClick={() =>
-                                                    setIsChatSearchOpen(
-                                                        !isChatSearchOpen
-                                                    )
+                                                    setIsChatSearchOpen(!isChatSearchOpen)
                                                 }
                                                 className={`w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl transition-all flex items-center justify-center sm:justify-start gap-2 ${
                                                     isChatSearchOpen
@@ -5144,9 +4737,7 @@ function DashboardContent({
                                             </button>
                                             {/* Add Folder Button */}
                                             <button
-                                                onClick={() =>
-                                                    setIsCreateFolderOpen(true)
-                                                }
+                                                onClick={() => setIsCreateFolderOpen(true)}
                                                 className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all flex items-center justify-center sm:justify-start gap-2"
                                                 title="Create folder"
                                             >
@@ -5170,12 +4761,8 @@ function DashboardContent({
                                             {/* Browse/Explore Channels Button - Prominent for discoverability */}
                                             <button
                                                 onClick={() => {
-                                                    setBrowseChannelsInitialCreate(
-                                                        false
-                                                    );
-                                                    setIsBrowseChannelsOpen(
-                                                        true
-                                                    );
+                                                    setBrowseChannelsInitialCreate(false);
+                                                    setIsBrowseChannelsOpen(true);
                                                 }}
                                                 className="h-8 sm:h-auto py-1.5 px-2.5 sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 hover:text-blue-300 border border-blue-500/30 transition-all flex items-center justify-center gap-1.5 sm:gap-2"
                                                 title="Explore channels"
@@ -5201,9 +4788,7 @@ function DashboardContent({
                                             <div className="relative">
                                                 <button
                                                     onClick={() =>
-                                                        setShowNewChatMenu(
-                                                            !showNewChatMenu
-                                                        )
+                                                        setShowNewChatMenu(!showNewChatMenu)
                                                     }
                                                     className="w-8 h-8 sm:w-auto sm:h-auto sm:py-2 sm:px-3 rounded-lg sm:rounded-xl bg-gradient-to-r from-[#FF5500] to-[#FF7700] text-white font-medium transition-all hover:shadow-lg hover:shadow-orange-500/25 flex items-center justify-center sm:justify-start gap-2"
                                                     title="Create new"
@@ -5256,9 +4841,7 @@ function DashboardContent({
                                                                 }}
                                                                 className="fixed inset-0 z-40"
                                                                 onClick={() =>
-                                                                    setShowNewChatMenu(
-                                                                        false
-                                                                    )
+                                                                    setShowNewChatMenu(false)
                                                                 }
                                                             />
                                                             {/* Menu */}
@@ -5305,22 +4888,17 @@ function DashboardContent({
                                                                                 <path
                                                                                     strokeLinecap="round"
                                                                                     strokeLinejoin="round"
-                                                                                    strokeWidth={
-                                                                                        2
-                                                                                    }
+                                                                                    strokeWidth={2}
                                                                                     d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"
                                                                                 />
                                                                             </svg>
                                                                         </div>
                                                                         <div>
                                                                             <p className="text-white text-sm font-medium">
-                                                                                Public
-                                                                                Channel
+                                                                                Public Channel
                                                                             </p>
                                                                             <p className="text-zinc-500 text-xs">
-                                                                                Anyone
-                                                                                can
-                                                                                join
+                                                                                Anyone can join
                                                                             </p>
                                                                         </div>
                                                                     </button>
@@ -5335,8 +4913,7 @@ function DashboardContent({
                                                                                 );
                                                                             }}
                                                                             disabled={
-                                                                                friends.length ===
-                                                                                0
+                                                                                friends.length === 0
                                                                             }
                                                                             className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                                                                         >
@@ -5359,8 +4936,7 @@ function DashboardContent({
                                                                             </div>
                                                                             <div>
                                                                                 <p className="text-white text-sm font-medium">
-                                                                                    Private
-                                                                                    Group
+                                                                                    Private Group
                                                                                 </p>
                                                                                 <p className="text-zinc-500 text-xs">
                                                                                     {friends.length ===
@@ -5393,17 +4969,13 @@ function DashboardContent({
                                                                                 <path
                                                                                     strokeLinecap="round"
                                                                                     strokeLinejoin="round"
-                                                                                    strokeWidth={
-                                                                                        2
-                                                                                    }
+                                                                                    strokeWidth={2}
                                                                                     d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
                                                                                 />
                                                                                 <path
                                                                                     strokeLinecap="round"
                                                                                     strokeLinejoin="round"
-                                                                                    strokeWidth={
-                                                                                        2
-                                                                                    }
+                                                                                    strokeWidth={2}
                                                                                     d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                                                                                 />
                                                                             </svg>
@@ -5420,13 +4992,19 @@ function DashboardContent({
                                                                     {/* Token Chat */}
                                                                     <button
                                                                         onClick={() => {
-                                                                            setShowNewChatMenu(false);
-                                                                            setIsBrowseTokenChatsOpen(true);
+                                                                            setShowNewChatMenu(
+                                                                                false
+                                                                            );
+                                                                            setIsBrowseTokenChatsOpen(
+                                                                                true
+                                                                            );
                                                                         }}
                                                                         className="w-full px-3 py-2.5 text-left rounded-lg hover:bg-zinc-700 transition-colors flex items-center gap-3"
                                                                     >
                                                                         <div className="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
-                                                                            <span className="text-base">🪙</span>
+                                                                            <span className="text-base">
+                                                                                🪙
+                                                                            </span>
                                                                         </div>
                                                                         <div>
                                                                             <p className="text-white text-sm font-medium">
@@ -5474,92 +5052,63 @@ function DashboardContent({
                                                 ? undefined
                                                 : handleUnifiedVideoClick
                                         }
-                                        showCreateFolderModal={
-                                            isCreateFolderOpen
-                                        }
+                                        showCreateFolderModal={isCreateFolderOpen}
                                         onCreateFolderModalClose={() =>
                                             setIsCreateFolderOpen(false)
                                         }
                                         showSearch={isChatSearchOpen}
                                         onSearchToggle={() =>
-                                            setIsChatSearchOpen(
-                                                !isChatSearchOpen
-                                            )
+                                            setIsChatSearchOpen(!isChatSearchOpen)
                                         }
-                                        onOpenAddFriend={() =>
-                                            setIsAddFriendOpen(true)
-                                        }
+                                        onOpenAddFriend={() => setIsAddFriendOpen(true)}
                                         onOpenBrowseChannels={() => {
-                                            setBrowseChannelsInitialCreate(
-                                                true
-                                            );
+                                            setBrowseChannelsInitialCreate(true);
                                             setIsBrowseChannelsOpen(true);
                                         }}
                                         onOpenBrowseTokenChats={() =>
                                             setIsBrowseTokenChatsOpen(true)
                                         }
-                                        onOpenCreateGroup={() =>
-                                            setIsCreateGroupOpen(true)
-                                        }
-                                        canCreateGroup={
-                                            friendsListData.length > 0
-                                        }
-                                        onMarkFolderAsRead={(
-                                            _folderEmoji,
-                                            chatsInFolder
-                                        ) => {
+                                        onOpenCreateGroup={() => setIsCreateGroupOpen(true)}
+                                        canCreateGroup={friendsListData.length > 0}
+                                        onMarkFolderAsRead={(_folderEmoji, chatsInFolder) => {
                                             for (const chat of chatsInFolder) {
                                                 if (chat.type === "global") {
-                                                    if (alphaChat.isMember)
-                                                        alphaChat.markAsRead();
+                                                    if (alphaChat.isMember) alphaChat.markAsRead();
                                                 } else if (
                                                     chat.type === "dm" &&
                                                     chat.metadata?.address
                                                 ) {
-                                                    markAsRead(
-                                                        chat.metadata.address
-                                                    );
+                                                    markAsRead(chat.metadata.address);
                                                 }
                                             }
                                         }}
-                                        onPinChat={(chat, pinned) =>
-                                            setChatPinned(chat.id, pinned)
-                                        }
+                                        onPinChat={(chat, pinned) => setChatPinned(chat.id, pinned)}
                                         resetKey={chatListResetKey}
                                     />
                                 </div>
                             </div>
 
                             {/* Group Invitations Section */}
-                            {isWakuInitialized &&
-                                pendingInvitations.length > 0 && (
-                                    <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mt-6 p-6">
-                                        <GroupInvitations
-                                            invitations={pendingInvitations}
-                                            onAccept={acceptInvitation}
-                                            onDecline={async (
-                                                invitationId: string,
-                                                groupId: string
-                                            ) => {
-                                                await leaveGroup(groupId);
-                                                const result =
-                                                    await declineInvitation(
-                                                        invitationId
-                                                    );
-                                                const fetchedGroups =
-                                                    await getGroups();
-                                                setGroups(fetchedGroups);
-                                                return result;
-                                            }}
-                                            onJoinGroup={
-                                                handleJoinGroupFromInvite
-                                            }
-                                            onAcceptWithPassword={
-                                                handleAcceptWithPassword
-                                            }
-                                        />
-                                    </div>
-                                )}
+                            {isWakuInitialized && pendingInvitations.length > 0 && (
+                                <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden mt-6 p-6">
+                                    <GroupInvitations
+                                        invitations={pendingInvitations}
+                                        onAccept={acceptInvitation}
+                                        onDecline={async (
+                                            invitationId: string,
+                                            groupId: string
+                                        ) => {
+                                            await leaveGroup(groupId);
+                                            const result = await declineInvitation(invitationId);
+                                            const fetchedGroups = await getGroups();
+                                            setGroups(fetchedGroups);
+                                            return result;
+                                        }}
+                                        onJoinGroup={handleJoinGroupFromInvite}
+                                        onAcceptWithPassword={handleAcceptWithPassword}
+                                    />
+                                </div>
+                            )}
                         </>
                     )}
 
@@ -5574,25 +5123,17 @@ function DashboardContent({
                                         <button
                                             onClick={async () => {
                                                 try {
-                                                    const res = await fetch(
-                                                        "/api/rooms",
-                                                        {
-                                                            method: "POST",
-                                                            headers: {
-                                                                "Content-Type":
-                                                                    "application/json",
-                                                            },
-                                                            body: JSON.stringify(
-                                                                {
-                                                                    hostWalletAddress:
-                                                                        userAddress,
-                                                                    title: "Quick Meeting",
-                                                                }
-                                                            ),
-                                                        }
-                                                    );
-                                                    const data =
-                                                        await res.json();
+                                                    const res = await fetch("/api/rooms", {
+                                                        method: "POST",
+                                                        headers: {
+                                                            "Content-Type": "application/json",
+                                                        },
+                                                        body: JSON.stringify({
+                                                            hostWalletAddress: userAddress,
+                                                            title: "Quick Meeting",
+                                                        }),
+                                                    });
+                                                    const data = await res.json();
                                                     if (res.ok && data.room) {
                                                         trackRoomCreated();
                                                         navigator.clipboard.writeText(
@@ -5602,30 +5143,24 @@ function DashboardContent({
                                                             window.matchMedia(
                                                                 "(display-mode: standalone)"
                                                             ).matches ||
-                                                            (
-                                                                window.navigator as any
-                                                            ).standalone ===
+                                                            (window.navigator as any).standalone ===
                                                                 true;
                                                         if (isStandalone) {
                                                             window.location.href =
                                                                 data.room.joinUrl;
                                                         } else {
                                                             window.open(
-                                                                data.room
-                                                                    .joinUrl,
+                                                                data.room.joinUrl,
                                                                 "_blank"
                                                             );
                                                         }
                                                     } else {
                                                         alert(
-                                                            data.error ||
-                                                                "Failed to create room"
+                                                            data.error || "Failed to create room"
                                                         );
                                                     }
                                                 } catch {
-                                                    alert(
-                                                        "Failed to create room"
-                                                    );
+                                                    alert("Failed to create room");
                                                 }
                                             }}
                                             className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 transition-all active:scale-95"
@@ -5638,32 +5173,23 @@ function DashboardContent({
 
                                         {/* New Scheduled */}
                                         <button
-                                            onClick={() =>
-                                                setShowNewScheduledModal(true)
-                                            }
+                                            onClick={() => setShowNewScheduledModal(true)}
                                             className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 text-orange-400 transition-all active:scale-95"
                                         >
                                             <span className="text-xl">📅</span>
-                                            <span className="text-xs font-medium">
-                                                Schedule
-                                            </span>
+                                            <span className="text-xs font-medium">Schedule</span>
                                         </button>
 
                                         {/* Call Friend */}
                                         <button
-                                            onClick={() =>
-                                                setShowNewCallModal(true)
-                                            }
+                                            onClick={() => setShowNewCallModal(true)}
                                             disabled={
-                                                callState !== "idle" ||
-                                                friendsListData.length === 0
+                                                callState !== "idle" || friendsListData.length === 0
                                             }
                                             className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 text-green-400 transition-all active:scale-95 disabled:opacity-50"
                                         >
                                             <span className="text-xl">📞</span>
-                                            <span className="text-xs font-medium">
-                                                Call Friend
-                                            </span>
+                                            <span className="text-xs font-medium">Call Friend</span>
                                         </button>
 
                                         {/* Open My Room */}
@@ -5675,29 +5201,19 @@ function DashboardContent({
                                                     );
                                                     if (res.ok) {
                                                         const roomUrl = `${window.location.origin}/room/${userAddress}`;
-                                                        window.location.href =
-                                                            roomUrl;
+                                                        window.location.href = roomUrl;
                                                     } else {
-                                                        alert(
-                                                            "Failed to open room"
-                                                        );
+                                                        alert("Failed to open room");
                                                     }
                                                 } catch (err) {
-                                                    console.error(
-                                                        "Failed to open room:",
-                                                        err
-                                                    );
-                                                    alert(
-                                                        "Failed to open room"
-                                                    );
+                                                    console.error("Failed to open room:", err);
+                                                    alert("Failed to open room");
                                                 }
                                             }}
                                             className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 transition-all active:scale-95"
                                         >
                                             <span className="text-xl">🔗</span>
-                                            <span className="text-xs font-medium">
-                                                My Room
-                                            </span>
+                                            <span className="text-xs font-medium">My Room</span>
                                         </button>
                                     </div>
                                 </div>
@@ -5723,20 +5239,15 @@ function DashboardContent({
                                                 const link = `${
                                                     window.location.origin
                                                 }/room/${userAddress.toLowerCase()}`;
-                                                navigator.clipboard.writeText(
-                                                    link
-                                                );
-                                                const btn =
-                                                    document.querySelector(
-                                                        "[data-room-copy-btn]"
-                                                    ) as HTMLElement;
+                                                navigator.clipboard.writeText(link);
+                                                const btn = document.querySelector(
+                                                    "[data-room-copy-btn]"
+                                                ) as HTMLElement;
                                                 if (btn) {
-                                                    const original =
-                                                        btn.textContent;
+                                                    const original = btn.textContent;
                                                     btn.textContent = "Copied!";
                                                     setTimeout(() => {
-                                                        btn.textContent =
-                                                            original || "Copy";
+                                                        btn.textContent = original || "Copy";
                                                     }, 2000);
                                                 }
                                             }}
@@ -5747,8 +5258,7 @@ function DashboardContent({
                                         </button>
                                     </div>
                                     <p className="text-zinc-500 text-[10px] sm:text-xs mt-1.5 px-1">
-                                        Your permanent room link - share for
-                                        instant meetings
+                                        Your permanent room link - share for instant meetings
                                     </p>
                                 </div>
                             </div>
@@ -5850,15 +5360,11 @@ function DashboardContent({
                                 }`}
                             >
                                 {isBetaAccessLoading ? (
-                                    <span className="text-xl animate-pulse">
-                                        💳
-                                    </span>
+                                    <span className="text-xl animate-pulse">💳</span>
                                 ) : (
                                     <span className="text-xl">💳</span>
                                 )}
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Wallet
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Wallet</span>
                             </button>
 
                             {/* Agents Tab */}
@@ -5871,9 +5377,7 @@ function DashboardContent({
                                 }`}
                             >
                                 <span className="text-xl">✨</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Agents
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Agents</span>
                             </button>
 
                             {/* Friends Tab */}
@@ -5886,9 +5390,7 @@ function DashboardContent({
                                 }`}
                             >
                                 <span className="text-xl">👥</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Friends
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Friends</span>
                                 {/* Friend request indicator */}
                                 {incomingRequests.length > 0 && (
                                     <span className="absolute top-0 right-0.5 min-w-[14px] h-[14px] px-0.5 bg-orange-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center animate-pulse">
@@ -5915,16 +5417,11 @@ function DashboardContent({
                                 }`}
                             >
                                 <span className="text-xl">💬</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Chats
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Chats</span>
                                 {/* Unread indicator */}
-                                {unreadCounts &&
-                                    Object.values(unreadCounts).some(
-                                        (c) => c > 0
-                                    ) && (
-                                        <span className="absolute top-0 right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
-                                    )}
+                                {unreadCounts && Object.values(unreadCounts).some((c) => c > 0) && (
+                                    <span className="absolute top-0 right-0.5 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                                )}
                             </button>
 
                             {/* Calls Tab */}
@@ -5937,9 +5434,7 @@ function DashboardContent({
                                 }`}
                             >
                                 <span className="text-xl">📞</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Calls
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Calls</span>
                             </button>
 
                             {/* Bug Report Tab */}
@@ -5954,9 +5449,7 @@ function DashboardContent({
                                 }`}
                             >
                                 <span className="text-xl">🐛</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Report
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Report</span>
                             </button>
 
                             {/* Settings Tab - just opens modal, doesn't change active tab */}
@@ -5969,9 +5462,7 @@ function DashboardContent({
                                 }`}
                             >
                                 <span className="text-xl">⚙️</span>
-                                <span className="text-[9px] font-medium mt-0.5">
-                                    Settings
-                                </span>
+                                <span className="text-[9px] font-medium mt-0.5">Settings</span>
                             </button>
                         </div>
                     </div>
@@ -5981,10 +5472,7 @@ function DashboardContent({
                 <footer className="border-t border-zinc-800 bg-zinc-900/50 py-4 px-4 mt-auto">
                     <div className="max-w-4xl mx-auto">
                         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-zinc-500">
-                            <p>
-                                © {new Date().getFullYear()} Spritz. All rights
-                                reserved.
-                            </p>
+                            <p>© {new Date().getFullYear()} Spritz. All rights reserved.</p>
                             <div className="flex items-center gap-4">
                                 <Link
                                     href="/privacy"
@@ -6023,9 +5511,7 @@ function DashboardContent({
                 error={friendsError}
                 initialValue={
                     typeof window !== "undefined"
-                        ? new URLSearchParams(window.location.search).get(
-                              "add"
-                          ) || undefined
+                        ? new URLSearchParams(window.location.search).get("add") || undefined
                         : undefined
                 }
             />
@@ -6061,9 +5547,7 @@ function DashboardContent({
                         setLocalVideoContainer={setLocalVideoContainer}
                         setRemoteVideoContainer={setRemoteVideoContainer}
                         setScreenShareContainer={setScreenShareContainer}
-                        setLocalScreenShareContainer={
-                            setLocalScreenShareContainer
-                        }
+                        setLocalScreenShareContainer={setLocalScreenShareContainer}
                     />
                 )}
             </AnimatePresence>
@@ -6072,15 +5556,10 @@ function DashboardContent({
             {incomingCall && callState === "idle" && (
                 <IncomingCallModal
                     callerAddress={incomingCall.caller_address}
-                    callerName={
-                        incomingCallFriend?.ensName ||
-                        incomingCallFriend?.nickname
-                    }
+                    callerName={incomingCallFriend?.ensName || incomingCallFriend?.nickname}
                     callerAvatar={incomingCallFriend?.avatar}
                     callType={incomingCall.call_type || "audio"}
-                    isDecentralized={
-                        !incomingCall.channel_name.startsWith("spritz_")
-                    }
+                    isDecentralized={!incomingCall.channel_name.startsWith("spritz_")}
                     onAccept={handleAcceptCall}
                     onReject={handleRejectCall}
                 />
@@ -6102,43 +5581,67 @@ function DashboardContent({
 
             {/* Chat Modal */}
             {userAddress && (
-                <ChatModal
-                    key={chatFriend?.address || "no-chat"} // Force remount when peer changes
-                    isOpen={!!chatFriend}
-                    onClose={() => setChatFriend(null)}
-                    userAddress={userAddress}
-                    peerAddress={chatFriend?.address || ""}
-                    peerName={chatFriend?.reachUsername ? `@${chatFriend.reachUsername}` : chatFriend?.ensName || chatFriend?.nickname}
-                    peerAvatar={chatFriend?.avatar}
-                    peerEnsName={chatFriend?.ensName}
-                    peerUsername={chatFriend?.reachUsername}
-                    onMessageSent={() => {
-                        // Just update the timestamp for sorting; the preview
-                        // is handled by onPreviewUpdate which always has the
-                        // correct last message from either person.
-                        if (chatFriend) {
-                            setLastMessageTimes((prev) => ({
-                                ...prev,
-                                [chatFriend.address.toLowerCase()]: Date.now(),
-                            }));
+                <LoggingErrorBoundary
+                    componentName="ChatModal"
+                    fallback={
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                            <div className="bg-zinc-900 rounded-2xl p-6 text-center max-w-sm">
+                                <p className="text-white font-medium mb-2">Chat crashed</p>
+                                <p className="text-zinc-400 text-sm mb-4">
+                                    Something went wrong. Please reopen this chat.
+                                </p>
+                                <button
+                                    onClick={() => setChatFriend(null)}
+                                    className="px-4 py-2 bg-[#FF5500] text-white rounded-xl text-sm"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    }
+                >
+                    <ChatModal
+                        key={chatFriend?.address || "no-chat"} // Force remount when peer changes
+                        isOpen={!!chatFriend}
+                        onClose={() => setChatFriend(null)}
+                        userAddress={userAddress}
+                        peerAddress={chatFriend?.address || ""}
+                        peerName={
+                            chatFriend?.reachUsername
+                                ? `@${chatFriend.reachUsername}`
+                                : chatFriend?.ensName || chatFriend?.nickname
                         }
-                    }}
-                    onPreviewUpdate={(preview) => {
-                        if (chatFriend) {
-                            // Update only the preview text for the list. Do NOT update
-                            // lastMessageTimes here — that would move the chat to the top
-                            // when just opening it. Order is updated only on send/receive.
-                            const key = chatFriend.address.toLowerCase();
-                            startTransition(() => {
-                                setLastMessagePreviews((prev) => ({
+                        peerAvatar={chatFriend?.avatar}
+                        peerEnsName={chatFriend?.ensName}
+                        peerUsername={chatFriend?.reachUsername}
+                        onMessageSent={() => {
+                            // Just update the timestamp for sorting; the preview
+                            // is handled by onPreviewUpdate which always has the
+                            // correct last message from either person.
+                            if (chatFriend) {
+                                setLastMessageTimes((prev) => ({
                                     ...prev,
-                                    [key]: preview,
+                                    [chatFriend.address.toLowerCase()]: Date.now(),
                                 }));
-                            });
-                        }
-                    }}
-                    onOpenUserCard={(address) => setUserCardAddress(address)}
-                />
+                            }
+                        }}
+                        onPreviewUpdate={(preview) => {
+                            if (chatFriend) {
+                                // Update only the preview text for the list. Do NOT update
+                                // lastMessageTimes here — that would move the chat to the top
+                                // when just opening it. Order is updated only on send/receive.
+                                const key = chatFriend.address.toLowerCase();
+                                startTransition(() => {
+                                    setLastMessagePreviews((prev) => ({
+                                        ...prev,
+                                        [key]: preview,
+                                    }));
+                                });
+                            }
+                        }}
+                        onOpenUserCard={(address) => setUserCardAddress(address)}
+                    />
+                </LoggingErrorBoundary>
             )}
 
             {/* Username Claim Modal */}
@@ -6159,18 +5662,12 @@ function DashboardContent({
                     if (needsPasskeyForWallet && !isPasskeyUser) {
                         // Check if user already has a passkey
                         try {
-                            const res = await fetch(
-                                "/api/passkey/credentials",
-                                {
-                                    credentials: "include",
-                                }
-                            );
+                            const res = await fetch("/api/passkey/credentials", {
+                                credentials: "include",
+                            });
                             if (res.ok) {
                                 const data = await res.json();
-                                if (
-                                    !data.credentials ||
-                                    data.credentials.length === 0
-                                ) {
+                                if (!data.credentials || data.credentials.length === 0) {
                                     // No passkey yet - show the prompt
                                     setShowPasskeyPrompt(true);
                                     return;
@@ -6242,12 +5739,7 @@ function DashboardContent({
                 onDisablePush={unsubscribeFromPush}
                 userAddress={userAddress}
                 authType={
-                    messagingAuthType as
-                        | "wallet"
-                        | "passkey"
-                        | "email"
-                        | "digitalid"
-                        | "solana"
+                    messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"
                 }
                 passkeyCredentialId={passkeyCredentialId}
                 onOpenStatusModal={() => setIsStatusModalOpen(true)}
@@ -6331,9 +5823,7 @@ function DashboardContent({
                                             Call a Friend
                                         </h2>
                                         <button
-                                            onClick={() =>
-                                                setShowNewCallModal(false)
-                                            }
+                                            onClick={() => setShowNewCallModal(false)}
                                             className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
                                         >
                                             <svg
@@ -6355,9 +5845,7 @@ function DashboardContent({
                                 <div className="p-4 max-h-96 overflow-y-auto">
                                     {friendsListData.length === 0 ? (
                                         <div className="text-center py-8">
-                                            <p className="text-zinc-400">
-                                                No friends to call
-                                            </p>
+                                            <p className="text-zinc-400">No friends to call</p>
                                             <p className="text-zinc-500 text-sm mt-2">
                                                 Add friends to start calling
                                             </p>
@@ -6368,17 +5856,10 @@ function DashboardContent({
                                                 <button
                                                     key={friend.id}
                                                     onClick={() => {
-                                                        setShowNewCallModal(
-                                                            false
-                                                        );
-                                                        handleCall(
-                                                            friend,
-                                                            false
-                                                        );
+                                                        setShowNewCallModal(false);
+                                                        handleCall(friend, false);
                                                     }}
-                                                    disabled={
-                                                        callState !== "idle"
-                                                    }
+                                                    disabled={callState !== "idle"}
                                                     className="w-full flex items-center gap-3 p-3 hover:bg-zinc-800 rounded-lg transition-colors disabled:opacity-50"
                                                 >
                                                     {friend.avatar ? (
@@ -6404,21 +5885,14 @@ function DashboardContent({
                                                                 `${friend.address.slice(
                                                                     0,
                                                                     6
-                                                                )}...${friend.address.slice(
-                                                                    -4
-                                                                )}`}
+                                                                )}...${friend.address.slice(-4)}`}
                                                         </p>
                                                         {(friend.reachUsername ||
                                                             friend.ensName) && (
                                                             <p className="text-xs text-zinc-500">
-                                                                {friend.address.slice(
-                                                                    0,
-                                                                    6
-                                                                )}
+                                                                {friend.address.slice(0, 6)}
                                                                 ...
-                                                                {friend.address.slice(
-                                                                    -4
-                                                                )}
+                                                                {friend.address.slice(-4)}
                                                             </p>
                                                         )}
                                                     </div>
@@ -6478,39 +5952,57 @@ function DashboardContent({
             />
 
             {/* Alpha Chat Modal - treat admins as members so they can always talk in Global Chat */}
-            <AlphaChatModal
-                isOpen={isAlphaChatOpen}
-                onClose={() => setIsAlphaChatOpen(false)}
-                userAddress={userAddress}
-                alphaChat={{
-                    ...alphaChat,
-                    isMember: alphaChat.isMember || isAdmin,
-                }}
-                getUserInfo={getAlphaUserInfo}
-                onOpenUserCard={(address) => setUserCardAddress(address)}
-                onAddFriend={async (address) => {
-                    const result = await sendFriendRequest(address);
-                    if (result) {
-                        // Optionally show toast
-                    }
-                    return result;
-                }}
-                isFriend={(address) =>
-                    friends.some(
-                        (f) =>
-                            f.friend_address.toLowerCase() ===
-                            address.toLowerCase()
-                    )
+            <LoggingErrorBoundary
+                componentName="AlphaChatModal"
+                fallback={
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                        <div className="bg-zinc-900 rounded-2xl p-6 text-center max-w-sm">
+                            <p className="text-white font-medium mb-2">Global chat crashed</p>
+                            <p className="text-zinc-400 text-sm mb-4">
+                                Something went wrong. Please reopen.
+                            </p>
+                            <button
+                                onClick={() => setIsAlphaChatOpen(false)}
+                                className="px-4 py-2 bg-[#FF5500] text-white rounded-xl text-sm"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
                 }
-                onOpenDM={(address) => {
-                    openDMByAddress(address);
-                    setIsAlphaChatOpen(false);
-                }}
-                isAdmin={isAdmin}
-                onMessageSent={() => {
-                    updateLastMessageTime("global-spritz");
-                }}
-            />
+            >
+                <AlphaChatModal
+                    isOpen={isAlphaChatOpen}
+                    onClose={() => setIsAlphaChatOpen(false)}
+                    userAddress={userAddress}
+                    alphaChat={{
+                        ...alphaChat,
+                        isMember: alphaChat.isMember || isAdmin,
+                    }}
+                    getUserInfo={getAlphaUserInfo}
+                    onOpenUserCard={(address) => setUserCardAddress(address)}
+                    onAddFriend={async (address) => {
+                        const result = await sendFriendRequest(address);
+                        if (result) {
+                            // Optionally show toast
+                        }
+                        return result;
+                    }}
+                    isFriend={(address) =>
+                        friends.some(
+                            (f) => f.friend_address.toLowerCase() === address.toLowerCase()
+                        )
+                    }
+                    onOpenDM={(address) => {
+                        openDMByAddress(address);
+                        setIsAlphaChatOpen(false);
+                    }}
+                    isAdmin={isAdmin}
+                    onMessageSent={() => {
+                        updateLastMessageTime("global-spritz");
+                    }}
+                />
+            </LoggingErrorBoundary>
 
             {/* User Card (Telegram-style profile when clicking another user's avatar) */}
             {userCardAddress && (
@@ -6521,32 +6013,24 @@ function DashboardContent({
                     peerName={
                         getAlphaUserInfo(userCardAddress)?.name ??
                         friendsListData.find(
-                            (f) =>
-                                f.address.toLowerCase() ===
-                                userCardAddress.toLowerCase()
+                            (f) => f.address.toLowerCase() === userCardAddress.toLowerCase()
                         )?.nickname ??
                         null
                     }
                     peerAvatar={
                         getAlphaUserInfo(userCardAddress)?.avatar ??
                         friendsListData.find(
-                            (f) =>
-                                f.address.toLowerCase() ===
-                                userCardAddress.toLowerCase()
+                            (f) => f.address.toLowerCase() === userCardAddress.toLowerCase()
                         )?.avatar ??
                         null
                     }
                     username={
                         friendsListData.find(
-                            (f) =>
-                                f.address.toLowerCase() ===
-                                userCardAddress.toLowerCase()
+                            (f) => f.address.toLowerCase() === userCardAddress.toLowerCase()
                         )?.reachUsername ?? null
                     }
                     onCall={(friend) => handleCall(friend as FriendsListFriend)}
-                    onVideoCall={(friend) =>
-                        handleVideoCall(friend as FriendsListFriend)
-                    }
+                    onVideoCall={(friend) => handleVideoCall(friend as FriendsListFriend)}
                     onMessage={(friend) => {
                         // Close user card modal first
                         setUserCardAddress(null);
@@ -6579,9 +6063,7 @@ function DashboardContent({
                         return result;
                     }}
                     isFriend={friends.some(
-                        (f) =>
-                            f.friend_address.toLowerCase() ===
-                            userCardAddress.toLowerCase()
+                        (f) => f.friend_address.toLowerCase() === userCardAddress.toLowerCase()
                     )}
                     onBlock={() => setShowBlockModal(true)}
                     onReport={() => setShowReportModal(true)}
@@ -6653,7 +6135,10 @@ function DashboardContent({
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                        onClick={() => { setShowBanConfirm(false); setBanReason(""); }}
+                        onClick={() => {
+                            setShowBanConfirm(false);
+                            setBanReason("");
+                        }}
                     >
                         <motion.div
                             initial={{ scale: 0.95 }}
@@ -6666,7 +6151,8 @@ function DashboardContent({
                             <p className="text-sm text-zinc-400 mb-4">
                                 This will prevent{" "}
                                 <span className="text-white font-medium">
-                                    {getAlphaUserInfo(userCardAddress)?.name ?? `${userCardAddress.slice(0, 6)}...${userCardAddress.slice(-4)}`}
+                                    {getAlphaUserInfo(userCardAddress)?.name ??
+                                        `${userCardAddress.slice(0, 6)}...${userCardAddress.slice(-4)}`}
                                 </span>{" "}
                                 from sending messages in any chat.
                             </p>
@@ -6679,7 +6165,10 @@ function DashboardContent({
                             />
                             <div className="flex gap-3">
                                 <button
-                                    onClick={() => { setShowBanConfirm(false); setBanReason(""); }}
+                                    onClick={() => {
+                                        setShowBanConfirm(false);
+                                        setBanReason("");
+                                    }}
                                     className="flex-1 py-2.5 rounded-xl bg-zinc-800 text-zinc-300 text-sm font-medium"
                                 >
                                     Cancel
@@ -6748,8 +6237,7 @@ function DashboardContent({
                                 Enter group password
                             </h3>
                             <p className="text-zinc-400 text-sm mb-4">
-                                &ldquo;{groupPendingUnlock.name}&rdquo; is
-                                password protected.
+                                &ldquo;{groupPendingUnlock.name}&rdquo; is password protected.
                             </p>
                             <input
                                 type="password"
@@ -6758,18 +6246,13 @@ function DashboardContent({
                                     setUnlockPassword(e.target.value);
                                     setUnlockError("");
                                 }}
-                                onKeyDown={(e) =>
-                                    e.key === "Enter" &&
-                                    handleUnlockGroupSubmit()
-                                }
+                                onKeyDown={(e) => e.key === "Enter" && handleUnlockGroupSubmit()}
                                 placeholder="Password"
                                 className="w-full py-2.5 px-3 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 text-sm mb-2"
                                 autoFocus
                             />
                             {unlockError && (
-                                <p className="text-red-400 text-xs mb-2">
-                                    {unlockError}
-                                </p>
+                                <p className="text-red-400 text-xs mb-2">{unlockError}</p>
                             )}
                             <div className="flex gap-2">
                                 <button
@@ -6799,48 +6282,66 @@ function DashboardContent({
 
             {/* Group Chat Modal */}
             {userAddress && (
-                <GroupChatModal
-                    key={selectedGroup?.id || "no-group"} // Force remount when group changes
-                    isOpen={!!selectedGroup}
-                    onClose={() => setSelectedGroup(null)}
-                    userAddress={userAddress}
-                    group={selectedGroup}
-                    friends={friendsListData}
-                    onGroupDeleted={async () => {
-                        // Refresh groups list after leaving
-                        const fetchedGroups = await getGroups();
-                        setGroups(fetchedGroups);
-                    }}
-                    onStartCall={handleStartGroupCall}
-                    hasActiveCall={callState !== "idle" || !!currentGroupCall}
-                    getUserInfo={getAlphaUserInfo}
-                    isFriend={(address) =>
-                        friends.some(
-                            (f) =>
-                                f.friend_address.toLowerCase() ===
-                                address.toLowerCase()
-                        )
+                <LoggingErrorBoundary
+                    componentName="GroupChatModal"
+                    fallback={
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                            <div className="bg-zinc-900 rounded-2xl p-6 text-center max-w-sm">
+                                <p className="text-white font-medium mb-2">Group chat crashed</p>
+                                <p className="text-zinc-400 text-sm mb-4">
+                                    Something went wrong. Please reopen.
+                                </p>
+                                <button
+                                    onClick={() => setSelectedGroup(null)}
+                                    className="px-4 py-2 bg-[#FF5500] text-white rounded-xl text-sm"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
                     }
-                    onOpenDM={(address) => {
-                        openDMByAddress(address);
-                        setSelectedGroup(null);
-                    }}
-                    isAdmin={isAdmin}
-                    onMessageSent={() => {
-                        // Update last message time for this group (for sorting)
-                        if (selectedGroup) {
-                            const groupKey = `group-${selectedGroup.id}`;
-                            updateLastMessageTime(groupKey);
+                >
+                    <GroupChatModal
+                        key={selectedGroup?.id || "no-group"} // Force remount when group changes
+                        isOpen={!!selectedGroup}
+                        onClose={() => setSelectedGroup(null)}
+                        userAddress={userAddress}
+                        group={selectedGroup}
+                        friends={friendsListData}
+                        onGroupDeleted={async () => {
+                            // Refresh groups list after leaving
+                            const fetchedGroups = await getGroups();
+                            setGroups(fetchedGroups);
+                        }}
+                        onStartCall={handleStartGroupCall}
+                        hasActiveCall={callState !== "idle" || !!currentGroupCall}
+                        getUserInfo={getAlphaUserInfo}
+                        isFriend={(address) =>
+                            friends.some(
+                                (f) => f.friend_address.toLowerCase() === address.toLowerCase()
+                            )
                         }
-                    }}
-                    onMessageReceived={() => {
-                        // Update last message time when receiving messages (for sorting)
-                        if (selectedGroup) {
-                            const groupKey = `group-${selectedGroup.id}`;
-                            updateLastMessageTime(groupKey);
-                        }
-                    }}
-                />
+                        onOpenDM={(address) => {
+                            openDMByAddress(address);
+                            setSelectedGroup(null);
+                        }}
+                        isAdmin={isAdmin}
+                        onMessageSent={() => {
+                            // Update last message time for this group (for sorting)
+                            if (selectedGroup) {
+                                const groupKey = `group-${selectedGroup.id}`;
+                                updateLastMessageTime(groupKey);
+                            }
+                        }}
+                        onMessageReceived={() => {
+                            // Update last message time when receiving messages (for sorting)
+                            if (selectedGroup) {
+                                const groupKey = `group-${selectedGroup.id}`;
+                                updateLastMessageTime(groupKey);
+                            }
+                        }}
+                    />
+                </LoggingErrorBoundary>
             )}
 
             {/* Browse Channels Modal */}
@@ -6853,9 +6354,7 @@ function DashboardContent({
                 }}
                 userAddress={userAddress}
                 channelLookupAddresses={
-                    channelLookupAddresses.length > 0
-                        ? channelLookupAddresses
-                        : undefined
+                    channelLookupAddresses.length > 0 ? channelLookupAddresses : undefined
                 }
                 poapAddresses={poapAddresses}
                 onJoinChannel={async (channel) => {
@@ -6883,7 +6382,11 @@ function DashboardContent({
                     setIsTokenChatOpen(true);
                 }}
                 initialShowCreate={browseChannelsInitialCreate}
-                onCreateGroup={isWakuInitialized && friends.length > 0 ? () => setIsCreateGroupOpen(true) : undefined}
+                onCreateGroup={
+                    isWakuInitialized && friends.length > 0
+                        ? () => setIsCreateGroupOpen(true)
+                        : undefined
+                }
                 onCreateLocationChat={() => setShowLocationChatPicker(true)}
                 onCreateTokenChat={() => {
                     setIsBrowseChannelsOpen(false);
@@ -6967,7 +6470,7 @@ function DashboardContent({
                     onSettingsUpdated={(updatedChat) => {
                         setSelectedTokenChat(updatedChat);
                         setJoinedTokenChats((prev) =>
-                            prev.map((c) => (c.id === updatedChat.id ? updatedChat : c)),
+                            prev.map((c) => (c.id === updatedChat.id ? updatedChat : c))
                         );
                     }}
                     onLeave={() => {
@@ -6979,57 +6482,71 @@ function DashboardContent({
 
             {/* Channel Chat Modal */}
             {selectedChannel && (
-                <ChannelChatModal
-                    key={selectedChannel?.id || "no-channel"} // Force remount when channel changes
-                    isOpen={!!selectedChannel}
-                    onClose={() => setSelectedChannel(null)}
-                    channel={selectedChannel}
-                    userAddress={userAddress}
-                    onLeave={async () => {
-                        await leaveChannel(selectedChannel.id);
-                        await fetchJoinedChannels(); // Refresh the list
-                        setSelectedChannel(null);
-                    }}
-                    getUserInfo={getAlphaUserInfo}
-                    onOpenUserCard={(address) => setUserCardAddress(address)}
-                    onAddFriend={async (address) => {
-                        const result = await sendFriendRequest(address);
-                        return result;
-                    }}
-                    isFriend={(address) =>
-                        friends.some(
-                            (f) =>
-                                f.friend_address.toLowerCase() ===
-                                address.toLowerCase()
-                        )
+                <LoggingErrorBoundary
+                    componentName="ChannelChatModal"
+                    fallback={
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                            <div className="bg-zinc-900 rounded-2xl p-6 text-center max-w-sm">
+                                <p className="text-white font-medium mb-2">Channel chat crashed</p>
+                                <p className="text-zinc-400 text-sm mb-4">
+                                    Something went wrong. Please reopen.
+                                </p>
+                                <button
+                                    onClick={() => setSelectedChannel(null)}
+                                    className="px-4 py-2 bg-[#FF5500] text-white rounded-xl text-sm"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
                     }
-                    onOpenDM={(address) => {
-                        openDMByAddress(address);
-                        setSelectedChannel(null);
-                    }}
-                    notificationsEnabled={isNotificationsEnabled(
-                        selectedChannel.id
-                    )}
-                    onToggleNotifications={() =>
-                        toggleChannelNotifications(selectedChannel.id)
-                    }
-                    onSetActiveChannel={setActiveChannel}
-                    isAdmin={isAdmin}
-                    onMessageSent={() => {
-                        // Update last message time for this channel (for sorting)
-                        const channelKey = `channel-${selectedChannel.id}`;
-                        updateLastMessageTime(channelKey);
-                    }}
-                    onForwardToGlobal={
-                        alphaChat.isMember
-                            ? async (content) => {
-                                  await alphaChat.sendMessage(content);
-                                  return true;
-                              }
-                            : undefined
-                    }
-                    globalChatIconUrl={globalChatIconUrl}
-                />
+                >
+                    <ChannelChatModal
+                        key={selectedChannel?.id || "no-channel"} // Force remount when channel changes
+                        isOpen={!!selectedChannel}
+                        onClose={() => setSelectedChannel(null)}
+                        channel={selectedChannel}
+                        userAddress={userAddress}
+                        onLeave={async () => {
+                            await leaveChannel(selectedChannel.id);
+                            await fetchJoinedChannels(); // Refresh the list
+                            setSelectedChannel(null);
+                        }}
+                        getUserInfo={getAlphaUserInfo}
+                        onOpenUserCard={(address) => setUserCardAddress(address)}
+                        onAddFriend={async (address) => {
+                            const result = await sendFriendRequest(address);
+                            return result;
+                        }}
+                        isFriend={(address) =>
+                            friends.some(
+                                (f) => f.friend_address.toLowerCase() === address.toLowerCase()
+                            )
+                        }
+                        onOpenDM={(address) => {
+                            openDMByAddress(address);
+                            setSelectedChannel(null);
+                        }}
+                        notificationsEnabled={isNotificationsEnabled(selectedChannel.id)}
+                        onToggleNotifications={() => toggleChannelNotifications(selectedChannel.id)}
+                        onSetActiveChannel={setActiveChannel}
+                        isAdmin={isAdmin}
+                        onMessageSent={() => {
+                            // Update last message time for this channel (for sorting)
+                            const channelKey = `channel-${selectedChannel.id}`;
+                            updateLastMessageTime(channelKey);
+                        }}
+                        onForwardToGlobal={
+                            alphaChat.isMember
+                                ? async (content) => {
+                                      await alphaChat.sendMessage(content);
+                                      return true;
+                                  }
+                                : undefined
+                        }
+                        globalChatIconUrl={globalChatIconUrl}
+                    />
+                </LoggingErrorBoundary>
             )}
 
             {/* Group Call UI */}
@@ -7104,10 +6621,8 @@ function DashboardContent({
                             </h2>
                             <p className="text-zinc-400 mb-6">
                                 Claim your{" "}
-                                <span className="text-amber-400 font-semibold">
-                                    +3 points
-                                </span>{" "}
-                                for logging in today
+                                <span className="text-amber-400 font-semibold">+3 points</span> for
+                                logging in today
                             </p>
 
                             <button
@@ -7157,8 +6672,7 @@ function DashboardContent({
                                     (f) =>
                                         f.ensName === toast.sender ||
                                         f.nickname === toast.sender ||
-                                        formatAddress(f.address) ===
-                                            toast.sender
+                                        formatAddress(f.address) === toast.sender
                                 );
                                 if (friend) {
                                     handleChat(friend);
@@ -7183,12 +6697,8 @@ function DashboardContent({
                                 </svg>
                             </div>
                             <div className="min-w-0">
-                                <p className="text-white font-medium truncate">
-                                    {toast.sender}
-                                </p>
-                                <p className="text-zinc-400 text-sm truncate">
-                                    {toast.message}
-                                </p>
+                                <p className="text-white font-medium truncate">{toast.sender}</p>
+                                <p className="text-zinc-400 text-sm truncate">{toast.message}</p>
                             </div>
                             <button
                                 onClick={(e) => {
@@ -7226,9 +6736,7 @@ function DashboardContent({
                 displayName={
                     userENS.ensName ||
                     userENS.snsName ||
-                    (reachUsername
-                        ? `@${reachUsername}`
-                        : formatAddress(userAddress))
+                    (reachUsername ? `@${reachUsername}` : formatAddress(userAddress))
                 }
                 statusEmoji={userSettings.statusEmoji}
                 statusText={userSettings.statusText}
@@ -7261,9 +6769,7 @@ function DashboardContent({
                 onClose={() => setIsGlobalSearchOpen(false)}
                 userAddress={userAddress}
                 onOpenChannel={(channelId) => {
-                    const channel = joinedChannels.find(
-                        (c) => c.id === channelId
-                    );
+                    const channel = joinedChannels.find((c) => c.id === channelId);
                     if (channel) setSelectedChannel(channel);
                 }}
             />
@@ -7278,10 +6784,10 @@ function DashboardContent({
                     isPasskeyUser
                         ? "passkey"
                         : isEmailUser
-                        ? "email"
-                        : walletType === "solana"
-                        ? "solana"
-                        : "wallet"
+                          ? "email"
+                          : walletType === "solana"
+                            ? "solana"
+                            : "wallet"
                 }
             />
 
@@ -7333,9 +6839,7 @@ function DashboardContent({
                                             <p className="text-zinc-400 text-xs">
                                                 {betaAppliedAt
                                                     ? `Applied on ${formatTimestamp(
-                                                          new Date(
-                                                              betaAppliedAt
-                                                          ),
+                                                          new Date(betaAppliedAt),
                                                           userTimezone,
                                                           "MMMM d, yyyy"
                                                       )}`
@@ -7343,77 +6847,59 @@ function DashboardContent({
                                             </p>
                                         </div>
                                         <p className="text-sm text-zinc-400">
-                                            We&apos;re reviewing applications
-                                            and granting access in batches.
-                                            You&apos;ll be notified when your
-                                            access is approved!
+                                            We&apos;re reviewing applications and granting access in
+                                            batches. You&apos;ll be notified when your access is
+                                            approved!
                                         </p>
                                     </div>
                                 ) : (
                                     <p className="text-sm text-zinc-400 mb-6">
-                                        Apply for beta access to use Spritz
-                                        Wallets - send crypto with free gas,
-                                        passkey signing, multi-chain support,
-                                        and shared vaults.
+                                        Apply for beta access to use Spritz Wallets - send crypto
+                                        with free gas, passkey signing, multi-chain support, and
+                                        shared vaults.
                                     </p>
                                 )}
-                                {!walletBetaApplied &&
-                                    !isCheckingBetaStatus && (
-                                        <button
-                                            onClick={async () => {
-                                                setIsApplyingWalletBeta(true);
-                                                try {
-                                                    const response =
-                                                        await fetch(
-                                                            "/api/beta-access/apply",
-                                                            {
-                                                                method: "POST",
-                                                                credentials:
-                                                                    "include",
-                                                            }
-                                                        );
-                                                    const data =
-                                                        await response.json();
-                                                    if (response.ok) {
-                                                        if (
-                                                            data.hasBetaAccess
-                                                        ) {
-                                                            // User already has access, refresh and open wallet
-                                                            refreshBetaAccess();
-                                                            setShowWalletBetaPrompt(
-                                                                false
-                                                            );
-                                                            setIsWalletModalOpen(
-                                                                true
-                                                            );
-                                                        } else {
-                                                            setWalletBetaApplied(
-                                                                true
-                                                            );
-                                                            setBetaAppliedAt(
-                                                                new Date().toISOString()
-                                                            );
-                                                        }
+                                {!walletBetaApplied && !isCheckingBetaStatus && (
+                                    <button
+                                        onClick={async () => {
+                                            setIsApplyingWalletBeta(true);
+                                            try {
+                                                const response = await fetch(
+                                                    "/api/beta-access/apply",
+                                                    {
+                                                        method: "POST",
+                                                        credentials: "include",
                                                     }
-                                                } catch (error) {
-                                                    console.error(
-                                                        "[Dashboard] Error applying for wallet beta:",
-                                                        error
-                                                    );
-                                                } finally {
-                                                    setIsApplyingWalletBeta(
-                                                        false
-                                                    );
+                                                );
+                                                const data = await response.json();
+                                                if (response.ok) {
+                                                    if (data.hasBetaAccess) {
+                                                        // User already has access, refresh and open wallet
+                                                        refreshBetaAccess();
+                                                        setShowWalletBetaPrompt(false);
+                                                        setIsWalletModalOpen(true);
+                                                    } else {
+                                                        setWalletBetaApplied(true);
+                                                        setBetaAppliedAt(new Date().toISOString());
+                                                    }
                                                 }
-                                            }}
-                                            disabled={isApplyingWalletBeta}
-                                            className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {isApplyingWalletBeta
-                                                ? "Applying..."
-                                                : "Apply for Beta Access"}
-                                        </button>
-                                    )}
+                                            } catch (error) {
+                                                console.error(
+                                                    "[Dashboard] Error applying for wallet beta:",
+                                                    error
+                                                );
+                                            } finally {
+                                                setIsApplyingWalletBeta(false);
+                                            }
+                                        }}
+                                        disabled={isApplyingWalletBeta}
+                                        className="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isApplyingWalletBeta
+                                            ? "Applying..."
+                                            : "Apply for Beta Access"}
+                                    </button>
+                                )}
                             </div>
                         </motion.div>
                     </motion.div>
@@ -7459,16 +6945,13 @@ function DashboardContent({
                                     Disconnect Wallet?
                                 </h3>
                                 <p className="text-zinc-400 text-sm">
-                                    Are you sure you want to disconnect?
-                                    You&apos;ll need to reconnect to access your
-                                    account.
+                                    Are you sure you want to disconnect? You&apos;ll need to
+                                    reconnect to access your account.
                                 </p>
                             </div>
                             <div className="flex gap-3">
                                 <button
-                                    onClick={() =>
-                                        setShowDisconnectConfirm(false)
-                                    }
+                                    onClick={() => setShowDisconnectConfirm(false)}
                                     className="flex-1 py-3 px-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-medium transition-colors"
                                 >
                                     Cancel
