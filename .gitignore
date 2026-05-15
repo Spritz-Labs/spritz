@@ -193,3 +193,7 @@ supabase/.temp/
 # Security Audits
 /audit/*
 /audit-*
+
+# Playwright
+/playwright-report/
+/test-results/

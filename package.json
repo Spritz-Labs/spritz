@@ -7,6 +7,11 @@
         "build": "next build --webpack",
         "postinstall": "rm -rf node_modules/@types/minimatch || true",
         "start": "next start",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "test:e2e": "playwright test",
+        "test:e2e:ui": "playwright test --ui",
         "lint": "eslint",
         "generate-icons": "node scripts/generate-icons.js",
         "update-cryptonomads": "node scripts/update-cryptonomads.mjs",
@@ -94,18 +99,28 @@
         "web-push": "^3.6.7"
     },
     "devDependencies": {
+        "@playwright/test": "^1.60.0",
         "@tailwindcss/postcss": "^4",
+        "@testing-library/dom": "^10.4.1",
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.2",
+        "@testing-library/user-event": "^14.6.1",
         "@types/node": "^20",
         "@types/qrcode": "^1.5.6",
         "@types/react": "^19",
         "@types/react-dom": "^19",
         "@types/web-push": "^3.6.4",
+        "@vitejs/plugin-react": "^6.0.2",
+        "@vitest/coverage-v8": "^4.1.6",
         "eslint": "^9",
         "eslint-config-next": "16.0.7",
+        "happy-dom": "^20.9.0",
         "marked": "^18.0.2",
+        "msw": "^2.14.6",
         "tailwindcss": "^4",
         "typescript": "^5",
-        "vercel": "^50.6.1"
+        "vercel": "^50.6.1",
+        "vitest": "^4.1.6"
     },
     "packageManager": "yarn@3.2.3+sha512.f26f951f67de0c6a33ee381e5ff364709c87e70eb5e65c694e4facde3512f1fa80b8679e6ba31ce7d340fbb46f08dd683af9457e240f25a204be7427940d767e"
 }

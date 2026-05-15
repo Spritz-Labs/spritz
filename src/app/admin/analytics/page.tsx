@@ -575,13 +575,13 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                     subtext={`+${data.summary.newUsersCount} new`}
                 />
                 <KPICard
-                    label="Organic Messages"
-                    value={data.summary.totalOrganicMessages}
+                    label="User DMs"
+                    value={data.summary.totalOrganicDms}
                     icon="💬"
-                    current={curr?.messages}
-                    previous={prev?.messages}
+                    current={curr?.dm_messages}
+                    previous={prev?.dm_messages}
                     trendLabel="vs prev"
-                    subtext={`${data.summary.totalAutomatedDms.toLocaleString()} automated excluded`}
+                    subtext={`${data.summary.totalChannelMessages.toLocaleString()} channel · ${data.summary.totalAlphaMessages.toLocaleString()} alpha`}
                 />
                 <KPICard
                     label="Smart Wallets"
@@ -627,7 +627,7 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
             )}
 
             {/* Message Breakdown with comparison */}
-            <ChartCard title={`Message Breakdown (in ${period})`} description="Organic user messages by type — excludes automated welcome & broadcast DMs">
+            <ChartCard title={`Message Breakdown (in ${period})`} description="User DMs, channel messages & alpha — excludes automated welcome & broadcast DMs">
                 <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
                         <p className="text-2xl font-bold text-blue-400">{(data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod).toLocaleString()}</p>
@@ -750,7 +750,7 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                 <SmallMetric label="Calls" value={data.summary.totalCalls} />
                 <SmallMetric label="Streams" value={data.summary.totalStreamsCreated} />
                 <SmallMetric label="Rooms" value={data.summary.totalRoomsCreated} />
-                <SmallMetric label="Organic Msgs" value={data.summary.totalOrganicMessages} />
+                <SmallMetric label="User DMs" value={data.summary.totalOrganicDms} />
                 <SmallMetric label="Points" value={data.summary.totalPoints} />
                 <SmallMetric label="Friendships" value={data.summary.acceptedFriendships} />
                 <SmallMetric label="Public Profiles" value={data.summary.publicProfilesCount} />
@@ -791,7 +791,7 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
                 <KPICard label="Total Users" value={data.summary.totalUsers} icon="👥" />
                 <KPICard label="New Users" value={data.summary.newUsersCount} icon="✨" subtext={`in ${period}`} />
                 <KPICard label="Active Users" value={data.summary.activeUsers} icon="🔥" subtext={`in ${period}`} />
-                <KPICard label="Organic Messages" value={data.summary.organicMessagesInPeriod ?? data.summary.messagesInPeriod} icon="💬" subtext={`in ${period} (excl. automated)`} />
+                <KPICard label="User DMs" value={data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod} icon="💬" subtext={`in ${period} (excl. automated)`} />
                 <KPICard label="Friend Requests" value={data.summary.friendRequestsCount} icon="🤝" />
                 <KPICard label="Invites Used" value={data.summary.invitesUsed} icon="🎟️" />
             </div>
