@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
 import { mainnet } from "wagmi/chains";
-import { useFriendRequests, type Friend } from "@/hooks/useFriendRequests";
+import { useFriendRequests } from "@/hooks/useFriendRequests";
 import { useVoiceCall } from "@/hooks/useVoiceCall";
 import { useHuddle01Call } from "@/hooks/useHuddle01Call";
 import { useCallSignaling } from "@/hooks/useCallSignaling";
@@ -39,7 +39,7 @@ import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimestamp } from "@/lib/timezone";
 import { isAgoraConfigured } from "@/config/agora";
 import { isHuddle01Configured, createHuddle01Room } from "@/config/huddle01";
-import { supabase, isSupabaseConfigured } from "@/config/supabase";
+import { supabase } from "@/config/supabase";
 import { StatusModal } from "./StatusModal";
 import dynamic from "next/dynamic";
 const SettingsModal = dynamic(() => import("./SettingsModal").then((m) => m.SettingsModal));
@@ -55,7 +55,7 @@ import { useSocials } from "@/hooks/useSocials";
 import { toast as sonnerToast } from "sonner";
 import { CreateGroupModal } from "./CreateGroupModal";
 import { GroupChatModal } from "./GroupChatModal";
-import { GroupsList } from "./GroupsList";
+// GroupsList rendered inline via UnifiedChatList
 import { GroupCallUI } from "./GroupCallUI";
 import { IncomingGroupCallModal } from "./IncomingGroupCallModal";
 import { type XMTPGroup } from "@/context/WakuProvider";
@@ -83,11 +83,11 @@ import { LoggingErrorBoundary } from "./LoggingErrorBoundary";
 const AgentsSection = dynamic(() => import("./AgentsSection").then((m) => m.AgentsSection));
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
-const GoLiveModal = dynamic(() => import("./GoLiveModal").then((m) => m.GoLiveModal));
+// GoLiveModal removed — streaming UI not yet wired
 import { ProfileAvatarModal } from "./ProfileAvatarModal";
 import { LiveBadge } from "./LiveStreamPlayer";
 import { useStreams } from "@/hooks/useStreams";
-import type { Stream } from "@/app/api/streams/route";
+// Stream type unused for now
 const WalletModal = dynamic(() => import("./WalletModal").then((m) => m.WalletModal));
 import { walletCacheKey, normalizeAddress } from "@/utils/address";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
@@ -166,9 +166,6 @@ function DashboardContent({
     const isSolanaUser = walletType === "solana";
     // Users who need a passkey to access Smart Wallet (non-wallet auth methods)
     const needsPasskeyForWallet = isEmailUser || isSolanaUser || isWorldIdUser || isAlienIdUser;
-    // EVM address for hooks that require it
-    // For Solana users, pass null to disable EVM-specific features
-    const evmAddress = isSolanaUser ? null : (userAddress as `0x${string}`);
     const { smartWallet } = useSmartWallet(isSolanaUser ? null : (userAddress as string));
     // Connected wallet address (for admin/alpha checks when user signed in with email etc.)
     const { address: connectedWalletAddress } = useAccount();
@@ -261,7 +258,7 @@ function DashboardContent({
     const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
     const [isCreatingGroup, setIsCreatingGroup] = useState(false);
     const [groups, setGroups] = useState<XMTPGroup[]>([]);
-    const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+    const [, setIsLoadingGroups] = useState(false);
 
     // Folder modal state
     const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
@@ -327,25 +324,17 @@ function DashboardContent({
     }, [isProfileMenuOpen]);
 
     // Username hook - works for both EVM and Solana addresses
-    const {
-        username: reachUsername,
-        claimUsername,
-        isFetching: isUsernameFetching,
-    } = useUsername(userAddress);
+    const { username: reachUsername, isFetching: isUsernameFetching } = useUsername(userAddress);
 
     // Phone verification hook - works for both EVM and Solana addresses
-    const {
-        phoneNumber: verifiedPhone,
-        isVerified: isPhoneVerified,
-        refresh: refreshPhone,
-    } = usePhoneVerification(userAddress);
+    const { isVerified: isPhoneVerified, refresh: refreshPhone } =
+        usePhoneVerification(userAddress);
 
     // Socials hook
     const {
         socials,
         socialCount,
         saveSocials,
-        fetchSocialsForAddress,
         isLoading: isSocialsLoading,
     } = useSocials(userAddress);
 
@@ -453,7 +442,6 @@ function DashboardContent({
         trackFriendAdded,
         trackFriendRemoved,
         trackRoomCreated,
-        trackScheduleCreated,
     } = useAnalytics(userAddress);
 
     // Check primary address, smart wallet, and connected wallet so admins work with any sign-in method
@@ -548,7 +536,6 @@ function DashboardContent({
     // Points system
     const {
         points: userPoints,
-        checkFriendsMilestone,
         awardPoints: awardUserPoints,
         hasClaimed,
         refresh: refreshPoints,
@@ -576,11 +563,9 @@ function DashboardContent({
         invites,
         available: availableInvites,
         used: usedInvites,
-        totalAllocation: totalInvites,
         isLoading: isInvitesLoading,
         shareInvite,
     } = useUserInvites(userAddress);
-    const allInvitesUsed = usedInvites > 0 && usedInvites === totalInvites;
 
     // Contacts sync state
     const [contacts, setContacts] = useState<
@@ -666,11 +651,7 @@ function DashboardContent({
         return addrs.length ? addrs : undefined;
     }, [smartWallet?.smartWalletAddress, connectedWalletAddress, userAddress]);
     const alphaChat = useAlphaChat(userAddress, alphaAdditionalAddresses);
-    const {
-        unreadCount: alphaUnreadCount,
-        isMember: isAlphaMember,
-        membership: alphaMembership,
-    } = alphaChat;
+    const { unreadCount: alphaUnreadCount, isMember: isAlphaMember } = alphaChat;
     const [isAlphaChatOpen, setIsAlphaChatOpen] = useState(false);
 
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -986,22 +967,18 @@ function DashboardContent({
     } = useCallHistory(userAddress);
     const [currentCallId, setCurrentCallId] = useState<string | null>(null);
     const [callStartTime, setCallStartTime] = useState<Date | null>(null);
-    const [showNewCallDropdown, setShowNewCallDropdown] = useState(false);
     const [showNewScheduledModal, setShowNewScheduledModal] = useState(false);
     const [showNewCallModal, setShowNewCallModal] = useState(false);
     const [isRejectingCall, setIsRejectingCall] = useState(false);
 
     // Live streaming
-    const { liveStreams, currentStream, createStream, goLive, endStream, fetchLiveStreams } =
-        useStreams(userAddress);
+    const { liveStreams, currentStream, createStream, goLive, endStream } = useStreams(userAddress);
 
     // Public channels
     const {
-        channels,
         joinedChannels,
         joinChannel,
         leaveChannel,
-        fetchChannels,
         fetchJoinedChannels,
         toggleChannelNotifications,
         isNotificationsEnabled,
@@ -1618,7 +1595,6 @@ function DashboardContent({
     const unlockGroupWithPassword =
         wakuContext?.unlockGroupWithPassword ??
         (() => Promise.resolve({ success: false, error: "Waku not available" }));
-    const addGroupMembers = wakuContext?.addGroupMembers ?? (() => Promise.resolve(false));
     const leaveGroup = wakuContext?.leaveGroup ?? (() => Promise.resolve());
 
     // State for reconnecting (kept for API compatibility)
@@ -2284,7 +2260,7 @@ function DashboardContent({
     };
 
     // Handler when user joins a token chat from browse
-    const handleTokenChatJoined = async (chat: TokenChat) => {
+    const handleTokenChatJoined = async (_chat: TokenChat) => {
         // Refresh joined list
         try {
             const res = await fetch(
@@ -2330,7 +2306,8 @@ function DashboardContent({
     const [unlockError, setUnlockError] = useState("");
 
     // Handler to open a group chat (shows password modal if group is password-protected and not unlocked)
-    const handleOpenGroup = (group: XMTPGroup) => {
+    // TODO: wire into UnifiedChatList to enforce password check
+    const _handleOpenGroup = (group: XMTPGroup) => {
         if (group.passwordProtected && !group.symmetricKey) {
             setGroupPendingUnlock(group);
             setUnlockPassword("");
@@ -2412,7 +2389,8 @@ function DashboardContent({
     };
 
     // Handler to join an existing group call
-    const handleJoinGroupCall = async (groupId: string) => {
+    // TODO: wire into GroupCallUI / notification handler
+    const _handleJoinGroupCall = async (groupId: string) => {
         if (!isCallConfigured) {
             alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
             return;
