@@ -86,6 +86,13 @@ const withPWA = withPWAInit({
             },
         },
         {
+            urlPattern: /\/api\//i,
+            handler: "NetworkOnly",
+            options: {
+                cacheName: "internal-apis",
+            },
+        },
+        {
             urlPattern: /.*/i,
             handler: "NetworkFirst",
             options: {
@@ -98,6 +105,9 @@ const withPWA = withPWAInit({
             },
         },
     ],
+    fallbacks: {
+        document: "/offline",
+    },
 });
 
 /** @type {import('next').NextConfig} */
