@@ -3,6 +3,11 @@
 
 console.log("[SW] Service worker loaded");
 
+self.addEventListener("unhandledrejection", (event) => {
+    console.error("[SW] Unhandled rejection:", event.reason);
+    event.preventDefault();
+});
+
 // Handle push notifications
 self.addEventListener("push", (event) => {
     console.log("[SW] Push event received!");
@@ -40,10 +45,7 @@ self.addEventListener("push", (event) => {
                     : [],
         };
 
-        console.log(
-            "[SW] Showing notification with title:",
-            data.title || "Spritz"
-        );
+        console.log("[SW] Showing notification with title:", data.title || "Spritz");
 
         event.waitUntil(
             self.registration
@@ -80,7 +82,7 @@ self.addEventListener("notificationclick", (event) => {
 
     // Determine the URL to open
     let targetUrl = data.url || "/";
-    
+
     // For message notifications, add the sender address as a query param to open the chat
     if (data.type === "message" && data.senderAddress) {
         targetUrl = `/?chat=${encodeURIComponent(data.senderAddress)}`;
@@ -92,10 +94,8 @@ self.addEventListener("notificationclick", (event) => {
         clients
             .matchAll({ type: "window", includeUncontrolled: true })
             .then((clientList) => {
-                // If app is already open, focus it and navigate to the chat
                 for (const client of clientList) {
                     if (client.url.includes(self.location.origin)) {
-                        // Post message to the client to open the chat
                         if (data.type === "message" && data.senderAddress) {
                             client.postMessage({
                                 type: "OPEN_CHAT",
@@ -105,8 +105,10 @@ self.addEventListener("notificationclick", (event) => {
                         return client.focus();
                     }
                 }
-                // Otherwise open new window with the target URL
                 return clients.openWindow(targetUrl);
+            })
+            .catch((err) => {
+                console.error("[SW] notificationclick error:", err);
             })
     );
 });
@@ -140,5 +142,3 @@ self.addEventListener("message", (event) => {
         self.skipWaiting();
     }
 });
-
-

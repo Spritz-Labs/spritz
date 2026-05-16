@@ -391,6 +391,7 @@ export function ChatModal({
         fetchOlderMessages,
         searchAllMessages,
         streamMessages,
+        unsubscribeStream,
         canMessage,
         markAsRead,
         setActiveChatPeer,
@@ -714,7 +715,7 @@ export function ChatModal({
                     console.log("[Chat] Got messages:", existingMessages.length);
 
                     // Filter and format messages
-                     
+
                     const formattedMessages: Message[] = existingMessages
                         .filter((msg: any) => {
                             return typeof msg.content === "string" && msg.content.trim() !== "";
@@ -794,8 +795,8 @@ export function ChatModal({
         loadMessages();
 
         return () => {
-            // Cleanup stream on unmount
             if (streamRef.current) {
+                unsubscribeStream(streamRef.current);
                 streamRef.current = null;
             }
         };
@@ -805,6 +806,7 @@ export function ChatModal({
         peerAddress,
         getMessages,
         streamMessages,
+        unsubscribeStream,
         canMessage,
         displayName,
         bypassCheck,
@@ -821,7 +823,6 @@ export function ChatModal({
                 const newMessages = await getMessages(peerAddress, true);
 
                 if (newMessages.length > 0) {
-                     
                     const formattedMessages: Message[] = newMessages
                         .filter((msg: any) => {
                             const valid =
@@ -924,7 +925,6 @@ export function ChatModal({
             const result = await fetchOlderMessages(peerAddress, beforeTimestamp);
 
             if (result.messages.length > 0) {
-                 
                 const olderFormatted: Message[] = result.messages
                     .filter((msg: any) => {
                         return typeof msg.content === "string" && msg.content.trim() !== "";

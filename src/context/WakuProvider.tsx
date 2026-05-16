@@ -85,9 +85,7 @@ interface MessagingKeypair {
  * Derive an encryption key from user's address + a random secret
  * This key is used to encrypt the ECDH private key for cloud backup
  */
-async function getOrCreateKeypairEncryptionKey(
-    userAddress: string
-): Promise<Uint8Array> {
+async function getOrCreateKeypairEncryptionKey(userAddress: string): Promise<Uint8Array> {
     if (typeof window === "undefined") {
         throw new Error("Cannot access in SSR");
     }
@@ -126,22 +124,14 @@ async function encryptPrivateKeyForBackup(
     const keyBuffer = new ArrayBuffer(encryptionKey.length);
     new Uint8Array(keyBuffer).set(encryptionKey);
 
-    const cryptoKey = await crypto.subtle.importKey(
-        "raw",
-        keyBuffer,
-        { name: "AES-GCM" },
-        false,
-        ["encrypt"]
-    );
+    const cryptoKey = await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, [
+        "encrypt",
+    ]);
 
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const data = new TextEncoder().encode(privateKeyBase64);
 
-    const encrypted = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv },
-        cryptoKey,
-        data
-    );
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, data);
 
     // Combine IV + encrypted data
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
@@ -159,9 +149,7 @@ async function decryptPrivateKeyFromBackup(
     encryptionKey: Uint8Array
 ): Promise<string | null> {
     try {
-        const combined = Uint8Array.from(atob(encryptedBase64), (c) =>
-            c.charCodeAt(0)
-        );
+        const combined = Uint8Array.from(atob(encryptedBase64), (c) => c.charCodeAt(0));
         const iv = combined.slice(0, 12);
         const encrypted = combined.slice(12);
 
@@ -211,9 +199,7 @@ async function tryRestoreKeypairFromCloud(
         );
 
         if (!privateKey) {
-            log.warn(
-                "[Waku] Failed to decrypt keypair from cloud (encryption key mismatch)"
-            );
+            log.warn("[Waku] Failed to decrypt keypair from cloud (encryption key mismatch)");
             return null;
         }
 
@@ -269,9 +255,7 @@ async function saveKeypairToCloud(
  * Cloud backup is OPT-IN only via Settings → Message Encryption Key.
  * Cloud backup requires 12-word phrase + 6-digit PIN to restore.
  */
-async function getOrCreateMessagingKeypair(
-    userAddress?: string
-): Promise<MessagingKeypair> {
+async function getOrCreateMessagingKeypair(userAddress?: string): Promise<MessagingKeypair> {
     if (typeof window === "undefined") {
         throw new Error("Cannot access keypair in SSR");
     }
@@ -300,29 +284,16 @@ async function getOrCreateMessagingKeypair(
         );
 
         // Export keys for storage
-        const publicKeyBuffer = await crypto.subtle.exportKey(
-            "raw",
-            keyPair.publicKey
-        );
-        const privateKeyBuffer = await crypto.subtle.exportKey(
-            "pkcs8",
-            keyPair.privateKey
-        );
+        const publicKeyBuffer = await crypto.subtle.exportKey("raw", keyPair.publicKey);
+        const privateKeyBuffer = await crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
 
         keypair = {
-            publicKey: btoa(
-                String.fromCharCode(...new Uint8Array(publicKeyBuffer))
-            ),
-            privateKey: btoa(
-                String.fromCharCode(...new Uint8Array(privateKeyBuffer))
-            ),
+            publicKey: btoa(String.fromCharCode(...new Uint8Array(publicKeyBuffer))),
+            privateKey: btoa(String.fromCharCode(...new Uint8Array(privateKeyBuffer))),
         };
 
         // Store locally
-        localStorage.setItem(
-            MESSAGING_KEYPAIR_STORAGE,
-            JSON.stringify(keypair)
-        );
+        localStorage.setItem(MESSAGING_KEYPAIR_STORAGE, JSON.stringify(keypair));
     }
 
     // ALWAYS ensure public key is in Supabase (needed for ECDH key exchange)
@@ -341,9 +312,7 @@ async function getOrCreateMessagingKeypair(
             );
 
             if (isExisting) {
-                log.debug(
-                    "[Waku] Uploaded existing keypair's public key to Supabase"
-                );
+                log.debug("[Waku] Uploaded existing keypair's public key to Supabase");
             }
         } catch (err) {
             log.warn("[Waku] Failed to store public key:", err);
@@ -357,9 +326,7 @@ async function getOrCreateMessagingKeypair(
  * Import a public key from base64 for ECDH
  */
 async function importPublicKey(publicKeyBase64: string): Promise<CryptoKey> {
-    const publicKeyBytes = Uint8Array.from(atob(publicKeyBase64), (c) =>
-        c.charCodeAt(0)
-    );
+    const publicKeyBytes = Uint8Array.from(atob(publicKeyBase64), (c) => c.charCodeAt(0));
     return crypto.subtle.importKey(
         "raw",
         publicKeyBytes,
@@ -373,9 +340,7 @@ async function importPublicKey(publicKeyBase64: string): Promise<CryptoKey> {
  * Import private key from base64 for ECDH
  */
 async function importPrivateKey(privateKeyBase64: string): Promise<CryptoKey> {
-    const privateKeyBytes = Uint8Array.from(atob(privateKeyBase64), (c) =>
-        c.charCodeAt(0)
-    );
+    const privateKeyBytes = Uint8Array.from(atob(privateKeyBase64), (c) => c.charCodeAt(0));
     return crypto.subtle.importKey(
         "pkcs8",
         privateKeyBytes,
@@ -404,10 +369,7 @@ async function deriveSharedSecret(
 /**
  * Store user's public key in Supabase for others to fetch
  */
-async function storePublicKeyInSupabase(
-    userAddress: string,
-    publicKey: string
-): Promise<void> {
+async function storePublicKeyInSupabase(userAddress: string, publicKey: string): Promise<void> {
     if (!supabase) return;
 
     try {
@@ -450,32 +412,21 @@ async function fetchPeerPublicKey(peerAddress: string): Promise<string | null> {
 }
 
 // Helper to encrypt content for Supabase storage using AES-GCM
-async function encryptForStorage(
-    content: string,
-    symmetricKey: Uint8Array
-): Promise<string> {
+async function encryptForStorage(content: string, symmetricKey: Uint8Array): Promise<string> {
     const encoder = new TextEncoder();
     const data = encoder.encode(content);
 
     // Import the key for AES-GCM
     const keyBuffer = new Uint8Array(symmetricKey).buffer;
-    const cryptoKey = await crypto.subtle.importKey(
-        "raw",
-        keyBuffer,
-        { name: "AES-GCM" },
-        false,
-        ["encrypt"]
-    );
+    const cryptoKey = await crypto.subtle.importKey("raw", keyBuffer, { name: "AES-GCM" }, false, [
+        "encrypt",
+    ]);
 
     // Generate a random IV
     const iv = crypto.getRandomValues(new Uint8Array(12));
 
     // Encrypt
-    const encrypted = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv },
-        cryptoKey,
-        data
-    );
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, data);
 
     // Combine IV + encrypted data and convert to base64
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
@@ -506,9 +457,7 @@ async function decryptFromStorage(
 ): Promise<string> {
     try {
         // Decode base64
-        const combined = Uint8Array.from(atob(encryptedBase64), (c) =>
-            c.charCodeAt(0)
-        );
+        const combined = Uint8Array.from(atob(encryptedBase64), (c) => c.charCodeAt(0));
 
         // Extract IV and encrypted data
         const iv = combined.slice(0, 12);
@@ -535,9 +484,7 @@ async function decryptFromStorage(
         return decoder.decode(decrypted);
     } catch (err) {
         // Don't log every decryption failure - can be noisy during key loading
-        log.debug(
-            "[Waku] Decryption attempt failed (keys may still be loading)"
-        );
+        log.debug("[Waku] Decryption attempt failed (keys may still be loading)");
         return DECRYPTION_FAILED_MARKER;
     }
 }
@@ -554,10 +501,7 @@ async function decryptWithFallback(
     // If we have ECDH key, try it first
     if (keys.isSecure && keys.ecdhKey) {
         try {
-            const content = await decryptFromStorage(
-                encryptedBase64,
-                keys.ecdhKey
-            );
+            const content = await decryptFromStorage(encryptedBase64, keys.ecdhKey);
             if (content !== DECRYPTION_FAILED_MARKER) {
                 return { content, usedLegacy: false };
             }
@@ -575,14 +519,8 @@ async function decryptWithFallback(
  * Compute the legacy (insecure) DM key
  * This is kept for backward compatibility with existing messages
  */
-async function computeLegacyDmKey(
-    userAddress: string,
-    peerAddress: string
-): Promise<Uint8Array> {
-    const sortedAddresses = [
-        userAddress.toLowerCase(),
-        peerAddress.toLowerCase(),
-    ].sort();
+async function computeLegacyDmKey(userAddress: string, peerAddress: string): Promise<Uint8Array> {
+    const sortedAddresses = [userAddress.toLowerCase(), peerAddress.toLowerCase()].sort();
 
     const seed = `spritz-dm-key-v1:${sortedAddresses[0]}:${sortedAddresses[1]}`;
     const encoder = new TextEncoder();
@@ -625,10 +563,7 @@ async function saveMessageToSupabase(
         if (error) {
             // Ignore duplicate key errors (message already exists)
             if (error.code === "23505") {
-                console.log(
-                    "[Waku] Message already exists in Supabase:",
-                    messageId
-                );
+                console.log("[Waku] Message already exists in Supabase:", messageId);
                 return true;
             }
             log.error("[Waku] Failed to save message to Supabase:", error);
@@ -669,7 +604,9 @@ async function fetchMessagesFromSupabase(
         // Fetch latest N messages by ordering descending, then reverse for display
         let query = supabase
             .from("shout_messages")
-            .select("message_id, encrypted_content, sender_address, sent_at, conversation_id, message_type")
+            .select(
+                "message_id, encrypted_content, sender_address, sent_at, conversation_id, message_type"
+            )
             .eq("conversation_id", conversationId)
             .order("sent_at", { ascending: false });
 
@@ -685,10 +622,7 @@ async function fetchMessagesFromSupabase(
         const { data, error } = await query;
 
         if (error) {
-            console.error(
-                "[Waku] Failed to fetch messages from Supabase:",
-                error
-            );
+            console.error("[Waku] Failed to fetch messages from Supabase:", error);
             return [];
         }
 
@@ -712,31 +646,27 @@ async function fetchMessagesFromSupabase(
                 let usedLegacyKey = false;
 
                 // Welcome/system/broadcast messages are stored as plain text (not encrypted)
-                if (msg.message_type === 'welcome' || msg.message_type === 'system' || msg.message_type === 'broadcast') {
+                if (
+                    msg.message_type === "welcome" ||
+                    msg.message_type === "system" ||
+                    msg.message_type === "broadcast"
+                ) {
                     content = msg.encrypted_content; // It's actually plain text for these types
                 } else if (isDualKey(keys)) {
                     // Use dual-key decryption with fallback
-                    const result = await decryptWithFallback(
-                        msg.encrypted_content,
-                        keys
-                    );
+                    const result = await decryptWithFallback(msg.encrypted_content, keys);
                     content = result.content;
                     usedLegacyKey = result.usedLegacy;
                 } else {
                     // Single key (for group chats)
-                    content = await decryptFromStorage(
-                        msg.encrypted_content,
-                        keys
-                    );
+                    content = await decryptFromStorage(msg.encrypted_content, keys);
                 }
 
                 return {
                     id: msg.message_id,
                     content,
                     senderInboxId: msg.sender_address,
-                    sentAtNs:
-                        BigInt(new Date(msg.sent_at).getTime()) *
-                        BigInt(1000000),
+                    sentAtNs: BigInt(new Date(msg.sent_at).getTime()) * BigInt(1000000),
                     conversationId: msg.conversation_id,
                     usedLegacyKey,
                 };
@@ -754,9 +684,7 @@ async function fetchMessagesFromSupabase(
 function persistMessages(topic: string, messages: unknown[]) {
     if (typeof window === "undefined") return;
     try {
-        const allMessages = JSON.parse(
-            localStorage.getItem(MESSAGES_STORAGE_KEY) || "{}"
-        );
+        const allMessages = JSON.parse(localStorage.getItem(MESSAGES_STORAGE_KEY) || "{}");
         // Convert BigInt to string for JSON serialization
         const serializable = messages.map((m: any) => ({
             ...m,
@@ -773,9 +701,7 @@ function persistMessages(topic: string, messages: unknown[]) {
 function loadPersistedMessages(topic: string): unknown[] {
     if (typeof window === "undefined") return [];
     try {
-        const allMessages = JSON.parse(
-            localStorage.getItem(MESSAGES_STORAGE_KEY) || "{}"
-        );
+        const allMessages = JSON.parse(localStorage.getItem(MESSAGES_STORAGE_KEY) || "{}");
         const rawMessages = allMessages[topic] || [];
 
         // Deduplicate and filter out messages without IDs
@@ -805,10 +731,7 @@ function loadPersistedMessages(topic: string): unknown[] {
                 ...m,
                 sentAtNs: m.sentAtNs.toString(),
             }));
-            localStorage.setItem(
-                MESSAGES_STORAGE_KEY,
-                JSON.stringify(allMessages)
-            );
+            localStorage.setItem(MESSAGES_STORAGE_KEY, JSON.stringify(allMessages));
         }
 
         return cleanedMessages;
@@ -850,25 +773,18 @@ type WakuContextType = {
             conversationId: string;
         };
     }>;
-    getMessages: (
-        peerAddress: string,
-        forceRefresh?: boolean
-    ) => Promise<unknown[]>;
+    getMessages: (peerAddress: string, forceRefresh?: boolean) => Promise<unknown[]>;
     fetchOlderMessages: (
         peerAddress: string,
         beforeTimestamp: string
     ) => Promise<{ messages: unknown[]; hasMore: boolean }>;
-    searchAllMessages: (
-        peerAddress: string
-    ) => Promise<unknown[]>;
+    searchAllMessages: (peerAddress: string) => Promise<unknown[]>;
     streamMessages: (
         peerAddress: string,
         onMessage: (message: unknown) => void
     ) => Promise<unknown>;
     /** Check if a DM conversation is using secure ECDH key exchange */
-    getConversationSecurityStatus: (
-        peerAddress: string
-    ) => Promise<ConversationSecurityStatus>;
+    getConversationSecurityStatus: (peerAddress: string) => Promise<ConversationSecurityStatus>;
     canMessage: (address: string) => Promise<boolean>;
     canMessageBatch: (addresses: string[]) => Promise<Record<string, boolean>>;
     markAsRead: (peerAddress: string) => void;
@@ -913,9 +829,7 @@ type WakuContextType = {
         groupId: string,
         onMessage: (message: unknown) => void
     ) => Promise<unknown>;
-    getGroupMembers: (
-        groupId: string
-    ) => Promise<{ inboxId: string; addresses: string[] }[]>;
+    getGroupMembers: (groupId: string) => Promise<{ inboxId: string; addresses: string[] }[]>;
     addGroupMembers: (
         groupId: string,
         memberAddresses: string[]
@@ -924,9 +838,7 @@ type WakuContextType = {
         groupId: string,
         memberAddress: string
     ) => Promise<{ success: boolean; error?: string }>;
-    leaveGroup: (
-        groupId: string
-    ) => Promise<{ success: boolean; error?: string }>;
+    leaveGroup: (groupId: string) => Promise<{ success: boolean; error?: string }>;
     joinGroupById: (
         groupId: string,
         groupData?: {
@@ -993,9 +905,7 @@ export function WakuProvider({
     const [isInitialized, setIsInitialized] = useState(false);
     const [isInitializing, setIsInitializing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>(
-        {}
-    );
+    const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
 
     // Track which chat is currently open (to avoid incrementing unread for open chats)
     const activeChatPeerRef = useRef<string | null>(null);
@@ -1064,10 +974,7 @@ export function WakuProvider({
             }
 
             // Always compute legacy key (needed for old message decryption)
-            const legacyKey = await computeLegacyDmKey(
-                userAddress,
-                peerAddress
-            );
+            const legacyKey = await computeLegacyDmKey(userAddress, peerAddress);
 
             // Try ECDH key derivation
             let ecdhKey: Uint8Array | null = null;
@@ -1075,32 +982,22 @@ export function WakuProvider({
 
             try {
                 // Get our keypair and ensure our public key is in Supabase
-                const myKeypair = await getOrCreateMessagingKeypair(
-                    userAddress
-                );
+                const myKeypair = await getOrCreateMessagingKeypair(userAddress);
 
                 // Fetch BOTH public keys to ensure consistency
                 // We only use ECDH if BOTH users have their public keys registered
-                const [peerPublicKeyBase64, myPublicKeyInDb] =
-                    await Promise.all([
-                        fetchPeerPublicKey(peerAddress),
-                        fetchPeerPublicKey(userAddress), // Check our own key is in DB
-                    ]);
+                const [peerPublicKeyBase64, myPublicKeyInDb] = await Promise.all([
+                    fetchPeerPublicKey(peerAddress),
+                    fetchPeerPublicKey(userAddress), // Check our own key is in DB
+                ]);
 
                 // Only use ECDH if BOTH public keys are available
                 // This ensures sender and receiver will use the same key
                 if (peerPublicKeyBase64 && myPublicKeyInDb) {
                     // ECDH key exchange
-                    const myPrivateKey = await importPrivateKey(
-                        myKeypair.privateKey
-                    );
-                    const peerPublicKey = await importPublicKey(
-                        peerPublicKeyBase64
-                    );
-                    const sharedSecret = await deriveSharedSecret(
-                        myPrivateKey,
-                        peerPublicKey
-                    );
+                    const myPrivateKey = await importPrivateKey(myKeypair.privateKey);
+                    const peerPublicKey = await importPublicKey(peerPublicKeyBase64);
+                    const sharedSecret = await deriveSharedSecret(myPrivateKey, peerPublicKey);
 
                     // Add conversation-specific context to the key
                     const sortedAddresses = [
@@ -1111,39 +1008,26 @@ export function WakuProvider({
 
                     // Combine ECDH secret with context for final key
                     const combined = new Uint8Array(
-                        sharedSecret.length +
-                            new TextEncoder().encode(context).length
+                        sharedSecret.length + new TextEncoder().encode(context).length
                     );
                     combined.set(sharedSecret);
-                    combined.set(
-                        new TextEncoder().encode(context),
-                        sharedSecret.length
-                    );
+                    combined.set(new TextEncoder().encode(context), sharedSecret.length);
 
-                    ecdhKey = new Uint8Array(
-                        await crypto.subtle.digest("SHA-256", combined)
-                    );
+                    ecdhKey = new Uint8Array(await crypto.subtle.digest("SHA-256", combined));
                     isSecure = true;
 
-                    log.debug(
-                        "[Waku] ECDH key exchange successful (both users have public keys)"
-                    );
+                    log.debug("[Waku] ECDH key exchange successful (both users have public keys)");
                 } else {
                     if (!myPublicKeyInDb) {
-                        log.debug(
-                            "[Waku] Own public key not in DB yet, using legacy"
-                        );
+                        log.debug("[Waku] Own public key not in DB yet, using legacy");
                     } else if (!peerPublicKeyBase64) {
-                        log.debug(
-                            "[Waku] Peer hasn't registered public key yet, using legacy"
-                        );
+                        log.debug("[Waku] Peer hasn't registered public key yet, using legacy");
                     }
                 }
             } catch (err) {
                 // DataError = peer's public key invalid/wrong format (e.g. wrong curve or corrupted in DB).
                 // We fall back to legacy key; chat still works.
-                const isDataError =
-                    err instanceof Error && err.name === "DataError";
+                const isDataError = err instanceof Error && err.name === "DataError";
                 if (isDataError) {
                     log.debug(
                         "[Waku] ECDH key derivation failed (invalid peer key format), using legacy key"
@@ -1244,15 +1128,18 @@ export function WakuProvider({
                     wakuSdk.Protocols.Filter,
                 ]);
 
-                // Add timeout for peer connection
-                const timeoutPromise = new Promise((_, reject) =>
-                    setTimeout(
+                // Add timeout for peer connection (cancel timer when peer connects)
+                let timeoutId: ReturnType<typeof setTimeout>;
+                const timeoutPromise = new Promise((_, reject) => {
+                    timeoutId = setTimeout(
                         () => reject(new Error("Peer connection timeout")),
                         PEER_TIMEOUT
-                    )
-                );
+                    );
+                });
 
-                await Promise.race([peerPromise, timeoutPromise]);
+                await Promise.race([peerPromise, timeoutPromise]).finally(() => {
+                    clearTimeout(timeoutId);
+                });
                 log.debug("[Waku] Connected to peers");
 
                 nodeRef.current = node;
@@ -1263,10 +1150,7 @@ export function WakuProvider({
 
                 return true;
             } catch (err) {
-                log.error(
-                    `[Waku] Initialization attempt ${attempt} failed:`,
-                    err
-                );
+                log.error(`[Waku] Initialization attempt ${attempt} failed:`, err);
 
                 // If this was the last attempt, set error
                 if (attempt === MAX_RETRIES) {
@@ -1274,14 +1158,8 @@ export function WakuProvider({
                     setIsInitializing(false);
                     setInitStatus("");
 
-                    const errorMessage =
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to connect";
-                    if (
-                        errorMessage.includes("timeout") ||
-                        errorMessage.includes("Peer")
-                    ) {
+                    const errorMessage = err instanceof Error ? err.message : "Failed to connect";
+                    if (errorMessage.includes("timeout") || errorMessage.includes("Peer")) {
                         // Waku network nodes may be temporarily unavailable
                         setError(
                             "Waku network temporarily unavailable. Your messages are still saved - try again later."
@@ -1318,15 +1196,12 @@ export function WakuProvider({
     }, []);
 
     // Check if an address can receive messages (always true for Waku)
-    const canMessage = useCallback(
-        async (address: string): Promise<boolean> => {
-            // Waku is a broadcast network, any address can receive messages
-            // As long as they subscribe to the right content topic
-            // Works with both EVM (0x...) and Solana (base58) addresses
-            return Boolean(address && address.length > 0);
-        },
-        []
-    );
+    const canMessage = useCallback(async (address: string): Promise<boolean> => {
+        // Waku is a broadcast network, any address can receive messages
+        // As long as they subscribe to the right content topic
+        // Works with both EVM (0x...) and Solana (base58) addresses
+        return Boolean(address && address.length > 0);
+    }, []);
 
     // Batch check canMessage
     const canMessageBatch = useCallback(
@@ -1399,9 +1274,7 @@ export function WakuProvider({
 
             // Check if node is initialized, try to initialize if not
             if (!nodeRef.current) {
-                console.log(
-                    "[Waku] Node not initialized, attempting to initialize..."
-                );
+                console.log("[Waku] Node not initialized, attempting to initialize...");
                 const initResult = await initialize();
                 if (!initResult || !nodeRef.current) {
                     return {
@@ -1412,10 +1285,7 @@ export function WakuProvider({
             }
 
             try {
-                const contentTopic = getDmContentTopic(
-                    userAddress,
-                    peerAddress
-                );
+                const contentTopic = getDmContentTopic(userAddress, peerAddress);
                 log.debug("[Waku] Sending message to topic:", contentTopic);
 
                 // Get symmetric keys for this conversation
@@ -1423,10 +1293,9 @@ export function WakuProvider({
                 const symmetricKey = dmKeys.encryptionKey; // Use ECDH key if available
 
                 // Create routing info for the network (using shard 0)
-                const routingInfo =
-                    wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
-                        clusterId: 1,
-                    });
+                const routingInfo = wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
+                    clusterId: 1,
+                });
 
                 // Create encoder with symmetric encryption
                 const encoder = wakuEncryption.createEncoder({
@@ -1436,9 +1305,7 @@ export function WakuProvider({
                 });
 
                 log.debug(
-                    `[Waku] Sending with ${
-                        dmKeys.isSecure ? "ECDH (secure)" : "legacy"
-                    } key`
+                    `[Waku] Sending with ${dmKeys.isSecure ? "ECDH (secure)" : "legacy"} key`
                 );
 
                 // Create message
@@ -1449,9 +1316,7 @@ export function WakuProvider({
                     sender: userAddress.toLowerCase(),
                     content,
                     messageId,
-                    messageType: content.startsWith("[PIXEL_ART]")
-                        ? "pixel_art"
-                        : "text",
+                    messageType: content.startsWith("[PIXEL_ART]") ? "pixel_art" : "text",
                 });
 
                 const payload = MessageProto.encode(messageObj).finish();
@@ -1505,8 +1370,8 @@ export function WakuProvider({
                             body: content.startsWith("[PIXEL_ART]")
                                 ? "Sent you a pixel art"
                                 : content.length > 100
-                                ? content.slice(0, 100) + "..."
-                                : content,
+                                  ? content.slice(0, 100) + "..."
+                                  : content,
                             type: "message",
                             url: "/",
                         }),
@@ -1533,19 +1398,13 @@ export function WakuProvider({
     // Optimized: fetches last 50 messages, returns Supabase results immediately,
     // runs Waku Store query in background (non-blocking)
     const getMessages = useCallback(
-        async (
-            peerAddress: string,
-            forceRefresh = false
-        ): Promise<unknown[]> => {
+        async (peerAddress: string, forceRefresh = false): Promise<unknown[]> => {
             if (!userAddress) {
                 return [];
             }
 
             try {
-                const contentTopic = getDmContentTopic(
-                    userAddress,
-                    peerAddress
-                );
+                const contentTopic = getDmContentTopic(userAddress, peerAddress);
                 const cacheKey = contentTopic;
 
                 // Load from localStorage into cache if cache is empty
@@ -1581,10 +1440,7 @@ export function WakuProvider({
 
                 // FETCH FROM SUPABASE FIRST (more reliable than Waku Store)
                 // Only fetch latest 50 messages for fast initial load
-                console.log(
-                    "[Waku] Fetching from Supabase for topic:",
-                    contentTopic
-                );
+                console.log("[Waku] Fetching from Supabase for topic:", contentTopic);
                 const supabaseMessages = await fetchMessagesFromSupabase(
                     contentTopic,
                     dmKeys,
@@ -1592,19 +1448,13 @@ export function WakuProvider({
                 );
 
                 // Track security status based on messages
-                const legacyCount = supabaseMessages.filter(
-                    (m) => m.usedLegacyKey
-                ).length;
+                const legacyCount = supabaseMessages.filter((m) => m.usedLegacyKey).length;
                 if (legacyCount > 0 && dmKeys.isSecure) {
                     log.debug(
                         `[Waku] ${legacyCount}/${supabaseMessages.length} messages used legacy key (old messages)`
                     );
                 }
-                console.log(
-                    "[Waku] Supabase returned:",
-                    supabaseMessages.length,
-                    "messages"
-                );
+                console.log("[Waku] Supabase returned:", supabaseMessages.length, "messages");
 
                 // Mark all Supabase messages as processed
                 supabaseMessages.forEach((m) => {
@@ -1630,9 +1480,7 @@ export function WakuProvider({
                 });
 
                 const mergedMessages = Array.from(messageMap.values());
-                mergedMessages.sort(
-                    (a: any, b: any) => Number(a.sentAtNs) - Number(b.sentAtNs)
-                );
+                mergedMessages.sort((a: any, b: any) => Number(a.sentAtNs) - Number(b.sentAtNs));
 
                 console.log(
                     "[Waku] Fast load: cache=",
@@ -1649,17 +1497,14 @@ export function WakuProvider({
                 // Fire-and-forget: Waku Store query runs in background (non-blocking)
                 // Any additional messages found will be merged into cache for next render
                 if (nodeRef.current && wakuSdk && wakuEncryption) {
-                    const allMessageIds = new Set(
-                        mergedMessages.map((m: any) => m.id)
-                    );
+                    const allMessageIds = new Set(mergedMessages.map((m: any) => m.id));
 
                     (async () => {
                         try {
-                            const routingInfo =
-                                wakuSdk!.utils.StaticShardingRoutingInfo.fromShard(
-                                    0,
-                                    { clusterId: 1 }
-                                );
+                            const routingInfo = wakuSdk!.utils.StaticShardingRoutingInfo.fromShard(
+                                0,
+                                { clusterId: 1 }
+                            );
                             const decoder = wakuEncryption!.createDecoder(
                                 contentTopic,
                                 routingInfo,
@@ -1667,77 +1512,44 @@ export function WakuProvider({
                             );
 
                             let wakuFound = 0;
-                            const storeQuery =
-                                nodeRef.current!.store.queryWithOrderedCallback(
-                                    [decoder],
-                                    (wakuMessage: {
-                                        payload?: Uint8Array;
-                                    }) => {
-                                        if (!wakuMessage.payload) return;
-                                        try {
-                                            const decoded =
-                                                MessageProto.decode(
-                                                    wakuMessage.payload
-                                                );
-                                            const msg =
-                                                MessageProto.toObject(decoded);
+                            const storeQuery = nodeRef.current!.store.queryWithOrderedCallback(
+                                [decoder],
+                                (wakuMessage: { payload?: Uint8Array }) => {
+                                    if (!wakuMessage.payload) return;
+                                    try {
+                                        const decoded = MessageProto.decode(wakuMessage.payload);
+                                        const msg = MessageProto.toObject(decoded);
 
-                                            if (
-                                                !allMessageIds.has(
-                                                    msg.messageId
-                                                ) &&
-                                                !processedMessageIds.current.has(
-                                                    msg.messageId
-                                                )
-                                            ) {
-                                                processedMessageIds.current.add(
-                                                    msg.messageId
-                                                );
-                                                allMessageIds.add(
-                                                    msg.messageId
-                                                );
-                                                // Add to cache
-                                                const cached =
-                                                    messagesCache.current.get(
-                                                        cacheKey
-                                                    ) || [];
-                                                cached.push({
-                                                    id: msg.messageId,
-                                                    content: msg.content,
-                                                    senderInboxId: msg.sender,
-                                                    sentAtNs:
-                                                        BigInt(
-                                                            msg.timestamp
-                                                        ) * BigInt(1000000),
-                                                });
-                                                cached.sort(
-                                                    (a: any, b: any) =>
-                                                        Number(a.sentAtNs) -
-                                                        Number(b.sentAtNs)
-                                                );
-                                                messagesCache.current.set(
-                                                    cacheKey,
-                                                    cached
-                                                );
-                                                wakuFound++;
-                                            }
-                                        } catch (decodeErr) {
-                                            console.log(
-                                                "[Waku] Failed to decode message:",
-                                                decodeErr
+                                        if (
+                                            !allMessageIds.has(msg.messageId) &&
+                                            !processedMessageIds.current.has(msg.messageId)
+                                        ) {
+                                            processedMessageIds.current.add(msg.messageId);
+                                            allMessageIds.add(msg.messageId);
+                                            // Add to cache
+                                            const cached =
+                                                messagesCache.current.get(cacheKey) || [];
+                                            cached.push({
+                                                id: msg.messageId,
+                                                content: msg.content,
+                                                senderInboxId: msg.sender,
+                                                sentAtNs: BigInt(msg.timestamp) * BigInt(1000000),
+                                            });
+                                            cached.sort(
+                                                (a: any, b: any) =>
+                                                    Number(a.sentAtNs) - Number(b.sentAtNs)
                                             );
+                                            messagesCache.current.set(cacheKey, cached);
+                                            wakuFound++;
                                         }
+                                    } catch (decodeErr) {
+                                        console.log("[Waku] Failed to decode message:", decodeErr);
                                     }
-                                );
+                                }
+                            );
 
                             const timeout = new Promise((_, reject) =>
-                                setTimeout(
-                                    () =>
-                                        reject(
-                                            new Error("Store query timeout")
-                                        ),
-                                    5000
-                                )
+                                setTimeout(() => reject(new Error("Store query timeout")), 5000)
                             );
 
                             await Promise.race([storeQuery, timeout]);
@@ -1753,10 +1565,7 @@ export function WakuProvider({
                                 );
                             }
                         } catch (storeErr) {
-                            console.log(
-                                "[Waku] Background store query failed:",
-                                storeErr
-                            );
+                            console.log("[Waku] Background store query failed:", storeErr);
                         }
                     })();
                 }
@@ -1808,16 +1617,11 @@ export function WakuProvider({
                 const cacheKey = contentTopic;
                 const existingCache = messagesCache.current.get(cacheKey) || [];
                 const existingIds = new Set(existingCache.map((m: any) => m.id));
-                const newMessages = olderMessages.filter(
-                    (m) => !existingIds.has(m.id)
-                );
+                const newMessages = olderMessages.filter((m) => !existingIds.has(m.id));
 
                 if (newMessages.length > 0) {
                     const merged = [...newMessages, ...existingCache];
-                    merged.sort(
-                        (a: any, b: any) =>
-                            Number(a.sentAtNs) - Number(b.sentAtNs)
-                    );
+                    merged.sort((a: any, b: any) => Number(a.sentAtNs) - Number(b.sentAtNs));
                     messagesCache.current.set(cacheKey, merged);
                     persistMessages(cacheKey, merged);
                 }
@@ -1852,11 +1656,7 @@ export function WakuProvider({
                     0 // No limit - fetch all
                 );
 
-                console.log(
-                    "[Waku] Search: fetched",
-                    allMessages.length,
-                    "total messages"
-                );
+                console.log("[Waku] Search: fetched", allMessages.length, "total messages");
 
                 return allMessages;
             } catch (err) {
@@ -1873,10 +1673,7 @@ export function WakuProvider({
             if (!userAddress || !peerAddress) return;
 
             // Don't prefetch if chat is already open for this peer
-            if (
-                activeChatPeerRef.current?.toLowerCase() ===
-                peerAddress.toLowerCase()
-            ) {
+            if (activeChatPeerRef.current?.toLowerCase() === peerAddress.toLowerCase()) {
                 return;
             }
 
@@ -1894,31 +1691,19 @@ export function WakuProvider({
     // Stream messages from a DM conversation
     const streamMessages = useCallback(
         async (peerAddress: string, onMessage: (message: unknown) => void) => {
-            if (
-                !nodeRef.current ||
-                !wakuSdk ||
-                !wakuEncryption ||
-                !userAddress
-            ) {
+            if (!nodeRef.current || !wakuSdk || !wakuEncryption || !userAddress) {
                 return null;
             }
 
             try {
-                const contentTopic = getDmContentTopic(
-                    userAddress,
-                    peerAddress
-                );
-                console.log(
-                    "[Waku] Starting message stream for topic:",
-                    contentTopic
-                );
+                const contentTopic = getDmContentTopic(userAddress, peerAddress);
+                console.log("[Waku] Starting message stream for topic:", contentTopic);
 
                 // Get symmetric keys and create routing info
                 const dmKeys = await getDmSymmetricKey(peerAddress);
-                const routingInfo =
-                    wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
-                        clusterId: 1,
-                    });
+                const routingInfo = wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
+                    clusterId: 1,
+                });
 
                 // For live messages, we need to listen on BOTH keys
                 // New messages will be encrypted with ECDH (if both users upgraded)
@@ -1933,33 +1718,23 @@ export function WakuProvider({
                 // we might miss messages from users who haven't upgraded yet
                 // TODO: Consider dual decoders for transition period
                 log.debug(
-                    `[Waku] Listening with ${
-                        dmKeys.isSecure ? "ECDH (secure)" : "legacy"
-                    } key`
+                    `[Waku] Listening with ${dmKeys.isSecure ? "ECDH (secure)" : "legacy"} key`
                 );
 
                 const callback = (wakuMessage: { payload?: Uint8Array }) => {
-                    console.log(
-                        "[Waku] Received message via filter!",
-                        wakuMessage
-                    );
+                    console.log("[Waku] Received message via filter!", wakuMessage);
                     if (!wakuMessage.payload) {
                         log.debug("[Waku] Message has no payload");
                         return;
                     }
                     try {
-                        const decoded = MessageProto.decode(
-                            wakuMessage.payload
-                        );
+                        const decoded = MessageProto.decode(wakuMessage.payload);
                         const msg = MessageProto.toObject(decoded);
                         log.debug("[Waku] Decoded message:", msg);
 
                         // Deduplicate
                         if (processedMessageIds.current.has(msg.messageId)) {
-                            console.log(
-                                "[Waku] Duplicate message, skipping:",
-                                msg.messageId
-                            );
+                            console.log("[Waku] Duplicate message, skipping:", msg.messageId);
                             return;
                         }
                         processedMessageIds.current.add(msg.messageId);
@@ -1972,18 +1747,12 @@ export function WakuProvider({
                             conversationId: contentTopic,
                         };
 
-                        console.log(
-                            "[Waku] Calling onMessage with:",
-                            formattedMsg
-                        );
+                        console.log("[Waku] Calling onMessage with:", formattedMsg);
                         onMessage(formattedMsg);
 
                         // Trigger global new message callbacks for notifications
                         // Only if message is from someone else (not self)
-                        if (
-                            msg.sender.toLowerCase() !==
-                            userAddress?.toLowerCase()
-                        ) {
+                        if (msg.sender.toLowerCase() !== userAddress?.toLowerCase()) {
                             // Only increment unread count if this chat is NOT currently open
                             const senderLower = msg.sender.toLowerCase();
                             if (activeChatPeerRef.current !== senderLower) {
@@ -1993,51 +1762,33 @@ export function WakuProvider({
                                 }));
                             }
 
-                            newMessageCallbacksRef.current.forEach(
-                                (callback) => {
-                                    try {
-                                        callback({
-                                            senderAddress: msg.sender,
-                                            content: msg.content,
-                                            conversationId: contentTopic,
-                                        });
-                                    } catch (cbErr) {
-                                        console.error(
-                                            "[Waku] Callback error:",
-                                            cbErr
-                                        );
-                                    }
+                            newMessageCallbacksRef.current.forEach((callback) => {
+                                try {
+                                    callback({
+                                        senderAddress: msg.sender,
+                                        content: msg.content,
+                                        conversationId: contentTopic,
+                                    });
+                                } catch (cbErr) {
+                                    console.error("[Waku] Callback error:", cbErr);
                                 }
-                            );
+                            });
                         }
 
                         // Update cache and persist
-                        const cached =
-                            messagesCache.current.get(contentTopic) || [];
+                        const cached = messagesCache.current.get(contentTopic) || [];
                         const updatedCache = [...cached, formattedMsg];
                         messagesCache.current.set(contentTopic, updatedCache);
                         persistMessages(contentTopic, updatedCache);
                     } catch (decodeErr) {
-                        console.log(
-                            "[Waku] Failed to decode streamed message:",
-                            decodeErr
-                        );
+                        console.log("[Waku] Failed to decode streamed message:", decodeErr);
                     }
                 };
 
                 // Subscribe directly using the new API
-                console.log(
-                    "[Waku] Setting up filter subscription for:",
-                    contentTopic
-                );
-                const subscribeResult = await nodeRef.current.filter.subscribe(
-                    decoder,
-                    callback
-                );
-                console.log(
-                    "[Waku] Filter subscription result:",
-                    subscribeResult
-                );
+                console.log("[Waku] Setting up filter subscription for:", contentTopic);
+                const subscribeResult = await nodeRef.current.filter.subscribe(decoder, callback);
+                console.log("[Waku] Filter subscription result:", subscribeResult);
                 subscriptionsRef.current.set(contentTopic, decoder);
 
                 // Return the decoder for cleanup
@@ -2050,48 +1801,62 @@ export function WakuProvider({
         [userAddress, getDmSymmetricKey]
     );
 
+    const unsubscribeStream = useCallback(async (decoder: unknown) => {
+        if (!decoder || !nodeRef.current) return;
+        try {
+            await nodeRef.current.filter.unsubscribe(
+                decoder as Parameters<typeof nodeRef.current.filter.unsubscribe>[0]
+            );
+        } catch (err) {
+            log.debug("[Waku] Error unsubscribing DM stream:", err);
+        }
+    }, []);
+
     // Mark messages as read - clears in-memory count AND persists read timestamp
     // to localStorage (immediate) and Supabase (async) so unreads don't reappear on reload
-    const markAsRead = useCallback((peerAddress: string) => {
-        const normalizedAddress = peerAddress.toLowerCase();
-        setUnreadCounts((prev) => {
-            const newCounts = { ...prev };
-            delete newCounts[normalizedAddress];
-            return newCounts;
-        });
+    const markAsRead = useCallback(
+        (peerAddress: string) => {
+            const normalizedAddress = peerAddress.toLowerCase();
+            setUnreadCounts((prev) => {
+                const newCounts = { ...prev };
+                delete newCounts[normalizedAddress];
+                return newCounts;
+            });
 
-        // Persist last-read timestamp to localStorage for instant reload recovery
-        if (userAddress && typeof window !== "undefined") {
-            const userAddrLower = userAddress.toLowerCase();
-            try {
-                const storageKey = `spritz_last_read_${userAddrLower}`;
-                const existing = JSON.parse(localStorage.getItem(storageKey) || "{}");
-                existing[normalizedAddress] = new Date().toISOString();
-                localStorage.setItem(storageKey, JSON.stringify(existing));
-            } catch {
-                // Ignore localStorage errors
-            }
+            // Persist last-read timestamp to localStorage for instant reload recovery
+            if (userAddress && typeof window !== "undefined") {
+                const userAddrLower = userAddress.toLowerCase();
+                try {
+                    const storageKey = `spritz_last_read_${userAddrLower}`;
+                    const existing = JSON.parse(localStorage.getItem(storageKey) || "{}");
+                    existing[normalizedAddress] = new Date().toISOString();
+                    localStorage.setItem(storageKey, JSON.stringify(existing));
+                } catch {
+                    // Ignore localStorage errors
+                }
 
-            // Also persist to Supabase (async, fire-and-forget) for cross-device sync
-            if (supabase) {
-                supabase
-                    .from("shout_read_receipts_dm")
-                    .upsert(
-                        {
-                            reader_address: userAddrLower,
-                            peer_address: normalizedAddress,
-                            last_read_at: new Date().toISOString(),
-                        },
-                        { onConflict: "reader_address,peer_address" }
-                    )
-                    .then(({ error }) => {
-                        if (error) {
-                            log.debug("[Waku] Failed to persist DM read state:", error.message);
-                        }
-                    });
+                // Also persist to Supabase (async, fire-and-forget) for cross-device sync
+                if (supabase) {
+                    supabase
+                        .from("shout_read_receipts_dm")
+                        .upsert(
+                            {
+                                reader_address: userAddrLower,
+                                peer_address: normalizedAddress,
+                                last_read_at: new Date().toISOString(),
+                            },
+                            { onConflict: "reader_address,peer_address" }
+                        )
+                        .then(({ error }) => {
+                            if (error) {
+                                log.debug("[Waku] Failed to persist DM read state:", error.message);
+                            }
+                        });
+                }
             }
-        }
-    }, [userAddress]);
+        },
+        [userAddress]
+    );
 
     // Set the active chat peer (to prevent incrementing unread for open chats)
     const setActiveChatPeer = useCallback(
@@ -2140,10 +1905,7 @@ export function WakuProvider({
             const client = supabase;
             const userAddrLower = userAddress.toLowerCase();
 
-            log.debug(
-                "[Waku] Loading initial unread counts for:",
-                userAddrLower
-            );
+            log.debug("[Waku] Loading initial unread counts for:", userAddrLower);
 
             try {
                 // Step 1: Load last-read timestamps from localStorage (instant)
@@ -2164,10 +1926,7 @@ export function WakuProvider({
                     .order("created_at", { ascending: false });
 
                 if (msgError) {
-                    log.error(
-                        "[Waku] Error loading unread messages:",
-                        msgError
-                    );
+                    log.error("[Waku] Error loading unread messages:", msgError);
                     return;
                 }
 
@@ -2183,16 +1942,11 @@ export function WakuProvider({
                     .eq("reader_address", userAddrLower);
 
                 if (receiptError) {
-                    log.error(
-                        "[Waku] Error loading read receipts:",
-                        receiptError
-                    );
+                    log.error("[Waku] Error loading read receipts:", receiptError);
                 }
 
                 const readMessageIds = new Set(
-                    (readReceipts || []).map(
-                        (r: { message_id: string }) => r.message_id
-                    )
+                    (readReceipts || []).map((r: { message_id: string }) => r.message_id)
                 );
 
                 // Step 4: Count unread - a message is unread if:
@@ -2239,10 +1993,7 @@ export function WakuProvider({
     useEffect(() => {
         if (!isInitialized || !userAddress || !supabase) return;
 
-        log.debug(
-            "[Waku] Setting up global message listener for:",
-            userAddress.toLowerCase()
-        );
+        log.debug("[Waku] Setting up global message listener for:", userAddress.toLowerCase());
 
         const client = supabase; // Capture for closure
         const channel = client
@@ -2260,26 +2011,17 @@ export function WakuProvider({
 
                     // Skip if we've already processed this message
                     if (processedMessageIds.current.has(msg.message_id)) {
-                        log.debug(
-                            "[Waku] Skipping already processed message:",
-                            msg.message_id
-                        );
+                        log.debug("[Waku] Skipping already processed message:", msg.message_id);
                         return;
                     }
                     processedMessageIds.current.add(msg.message_id);
 
                     // Skip our own messages
-                    if (
-                        msg.sender_address.toLowerCase() ===
-                        userAddress.toLowerCase()
-                    ) {
+                    if (msg.sender_address.toLowerCase() === userAddress.toLowerCase()) {
                         return;
                     }
 
-                    log.debug(
-                        "[Waku] Global listener received message from:",
-                        msg.sender_address
-                    );
+                    log.debug("[Waku] Global listener received message from:", msg.sender_address);
 
                     const senderLower = msg.sender_address.toLowerCase();
 
@@ -2287,46 +2029,34 @@ export function WakuProvider({
                     // deliver INSERT in the same tick the user opens the DM; without this
                     // we sometimes increment unread while the chat is already open.
                     queueMicrotask(() => {
-                        const isChatOpen =
-                            activeChatPeerRef.current === senderLower;
-                        const isRecentlyRead =
-                            recentlyReadPeersRef.current.has(senderLower);
+                        const isChatOpen = activeChatPeerRef.current === senderLower;
+                        const isRecentlyRead = recentlyReadPeersRef.current.has(senderLower);
 
                         if (!isChatOpen && !isRecentlyRead) {
-                            log.debug(
-                                "[Waku] Incrementing unread for:",
-                                senderLower
-                            );
+                            log.debug("[Waku] Incrementing unread for:", senderLower);
                             setUnreadCounts((prev) => ({
                                 ...prev,
                                 [senderLower]: (prev[senderLower] || 0) + 1,
                             }));
 
-                            const isPlaintext = [
-                                "welcome",
-                                "system",
-                                "broadcast",
-                            ].includes(msg.message_type);
+                            const isPlaintext = ["welcome", "system", "broadcast"].includes(
+                                msg.message_type
+                            );
                             const callbackContent = isPlaintext
                                 ? msg.encrypted_content
                                 : "New message received";
 
-                            newMessageCallbacksRef.current.forEach(
-                                (callback) => {
-                                    try {
-                                        callback({
-                                            senderAddress: msg.sender_address,
-                                            content: callbackContent,
-                                            conversationId: msg.conversation_id,
-                                        });
-                                    } catch (err) {
-                                        log.error(
-                                            "[Waku] Notification callback error:",
-                                            err
-                                        );
-                                    }
-                                },
-                            );
+                            newMessageCallbacksRef.current.forEach((callback) => {
+                                try {
+                                    callback({
+                                        senderAddress: msg.sender_address,
+                                        content: callbackContent,
+                                        conversationId: msg.conversation_id,
+                                    });
+                                } catch (err) {
+                                    log.error("[Waku] Notification callback error:", err);
+                                }
+                            });
                         } else {
                             log.debug(
                                 "[Waku] Chat is open or recently read, skipping unread increment for:",
@@ -2416,14 +2146,8 @@ export function WakuProvider({
                 if (password && password.trim().length >= 8) {
                     passwordProtected = true;
                     passwordSalt = generatePasswordSalt();
-                    symmetricKeyHex = await deriveKeyFromPassword(
-                        password.trim(),
-                        passwordSalt
-                    );
-                    passwordHash = await hashPasswordForVerification(
-                        password.trim(),
-                        passwordSalt
-                    );
+                    symmetricKeyHex = await deriveKeyFromPassword(password.trim(), passwordSalt);
+                    passwordHash = await hashPasswordForVerification(password.trim(), passwordSalt);
                 } else {
                     const symmetricKey = wakuEncryption.generateSymmetricKey();
                     symmetricKeyHex = wakuUtils.bytesToHex(symmetricKey);
@@ -2453,9 +2177,7 @@ export function WakuProvider({
                             id: groupId,
                             name: groupName,
                             created_by: userAddress.toLowerCase(),
-                            symmetric_key: passwordProtected
-                                ? null
-                                : symmetricKeyHex,
+                            symmetric_key: passwordProtected ? null : symmetricKeyHex,
                             password_protected: passwordProtected,
                             password_salt: passwordSalt ?? null,
                             password_hash: passwordHash ?? null,
@@ -2472,19 +2194,15 @@ export function WakuProvider({
                                 "[Waku] Insert with emoji failed, trying without:",
                                 groupError.message || groupError
                             );
-                            const { error: err2 } = await supabase
-                                .from("shout_groups")
-                                .insert({
-                                    id: groupId,
-                                    name: groupName,
-                                    created_by: userAddress.toLowerCase(),
-                                    symmetric_key: passwordProtected
-                                        ? null
-                                        : symmetricKeyHex,
-                                    password_protected: passwordProtected,
-                                    password_salt: passwordSalt ?? null,
-                                    password_hash: passwordHash ?? null,
-                                });
+                            const { error: err2 } = await supabase.from("shout_groups").insert({
+                                id: groupId,
+                                name: groupName,
+                                created_by: userAddress.toLowerCase(),
+                                symmetric_key: passwordProtected ? null : symmetricKeyHex,
+                                password_protected: passwordProtected,
+                                password_salt: passwordSalt ?? null,
+                                password_hash: passwordHash ?? null,
+                            });
                             groupError = err2;
                         }
                         if (groupError) {
@@ -2496,10 +2214,7 @@ export function WakuProvider({
                             const memberInserts = allMembers.map((addr) => ({
                                 group_id: groupId,
                                 member_address: addr,
-                                role:
-                                    addr === userAddress.toLowerCase()
-                                        ? "admin"
-                                        : "member",
+                                role: addr === userAddress.toLowerCase() ? "admin" : "member",
                             }));
                             const { error: membersError } = await supabase
                                 .from("shout_group_members")
@@ -2510,9 +2225,7 @@ export function WakuProvider({
                                     membersError
                                 );
                             } else {
-                                log.debug(
-                                    "[Waku] Group saved to Supabase successfully"
-                                );
+                                log.debug("[Waku] Group saved to Supabase successfully");
                             }
                         }
                     } catch (dbErr) {
@@ -2534,10 +2247,7 @@ export function WakuProvider({
                 log.error("[Waku] Failed to create group:", err);
                 return {
                     success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to create group",
+                    error: err instanceof Error ? err.message : "Failed to create group",
                 };
             }
         },
@@ -2571,39 +2281,29 @@ export function WakuProvider({
                     .eq("member_address", userAddrLower);
 
                 if (memberError) {
-                    log.error(
-                        "[Waku] Error fetching group memberships:",
-                        memberError
-                    );
+                    log.error("[Waku] Error fetching group memberships:", memberError);
                 } else if (memberRows && memberRows.length > 0) {
-                    const groupIds = memberRows.map(
-                        (r: { group_id: string }) => r.group_id
-                    );
+                    const groupIds = memberRows.map((r: { group_id: string }) => r.group_id);
 
                     // Fetch full group details
-                    const { data: dbGroups, error: groupsError } =
-                        await supabase
-                            .from("shout_groups")
-                            .select(
-                                "id, name, emoji, symmetric_key, created_at, password_protected, password_salt, password_hash"
-                            )
-                            .in("id", groupIds);
+                    const { data: dbGroups, error: groupsError } = await supabase
+                        .from("shout_groups")
+                        .select(
+                            "id, name, emoji, symmetric_key, created_at, password_protected, password_salt, password_hash"
+                        )
+                        .in("id", groupIds);
 
                     if (groupsError) {
                         log.error("[Waku] Error fetching groups:", groupsError);
                     } else if (dbGroups) {
                         // Fetch all members for these groups
-                        const { data: allMembers, error: allMembersError } =
-                            await supabase
-                                .from("shout_group_members")
-                                .select("group_id, member_address")
-                                .in("group_id", groupIds);
+                        const { data: allMembers, error: allMembersError } = await supabase
+                            .from("shout_group_members")
+                            .select("group_id, member_address")
+                            .in("group_id", groupIds);
 
                         if (allMembersError) {
-                            log.error(
-                                "[Waku] Error fetching group members:",
-                                allMembersError
-                            );
+                            log.error("[Waku] Error fetching group members:", allMembersError);
                         }
 
                         // Build member lists per group
@@ -2624,11 +2324,8 @@ export function WakuProvider({
                                     name: dbGroup.name,
                                     emoji: dbGroup.emoji || undefined,
                                     members: membersByGroup[dbGroup.id] || [],
-                                    createdAt: new Date(
-                                        dbGroup.created_at
-                                    ).getTime(),
-                                    symmetricKey:
-                                        dbGroup.symmetric_key ?? undefined,
+                                    createdAt: new Date(dbGroup.created_at).getTime(),
+                                    symmetricKey: dbGroup.symmetric_key ?? undefined,
                                     passwordProtected:
                                         (
                                             dbGroup as {
@@ -2679,13 +2376,9 @@ export function WakuProvider({
 
                         // Update localStorage if there were any changes
                         if (hasUpdates) {
-                            const updatedGroups = Array.from(
-                                groupsMap.values()
-                            );
+                            const updatedGroups = Array.from(groupsMap.values());
                             saveGroups(updatedGroups);
-                            log.debug(
-                                "[Waku] Saved groups to localStorage with emoji updates"
-                            );
+                            log.debug("[Waku] Saved groups to localStorage with emoji updates");
                         }
                     }
                 }
@@ -2701,12 +2394,7 @@ export function WakuProvider({
             .filter((g) => {
                 const isUserMember = g.members.includes(userAddrLower);
                 if (!isUserMember) {
-                    log.debug(
-                        "[Waku] User not in group:",
-                        g.name,
-                        "members:",
-                        g.members
-                    );
+                    log.debug("[Waku] User not in group:", g.name, "members:", g.members);
                 }
                 return isUserMember;
             })
@@ -2772,9 +2460,7 @@ export function WakuProvider({
 
                 // Start with Supabase messages
                 const allMessages: unknown[] = [...supabaseMessages];
-                const allMessageIds = new Set(
-                    supabaseMessages.map((m) => m.id)
-                );
+                const allMessageIds = new Set(supabaseMessages.map((m) => m.id));
 
                 // Mark all Supabase messages as processed
                 supabaseMessages.forEach((m) => {
@@ -2784,13 +2470,9 @@ export function WakuProvider({
                 // Also try Waku Store as secondary source
                 if (nodeRef.current && wakuSdk && wakuEncryption) {
                     try {
-                        const routingInfo =
-                            wakuSdk.utils.StaticShardingRoutingInfo.fromShard(
-                                0,
-                                {
-                                    clusterId: 1,
-                                }
-                            );
+                        const routingInfo = wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
+                            clusterId: 1,
+                        });
                         const decoder = wakuEncryption.createDecoder(
                             contentTopic,
                             routingInfo,
@@ -2802,28 +2484,20 @@ export function WakuProvider({
                             (wakuMessage: { payload?: Uint8Array }) => {
                                 if (!wakuMessage.payload) return;
                                 try {
-                                    const decoded = MessageProto.decode(
-                                        wakuMessage.payload
-                                    );
+                                    const decoded = MessageProto.decode(wakuMessage.payload);
                                     const msg = MessageProto.toObject(decoded);
 
                                     if (
                                         !allMessageIds.has(msg.messageId) &&
-                                        !processedMessageIds.current.has(
-                                            msg.messageId
-                                        )
+                                        !processedMessageIds.current.has(msg.messageId)
                                     ) {
-                                        processedMessageIds.current.add(
-                                            msg.messageId
-                                        );
+                                        processedMessageIds.current.add(msg.messageId);
                                         allMessageIds.add(msg.messageId);
                                         allMessages.push({
                                             id: msg.messageId,
                                             content: msg.content,
                                             senderInboxId: msg.sender,
-                                            sentAtNs:
-                                                BigInt(msg.timestamp) *
-                                                BigInt(1000000),
+                                            sentAtNs: BigInt(msg.timestamp) * BigInt(1000000),
                                         });
                                     }
                                 } catch (decodeErr) {
@@ -2835,10 +2509,7 @@ export function WakuProvider({
                             }
                         );
                     } catch (storeErr) {
-                        console.log(
-                            "[Waku] Group store query failed:",
-                            storeErr
-                        );
+                        console.log("[Waku] Group store query failed:", storeErr);
                     }
                 }
 
@@ -2858,9 +2529,7 @@ export function WakuProvider({
 
                 const mergedMessages = Array.from(messageMap.values());
 
-                mergedMessages.sort(
-                    (a: any, b: any) => Number(a.sentAtNs) - Number(b.sentAtNs)
-                );
+                mergedMessages.sort((a: any, b: any) => Number(a.sentAtNs) - Number(b.sentAtNs));
 
                 messagesCache.current.set(cacheKey, mergedMessages);
                 persistMessages(cacheKey, mergedMessages);
@@ -2904,10 +2573,9 @@ export function WakuProvider({
                 }
 
                 const symmetricKey = wakuUtils.hexToBytes(group.symmetricKey);
-                const routingInfo =
-                    wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
-                        clusterId: 1,
-                    });
+                const routingInfo = wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
+                    clusterId: 1,
+                });
                 // Create encoder with symmetric encryption
                 const encoder = wakuEncryption.createEncoder({
                     contentTopic,
@@ -2922,9 +2590,7 @@ export function WakuProvider({
                     sender: userAddress.toLowerCase(),
                     content,
                     messageId,
-                    messageType: content.startsWith("[PIXEL_ART]")
-                        ? "pixel_art"
-                        : "text",
+                    messageType: content.startsWith("[PIXEL_ART]") ? "pixel_art" : "text",
                 });
 
                 const payload = MessageProto.encode(messageObj).finish();
@@ -2964,14 +2630,11 @@ export function WakuProvider({
                     const notificationBody = content.startsWith("[PIXEL_ART]")
                         ? "Sent a pixel art"
                         : content.length > 100
-                        ? content.slice(0, 100) + "..."
-                        : content;
+                          ? content.slice(0, 100) + "..."
+                          : content;
 
                     group.members.forEach((memberAddress) => {
-                        if (
-                            memberAddress.toLowerCase() !==
-                            userAddress.toLowerCase()
-                        ) {
+                        if (memberAddress.toLowerCase() !== userAddress.toLowerCase()) {
                             fetch("/api/push/send", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
@@ -2994,8 +2657,7 @@ export function WakuProvider({
                 log.error("[Waku] Failed to send group message:", err);
                 return {
                     success: false,
-                    error:
-                        err instanceof Error ? err.message : "Failed to send",
+                    error: err instanceof Error ? err.message : "Failed to send",
                 };
             }
         },
@@ -3017,10 +2679,9 @@ export function WakuProvider({
                 if (!group) return null;
 
                 const symmetricKey = wakuUtils.hexToBytes(group.symmetricKey);
-                const routingInfo =
-                    wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
-                        clusterId: 1,
-                    });
+                const routingInfo = wakuSdk.utils.StaticShardingRoutingInfo.fromShard(0, {
+                    clusterId: 1,
+                });
                 const decoder = wakuEncryption.createDecoder(
                     contentTopic,
                     routingInfo,
@@ -3030,13 +2691,10 @@ export function WakuProvider({
                 const callback = (wakuMessage: { payload?: Uint8Array }) => {
                     if (!wakuMessage.payload) return;
                     try {
-                        const decoded = MessageProto.decode(
-                            wakuMessage.payload
-                        );
+                        const decoded = MessageProto.decode(wakuMessage.payload);
                         const msg = MessageProto.toObject(decoded);
 
-                        if (processedMessageIds.current.has(msg.messageId))
-                            return;
+                        if (processedMessageIds.current.has(msg.messageId)) return;
                         processedMessageIds.current.add(msg.messageId);
 
                         const formattedMsg = {
@@ -3051,45 +2709,33 @@ export function WakuProvider({
 
                         // Trigger global new message callbacks for notifications
                         // Only if message is from someone else (not self)
-                        if (
-                            msg.sender.toLowerCase() !==
-                            userAddress?.toLowerCase()
-                        ) {
+                        if (msg.sender.toLowerCase() !== userAddress?.toLowerCase()) {
                             // Increment unread count for this group
                             setUnreadCounts((prev) => ({
                                 ...prev,
                                 [groupId]: (prev[groupId] || 0) + 1,
                             }));
 
-                            newMessageCallbacksRef.current.forEach(
-                                (callback) => {
-                                    try {
-                                        callback({
-                                            senderAddress: msg.sender,
-                                            content: msg.content,
-                                            conversationId: groupId,
-                                        });
-                                    } catch (cbErr) {
-                                        console.error(
-                                            "[Waku] Group callback error:",
-                                            cbErr
-                                        );
-                                    }
+                            newMessageCallbacksRef.current.forEach((callback) => {
+                                try {
+                                    callback({
+                                        senderAddress: msg.sender,
+                                        content: msg.content,
+                                        conversationId: groupId,
+                                    });
+                                } catch (cbErr) {
+                                    console.error("[Waku] Group callback error:", cbErr);
                                 }
-                            );
+                            });
                         }
 
                         // Update cache and persist
-                        const cached =
-                            messagesCache.current.get(contentTopic) || [];
+                        const cached = messagesCache.current.get(contentTopic) || [];
                         const updatedCache = [...cached, formattedMsg];
                         messagesCache.current.set(contentTopic, updatedCache);
                         persistMessages(contentTopic, updatedCache);
                     } catch (decodeErr) {
-                        console.log(
-                            "[Waku] Failed to decode group streamed message:",
-                            decodeErr
-                        );
+                        console.log("[Waku] Failed to decode group streamed message:", decodeErr);
                     }
                 };
 
@@ -3108,9 +2754,7 @@ export function WakuProvider({
 
     // Get group members
     const getGroupMembers = useCallback(
-        async (
-            groupId: string
-        ): Promise<{ inboxId: string; addresses: string[] }[]> => {
+        async (groupId: string): Promise<{ inboxId: string; addresses: string[] }[]> => {
             const groups = getStoredGroups();
             const group = groups.find((g) => g.id === groupId);
             if (!group) return [];
@@ -3157,10 +2801,7 @@ export function WakuProvider({
                         .insert(memberInserts);
 
                     if (error) {
-                        log.error(
-                            "[Waku] Error adding members to Supabase:",
-                            error
-                        );
+                        log.error("[Waku] Error adding members to Supabase:", error);
                     }
                 }
 
@@ -3168,10 +2809,7 @@ export function WakuProvider({
             } catch (err) {
                 return {
                     success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to add members",
+                    error: err instanceof Error ? err.message : "Failed to add members",
                 };
             }
         },
@@ -3206,10 +2844,7 @@ export function WakuProvider({
                         .eq("member_address", memberAddress.toLowerCase());
 
                     if (error) {
-                        log.error(
-                            "[Waku] Error removing member from Supabase:",
-                            error
-                        );
+                        log.error("[Waku] Error removing member from Supabase:", error);
                     }
                 }
 
@@ -3217,10 +2852,7 @@ export function WakuProvider({
             } catch (err) {
                 return {
                     success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to remove member",
+                    error: err instanceof Error ? err.message : "Failed to remove member",
                 };
             }
         },
@@ -3229,17 +2861,12 @@ export function WakuProvider({
 
     // Leave a group
     const leaveGroup = useCallback(
-        async (
-            groupId: string
-        ): Promise<{ success: boolean; error?: string }> => {
+        async (groupId: string): Promise<{ success: boolean; error?: string }> => {
             try {
                 // Hide the group locally
                 const hidden = getHiddenGroups();
                 hidden.add(groupId);
-                localStorage.setItem(
-                    HIDDEN_GROUPS_KEY,
-                    JSON.stringify([...hidden])
-                );
+                localStorage.setItem(HIDDEN_GROUPS_KEY, JSON.stringify([...hidden]));
 
                 // Unsubscribe from the group topic
                 const contentTopic = getGroupContentTopic(groupId);
@@ -3248,10 +2875,7 @@ export function WakuProvider({
                     try {
                         await nodeRef.current.filter.unsubscribe(decoder);
                     } catch (unsubErr) {
-                        console.warn(
-                            "[Waku] Error unsubscribing from group:",
-                            unsubErr
-                        );
+                        console.warn("[Waku] Error unsubscribing from group:", unsubErr);
                     }
                     subscriptionsRef.current.delete(contentTopic);
                 }
@@ -3265,10 +2889,7 @@ export function WakuProvider({
                         .eq("member_address", userAddress.toLowerCase());
 
                     if (error) {
-                        log.error(
-                            "[Waku] Error leaving group in Supabase:",
-                            error
-                        );
+                        log.error("[Waku] Error leaving group in Supabase:", error);
                     }
                 }
 
@@ -3276,10 +2897,7 @@ export function WakuProvider({
             } catch (err) {
                 return {
                     success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to leave group",
+                    error: err instanceof Error ? err.message : "Failed to leave group",
                 };
             }
         },
@@ -3301,10 +2919,7 @@ export function WakuProvider({
                 const hidden = getHiddenGroups();
                 if (hidden.has(groupId)) {
                     hidden.delete(groupId);
-                    localStorage.setItem(
-                        HIDDEN_GROUPS_KEY,
-                        JSON.stringify([...hidden])
-                    );
+                    localStorage.setItem(HIDDEN_GROUPS_KEY, JSON.stringify([...hidden]));
                 }
 
                 // If group data is provided and group doesn't exist, add it
@@ -3335,9 +2950,7 @@ export function WakuProvider({
                             id: groupId,
                             name: groupData.name,
                             emoji: emoji,
-                            members: groupData.members.map((m) =>
-                                m.toLowerCase()
-                            ),
+                            members: groupData.members.map((m) => m.toLowerCase()),
                             createdAt: Date.now(),
                             symmetricKey: groupData.symmetricKey,
                         };
@@ -3356,10 +2969,7 @@ export function WakuProvider({
             } catch (err) {
                 return {
                     success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to join group",
+                    error: err instanceof Error ? err.message : "Failed to join group",
                 };
             }
         },
@@ -3383,19 +2993,13 @@ export function WakuProvider({
                 if (!valid) {
                     return { success: false, error: "Incorrect password" };
                 }
-                const symmetricKeyHex = await deriveKeyFromPassword(
-                    password.trim(),
-                    passwordSalt
-                );
+                const symmetricKeyHex = await deriveKeyFromPassword(password.trim(), passwordSalt);
                 const groups = getStoredGroups();
                 const existingIndex = groups.findIndex((g) => g.id === groupId);
                 if (existingIndex >= 0) {
                     groups[existingIndex].symmetricKey = symmetricKeyHex;
                     saveGroups(groups);
-                    log.debug(
-                        "[Waku] Unlocked group (updated localStorage):",
-                        groupId
-                    );
+                    log.debug("[Waku] Unlocked group (updated localStorage):", groupId);
                     return { success: true };
                 }
                 // Group not in localStorage (e.g. from Supabase only): fetch name/members and add
@@ -3436,19 +3040,13 @@ export function WakuProvider({
                 };
                 groups.push(newGroup);
                 saveGroups(groups);
-                log.debug(
-                    "[Waku] Unlocked group (added to localStorage):",
-                    groupId
-                );
+                log.debug("[Waku] Unlocked group (added to localStorage):", groupId);
                 return { success: true };
             } catch (err) {
                 log.error("[Waku] unlockGroupWithPassword failed:", err);
                 return {
                     success: false,
-                    error:
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to unlock group",
+                    error: err instanceof Error ? err.message : "Failed to unlock group",
                 };
             }
         },
@@ -3494,8 +3092,7 @@ export function WakuProvider({
 
     // PWA keep-alive: when app returns to foreground, re-init Waku if needed (OS may kill connections when backgrounded)
     useEffect(() => {
-        if (typeof document === "undefined" || !userAddress || !sdkLoaded)
-            return;
+        if (typeof document === "undefined" || !userAddress || !sdkLoaded) return;
 
         let hiddenAt: number | null = null;
         const BACKGROUND_REINIT_MS = 2 * 60 * 1000; // Re-init if app was hidden > 2 min
@@ -3508,15 +3105,11 @@ export function WakuProvider({
             // App became visible
             if (document.visibilityState !== "visible") return;
 
-            const wasHiddenLong =
-                hiddenAt != null &&
-                Date.now() - hiddenAt > BACKGROUND_REINIT_MS;
+            const wasHiddenLong = hiddenAt != null && Date.now() - hiddenAt > BACKGROUND_REINIT_MS;
             hiddenAt = null;
 
             if (!isInitialized && !isInitializing) {
-                log.debug(
-                    "[Waku] PWA foreground: not initialized, attempting init..."
-                );
+                log.debug("[Waku] PWA foreground: not initialized, attempting init...");
                 await initialize();
                 return;
             }
@@ -3531,19 +3124,8 @@ export function WakuProvider({
         };
 
         document.addEventListener("visibilitychange", handleVisibilityChange);
-        return () =>
-            document.removeEventListener(
-                "visibilitychange",
-                handleVisibilityChange
-            );
-    }, [
-        userAddress,
-        sdkLoaded,
-        isInitialized,
-        isInitializing,
-        initialize,
-        close,
-    ]);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [userAddress, sdkLoaded, isInitialized, isInitializing, initialize, close]);
 
     // PERF: inline object literals re-ran every consumer on every provider
     // render (there are many consumers: chat list, modal, presence, etc.).
@@ -3563,6 +3145,7 @@ export function WakuProvider({
             fetchOlderMessages,
             searchAllMessages,
             streamMessages,
+            unsubscribeStream,
             canMessage,
             canMessageBatch,
             getConversationSecurityStatus,
@@ -3599,6 +3182,7 @@ export function WakuProvider({
             fetchOlderMessages,
             searchAllMessages,
             streamMessages,
+            unsubscribeStream,
             canMessage,
             canMessageBatch,
             getConversationSecurityStatus,
@@ -3623,11 +3207,7 @@ export function WakuProvider({
         ]
     );
 
-    return (
-        <WakuContext.Provider value={value}>
-            {children}
-        </WakuContext.Provider>
-    );
+    return <WakuContext.Provider value={value}>{children}</WakuContext.Provider>;
 }
 
 export function useWakuContext() {

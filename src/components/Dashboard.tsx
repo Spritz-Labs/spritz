@@ -1640,6 +1640,7 @@ function DashboardContent({
         message: string;
         sender: string;
     } | null>(null);
+    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Track which friends can receive Waku messages
     const [friendsWakuStatus, setFriendsWakuStatus] = useState<Record<string, boolean>>({});
@@ -2540,8 +2541,8 @@ function DashboardContent({
                 message: content.length > 50 ? content.slice(0, 50) + "..." : content,
             });
 
-            // Auto-hide after 4 seconds
-            setTimeout(() => setToast(null), 4000);
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = setTimeout(() => setToast(null), 4000);
         });
 
         return unsubscribe;
@@ -2592,8 +2593,8 @@ function DashboardContent({
                     message: content.length > 50 ? content.slice(0, 50) + "..." : content,
                 });
 
-                // Auto-hide after 4 seconds
-                setTimeout(() => setToast(null), 4000);
+                if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = setTimeout(() => setToast(null), 4000);
             }
         );
 
@@ -5636,43 +5637,45 @@ function DashboardContent({
             />
 
             {/* Settings Modal */}
-            <SettingsModal
-                isOpen={isSettingsModalOpen}
-                onClose={() => {
-                    refetchUserSettings();
-                    setAvatarRefreshTrigger((k) => k + 1);
-                    setIsSettingsModalOpen(false);
-                }}
-                settings={userSettings}
-                onToggleSound={toggleSound}
-                onToggleDecentralizedCalls={toggleDecentralizedCalls}
-                isHuddle01Configured={isHuddle01Configured}
-                pushSupported={pushSupported}
-                pushPermission={pushPermission}
-                pushSubscribed={pushSubscribed}
-                pushLoading={pushLoading}
-                pushError={pushError}
-                onEnablePush={subscribeToPush}
-                onDisablePush={unsubscribeFromPush}
-                userAddress={userAddress}
-                authType={
-                    messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"
-                }
-                passkeyCredentialId={passkeyCredentialId}
-                onOpenStatusModal={() => setIsStatusModalOpen(true)}
-                availableInvites={availableInvites}
-                usedInvites={usedInvites}
-                onOpenInvitesModal={() => setIsInvitesModalOpen(true)}
-                userEmail={userEmail}
-                isEmailVerified={isEmailVerified}
-                emailUpdatesOptIn={emailUpdatesOptIn}
-                onEmailUpdatesOptInChange={updateEmailUpdatesOptIn}
-                onOpenEmailModal={() => setIsEmailModalOpen(true)}
-                ensAvatar={userENS.avatar}
-                onToggleUseCustomAvatar={toggleUseCustomAvatar}
-                onSetCustomAvatar={setCustomAvatar}
-                isAdmin={isAdmin}
-            />
+            <LoggingErrorBoundary componentName="SettingsModal">
+                <SettingsModal
+                    isOpen={isSettingsModalOpen}
+                    onClose={() => {
+                        refetchUserSettings();
+                        setAvatarRefreshTrigger((k) => k + 1);
+                        setIsSettingsModalOpen(false);
+                    }}
+                    settings={userSettings}
+                    onToggleSound={toggleSound}
+                    onToggleDecentralizedCalls={toggleDecentralizedCalls}
+                    isHuddle01Configured={isHuddle01Configured}
+                    pushSupported={pushSupported}
+                    pushPermission={pushPermission}
+                    pushSubscribed={pushSubscribed}
+                    pushLoading={pushLoading}
+                    pushError={pushError}
+                    onEnablePush={subscribeToPush}
+                    onDisablePush={unsubscribeFromPush}
+                    userAddress={userAddress}
+                    authType={
+                        messagingAuthType as "wallet" | "passkey" | "email" | "digitalid" | "solana"
+                    }
+                    passkeyCredentialId={passkeyCredentialId}
+                    onOpenStatusModal={() => setIsStatusModalOpen(true)}
+                    availableInvites={availableInvites}
+                    usedInvites={usedInvites}
+                    onOpenInvitesModal={() => setIsInvitesModalOpen(true)}
+                    userEmail={userEmail}
+                    isEmailVerified={isEmailVerified}
+                    emailUpdatesOptIn={emailUpdatesOptIn}
+                    onEmailUpdatesOptInChange={updateEmailUpdatesOptIn}
+                    onOpenEmailModal={() => setIsEmailModalOpen(true)}
+                    ensAvatar={userENS.avatar}
+                    onToggleUseCustomAvatar={toggleUseCustomAvatar}
+                    onSetCustomAvatar={setCustomAvatar}
+                    isAdmin={isAdmin}
+                />
+            </LoggingErrorBoundary>
 
             {/* Registration Preferences Modal */}
             <RegistrationPreferencesModal
@@ -6262,55 +6265,57 @@ function DashboardContent({
             )}
 
             {/* Browse Channels Modal */}
-            <BrowseChannelsModal
-                isOpen={isBrowseChannelsOpen}
-                onClose={() => {
-                    setIsBrowseChannelsOpen(false);
-                    setBrowseChannelsInitialCreate(false);
-                    fetchJoinedChannels();
-                }}
-                userAddress={userAddress}
-                channelLookupAddresses={
-                    channelLookupAddresses.length > 0 ? channelLookupAddresses : undefined
-                }
-                poapAddresses={poapAddresses}
-                onJoinChannel={async (channel) => {
-                    setIsBrowseChannelsOpen(false);
-                    setBrowseChannelsInitialCreate(false);
-                    await fetchJoinedChannels(); // Refresh the list immediately
-                    setSelectedChannel(channel);
-                }}
-                onJoinLocationChat={(chat) => {
-                    setIsBrowseChannelsOpen(false);
-                    setBrowseChannelsInitialCreate(false);
-                    fetchJoinedLocationChats();
-                    setSelectedLocationChat(chat);
-                }}
-                onJoinTokenChat={(chat) => {
-                    setIsBrowseChannelsOpen(false);
-                    setBrowseChannelsInitialCreate(false);
-                    setSelectedTokenChat(chat);
-                    setIsTokenChatOpen(true);
-                }}
-                onOpenTokenChat={(chat) => {
-                    setIsBrowseChannelsOpen(false);
-                    setBrowseChannelsInitialCreate(false);
-                    setSelectedTokenChat(chat);
-                    setIsTokenChatOpen(true);
-                }}
-                initialShowCreate={browseChannelsInitialCreate}
-                onCreateGroup={
-                    isWakuInitialized && friends.length > 0
-                        ? () => setIsCreateGroupOpen(true)
-                        : undefined
-                }
-                onCreateLocationChat={() => setShowLocationChatPicker(true)}
-                onCreateTokenChat={() => {
-                    setIsBrowseChannelsOpen(false);
-                    setBrowseChannelsInitialCreate(false);
-                    setIsCreateTokenChatOpen(true);
-                }}
-            />
+            <LoggingErrorBoundary componentName="BrowseChannelsModal">
+                <BrowseChannelsModal
+                    isOpen={isBrowseChannelsOpen}
+                    onClose={() => {
+                        setIsBrowseChannelsOpen(false);
+                        setBrowseChannelsInitialCreate(false);
+                        fetchJoinedChannels();
+                    }}
+                    userAddress={userAddress}
+                    channelLookupAddresses={
+                        channelLookupAddresses.length > 0 ? channelLookupAddresses : undefined
+                    }
+                    poapAddresses={poapAddresses}
+                    onJoinChannel={async (channel) => {
+                        setIsBrowseChannelsOpen(false);
+                        setBrowseChannelsInitialCreate(false);
+                        await fetchJoinedChannels();
+                        setSelectedChannel(channel);
+                    }}
+                    onJoinLocationChat={(chat) => {
+                        setIsBrowseChannelsOpen(false);
+                        setBrowseChannelsInitialCreate(false);
+                        fetchJoinedLocationChats();
+                        setSelectedLocationChat(chat);
+                    }}
+                    onJoinTokenChat={(chat) => {
+                        setIsBrowseChannelsOpen(false);
+                        setBrowseChannelsInitialCreate(false);
+                        setSelectedTokenChat(chat);
+                        setIsTokenChatOpen(true);
+                    }}
+                    onOpenTokenChat={(chat) => {
+                        setIsBrowseChannelsOpen(false);
+                        setBrowseChannelsInitialCreate(false);
+                        setSelectedTokenChat(chat);
+                        setIsTokenChatOpen(true);
+                    }}
+                    initialShowCreate={browseChannelsInitialCreate}
+                    onCreateGroup={
+                        isWakuInitialized && friends.length > 0
+                            ? () => setIsCreateGroupOpen(true)
+                            : undefined
+                    }
+                    onCreateLocationChat={() => setShowLocationChatPicker(true)}
+                    onCreateTokenChat={() => {
+                        setIsBrowseChannelsOpen(false);
+                        setBrowseChannelsInitialCreate(false);
+                        setIsCreateTokenChatOpen(true);
+                    }}
+                />
+            </LoggingErrorBoundary>
 
             {/* Location Chat Picker */}
             <LocationChatPicker
@@ -6373,28 +6378,30 @@ function DashboardContent({
 
             {/* Token Chat Modal */}
             {selectedTokenChat && (
-                <TokenChatModal
-                    key={selectedTokenChat.id}
-                    isOpen={isTokenChatOpen}
-                    onClose={() => {
-                        setIsTokenChatOpen(false);
-                        setSelectedTokenChat(null);
-                    }}
-                    userAddress={userAddress}
-                    chat={selectedTokenChat}
-                    getUserInfo={getAlphaUserInfo}
-                    onOpenUserCard={(address) => setUserCardAddress(address)}
-                    onSettingsUpdated={(updatedChat) => {
-                        setSelectedTokenChat(updatedChat);
-                        setJoinedTokenChats((prev) =>
-                            prev.map((c) => (c.id === updatedChat.id ? updatedChat : c))
-                        );
-                    }}
-                    onLeave={() => {
-                        setIsTokenChatOpen(false);
-                        setSelectedTokenChat(null);
-                    }}
-                />
+                <LoggingErrorBoundary componentName="TokenChatModal">
+                    <TokenChatModal
+                        key={selectedTokenChat.id}
+                        isOpen={isTokenChatOpen}
+                        onClose={() => {
+                            setIsTokenChatOpen(false);
+                            setSelectedTokenChat(null);
+                        }}
+                        userAddress={userAddress}
+                        chat={selectedTokenChat}
+                        getUserInfo={getAlphaUserInfo}
+                        onOpenUserCard={(address) => setUserCardAddress(address)}
+                        onSettingsUpdated={(updatedChat) => {
+                            setSelectedTokenChat(updatedChat);
+                            setJoinedTokenChats((prev) =>
+                                prev.map((c) => (c.id === updatedChat.id ? updatedChat : c))
+                            );
+                        }}
+                        onLeave={() => {
+                            setIsTokenChatOpen(false);
+                            setSelectedTokenChat(null);
+                        }}
+                    />
+                </LoggingErrorBoundary>
             )}
 
             {/* Channel Chat Modal */}
@@ -6469,23 +6476,25 @@ function DashboardContent({
             {/* Group Call UI */}
             <AnimatePresence>
                 {currentGroupCall && (
-                    <GroupCallUI
-                        call={currentGroupCall}
-                        participants={groupCallParticipants}
-                        userAddress={userAddress as `0x${string}`}
-                        isMuted={isMuted}
-                        isVideoOff={isVideoOff}
-                        isScreenSharing={isScreenSharing}
-                        duration={groupCallDuration}
-                        onToggleMute={toggleMute}
-                        onToggleVideo={toggleVideo}
-                        onToggleScreenShare={toggleScreenShare}
-                        onLeave={handleLeaveGroupCall}
-                        setLocalVideoContainer={setLocalVideoContainer}
-                        setRemoteVideoContainer={setRemoteVideoContainer}
-                        setScreenShareContainer={setScreenShareContainer}
-                        formatDuration={formatDuration}
-                    />
+                    <LoggingErrorBoundary componentName="GroupCallUI">
+                        <GroupCallUI
+                            call={currentGroupCall}
+                            participants={groupCallParticipants}
+                            userAddress={userAddress as `0x${string}`}
+                            isMuted={isMuted}
+                            isVideoOff={isVideoOff}
+                            isScreenSharing={isScreenSharing}
+                            duration={groupCallDuration}
+                            onToggleMute={toggleMute}
+                            onToggleVideo={toggleVideo}
+                            onToggleScreenShare={toggleScreenShare}
+                            onLeave={handleLeaveGroupCall}
+                            setLocalVideoContainer={setLocalVideoContainer}
+                            setRemoteVideoContainer={setRemoteVideoContainer}
+                            setScreenShareContainer={setScreenShareContainer}
+                            formatDuration={formatDuration}
+                        />
+                    </LoggingErrorBoundary>
                 )}
             </AnimatePresence>
 
