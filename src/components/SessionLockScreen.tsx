@@ -2,7 +2,7 @@
 
 /**
  * Session Lock Screen
- * 
+ *
  * Displays when the user's session has been locked due to inactivity.
  * Supports multiple authentication methods:
  * - Wallet signature (for wallet users)
@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAccount, useSignMessage, useConnect, useConnectors } from "wagmi";
 import { usePasskeyContext } from "@/context/PasskeyProvider";
 import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
+import { reportError } from "@/lib/reportError";
 
 type AuthMethod = "wallet" | "passkey" | "email" | "solana" | "world_id" | "alien_id";
 
@@ -41,14 +42,15 @@ export function SessionLockScreen({
     const [isReconnecting, setIsReconnecting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const connectedWalletLabel = useSolanaDisplayLabel(
-        (address || walletAddress) ?? null
-    );
+    const connectedWalletLabel = useSolanaDisplayLabel((address || walletAddress) ?? null);
 
     // Determine if this user should use passkey for unlock
-    const usePasskeyUnlock = authMethod === "passkey" || authMethod === "email" || 
-                             authMethod === "solana" || authMethod === "world_id" || 
-                             authMethod === "alien_id";
+    const usePasskeyUnlock =
+        authMethod === "passkey" ||
+        authMethod === "email" ||
+        authMethod === "solana" ||
+        authMethod === "world_id" ||
+        authMethod === "alien_id";
 
     // Check if wallet is connected
     const walletConnected = isConnected && address;
@@ -67,7 +69,7 @@ export function SessionLockScreen({
                 setError("No wallet connector available");
             }
         } catch (err) {
-            console.error("[SessionLock] Wallet reconnect failed:", err);
+            reportError(err, { context: "sessionLockWalletReconnect", silent: true });
             setError("Failed to reconnect wallet");
         } finally {
             setIsReconnecting(false);
@@ -98,12 +100,15 @@ export function SessionLockScreen({
                 onUnlock();
             }
         } catch (err) {
-            console.error("[SessionLock] Wallet unlock failed:", err);
+            reportError(err, { context: "sessionLockWalletUnlock", silent: true });
             const errorMessage = err instanceof Error ? err.message : "Unknown error";
-            
+
             if (errorMessage.includes("User rejected") || errorMessage.includes("rejected")) {
                 setError("Signature cancelled. Please try again.");
-            } else if (errorMessage.includes("disconnected") || errorMessage.includes("not connected")) {
+            } else if (
+                errorMessage.includes("disconnected") ||
+                errorMessage.includes("not connected")
+            ) {
                 setError("Wallet disconnected. Please reconnect.");
             } else {
                 setError("Failed to unlock. Try reconnecting wallet or skip.");
@@ -123,7 +128,7 @@ export function SessionLockScreen({
             console.log("[SessionLock] Passkey unlock successful");
             onUnlock();
         } catch (err) {
-            console.error("[SessionLock] Passkey unlock failed:", err);
+            reportError(err, { context: "sessionLockPasskeyUnlock", silent: true });
             if (err instanceof Error && err.message.includes("cancelled")) {
                 setError("Authentication cancelled. Please try again.");
             } else {
@@ -276,7 +281,9 @@ export function SessionLockScreen({
                                             d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"
                                         />
                                     </svg>
-                                    {walletConnected ? "Unlock with Wallet" : "Connect Wallet First"}
+                                    {walletConnected
+                                        ? "Unlock with Wallet"
+                                        : "Connect Wallet First"}
                                 </>
                             )}
                         </button>
@@ -290,12 +297,11 @@ export function SessionLockScreen({
                         </button>
 
                         <p className="text-xs text-zinc-500 text-center mt-4">
-                            {usePasskeyUnlock 
+                            {usePasskeyUnlock
                                 ? "Use your passkey to verify your identity and unlock your session."
-                                : walletConnected 
-                                    ? "Sign a message to verify your identity and unlock your session."
-                                    : "Reconnect your wallet or skip to continue."
-                            }
+                                : walletConnected
+                                  ? "Sign a message to verify your identity and unlock your session."
+                                  : "Reconnect your wallet or skip to continue."}
                         </p>
                     </motion.div>
                 </motion.div>
@@ -306,7 +312,7 @@ export function SessionLockScreen({
 
 /**
  * Inactivity Warning Toast
- * 
+ *
  * Shows a warning before the session is locked
  */
 type InactivityWarningProps = {

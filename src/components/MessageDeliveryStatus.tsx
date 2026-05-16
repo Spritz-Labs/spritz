@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
@@ -12,7 +13,7 @@ type MessageDeliveryStatusProps = {
     className?: string;
 };
 
-export function MessageDeliveryStatus({
+export const MessageDeliveryStatus = React.memo(function MessageDeliveryStatus({
     status,
     timestamp,
     readBy = [],
@@ -40,13 +41,9 @@ export function MessageDeliveryStatus({
             )}
         </div>
     );
-}
+});
 
-function DeliveryStatusIcon({
-    status,
-}: {
-    status: MessageDeliveryStatusProps["status"];
-}) {
+function DeliveryStatusIcon({ status }: { status: MessageDeliveryStatusProps["status"] }) {
     switch (status) {
         case "sending":
             return (

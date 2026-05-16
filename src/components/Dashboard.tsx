@@ -81,6 +81,7 @@ import { useAlphaChat } from "@/hooks/useAlphaChat";
 import { Leaderboard } from "./Leaderboard";
 import { SpritzLogo } from "./SpritzLogo";
 import { LoggingErrorBoundary } from "./LoggingErrorBoundary";
+import { DailyBonusModal } from "./DailyBonusModal";
 const AgentsSection = dynamic(() => import("./AgentsSection").then((m) => m.AgentsSection));
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
@@ -596,7 +597,9 @@ function DashboardContent({
     // Sync contacts function
     const handleSyncContacts = async () => {
         if (!isPWA) {
-            alert("Contacts sync is only available in the PWA app. Please install the app first.");
+            sonnerToast.error(
+                "Contacts sync is only available in the PWA app. Please install the app first."
+            );
             return;
         }
 
@@ -622,7 +625,9 @@ function DashboardContent({
                 if (firstInvite) {
                     await shareInvite(firstInvite.code);
                 } else {
-                    alert("No available invite codes. Please generate more invites first.");
+                    sonnerToast.error(
+                        "No available invite codes. Please generate more invites first."
+                    );
                 }
             }
         } catch (error) {
@@ -632,7 +637,9 @@ function DashboardContent({
             if (firstInvite) {
                 await shareInvite(firstInvite.code);
             } else {
-                alert("Failed to sync contacts. Please try sharing an invite manually.");
+                sonnerToast.error(
+                    "Failed to sync contacts. Please try sharing an invite manually."
+                );
             }
         } finally {
             setIsSyncingContacts(false);
@@ -2340,7 +2347,7 @@ function DashboardContent({
     // Handler to start a group call
     const handleStartGroupCall = async (groupId: string, groupName: string, isVideo: boolean) => {
         if (!isCallConfigured) {
-            alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
+            sonnerToast.error("Calling not configured. Please set up AGORA_APP_ID.");
             return;
         }
 
@@ -2606,7 +2613,7 @@ function DashboardContent({
 
     const handleCall = async (friend: FriendsListFriend, withVideo: boolean = false) => {
         if (!isCallConfigured) {
-            alert("Calling not configured. Please set NEXT_PUBLIC_AGORA_APP_ID.");
+            sonnerToast.error("Calling not configured. Please set up AGORA_APP_ID.");
             return;
         }
 
@@ -2631,9 +2638,7 @@ function DashboardContent({
                 console.error("[Dashboard] Failed to create Huddle01 room");
                 setCurrentCallFriend(null);
                 setCurrentCallProvider(null);
-                alert(
-                    "Failed to create decentralized call room. Please try again or disable decentralized calls."
-                );
+                sonnerToast.error("Failed to create call room. Please try again.");
                 return;
             }
             channelName = roomResult.roomId;
@@ -5094,13 +5099,13 @@ function DashboardContent({
                                                             );
                                                         }
                                                     } else {
-                                                        alert(
+                                                        sonnerToast.error(
                                                             data.error || "Failed to create room"
                                                         );
                                                     }
                                                 } catch (err) {
                                                     reportError(err, { context: "createRoom" });
-                                                    alert("Failed to create room");
+                                                    sonnerToast.error("Failed to create room");
                                                 }
                                             }}
                                             className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 transition-all active:scale-95"
@@ -5143,11 +5148,11 @@ function DashboardContent({
                                                         const roomUrl = `${window.location.origin}/room/${userAddress}`;
                                                         window.location.href = roomUrl;
                                                     } else {
-                                                        alert("Failed to open room");
+                                                        sonnerToast.error("Failed to open room");
                                                     }
                                                 } catch (err) {
-                                                    console.error("Failed to open room:", err);
-                                                    alert("Failed to open room");
+                                                    reportError(err, { context: "openRoom" });
+                                                    sonnerToast.error("Failed to open room");
                                                 }
                                             }}
                                             className="flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 transition-all active:scale-95"
@@ -6513,86 +6518,13 @@ function DashboardContent({
             </AnimatePresence>
 
             {/* Daily Bonus Modal */}
-            <AnimatePresence>
-                {showDailyBonusModal && dailyBonusAvailable && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-                        onClick={handleDismissDailyBonus}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.8, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.8, opacity: 0 }}
-                            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-sm text-center"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                            {/* Animated Gift Icon */}
-                            <motion.div
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{
-                                    type: "spring",
-                                    delay: 0.1,
-                                    stiffness: 200,
-                                }}
-                                className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center"
-                            >
-                                <motion.span
-                                    animate={{
-                                        rotate: [0, -10, 10, -10, 0],
-                                        scale: [1, 1.1, 1],
-                                    }}
-                                    transition={{
-                                        duration: 0.5,
-                                        repeat: Infinity,
-                                        repeatDelay: 2,
-                                    }}
-                                    className="text-4xl"
-                                >
-                                    🎁
-                                </motion.span>
-                            </motion.div>
-
-                            <h2 className="text-xl font-bold text-white mb-2">
-                                Daily Bonus Available!
-                            </h2>
-                            <p className="text-zinc-400 mb-6">
-                                Claim your{" "}
-                                <span className="text-amber-400 font-semibold">+3 points</span> for
-                                logging in today
-                            </p>
-
-                            <button
-                                onClick={handleClaimDailyBonus}
-                                disabled={isClaimingBonus}
-                                className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold transition-all hover:shadow-lg hover:shadow-orange-500/25 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                            >
-                                {isClaimingBonus ? (
-                                    <>
-                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        Claiming...
-                                    </>
-                                ) : (
-                                    <>
-                                        <span>✨</span>
-                                        Claim +3 Points
-                                    </>
-                                )}
-                            </button>
-
-                            <button
-                                onClick={handleDismissDailyBonus}
-                                className="mt-3 text-zinc-500 hover:text-zinc-300 text-sm transition-colors"
-                            >
-                                Maybe later
-                            </button>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <DailyBonusModal
+                isOpen={showDailyBonusModal}
+                isAvailable={dailyBonusAvailable}
+                isClaiming={isClaimingBonus}
+                onClaim={handleClaimDailyBonus}
+                onDismiss={handleDismissDailyBonus}
+            />
 
             {/* Welcome message is now sent as a real DM from Kevin */}
 

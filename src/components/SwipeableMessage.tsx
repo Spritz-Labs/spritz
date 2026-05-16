@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback } from "react";
 import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
 
 type SwipeableMessageProps = {
     children: React.ReactNode;
-    onSwipeLeft?: () => void;  // Delete/archive
+    onSwipeLeft?: () => void; // Delete/archive
     onSwipeRight?: () => void; // Reply
     leftAction?: React.ReactNode;
     rightAction?: React.ReactNode;
@@ -15,18 +15,28 @@ type SwipeableMessageProps = {
     threshold?: number;
 };
 
-export function SwipeableMessage({
+export const SwipeableMessage = React.memo(function SwipeableMessage({
     children,
     onSwipeLeft,
     onSwipeRight,
     leftAction = (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+            />
         </svg>
     ),
     rightAction = (
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+            />
         </svg>
     ),
     leftColor = "bg-blue-500",
@@ -47,13 +57,13 @@ export function SwipeableMessage({
     const handleDragEnd = useCallback(
         (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
             const { offset } = info;
-            
+
             if (offset.x > threshold && onSwipeRight) {
                 onSwipeRight();
             } else if (offset.x < -threshold && onSwipeLeft) {
                 onSwipeLeft();
             }
-            
+
             setIsDragging(false);
         },
         [threshold, onSwipeLeft, onSwipeRight]
@@ -70,9 +80,7 @@ export function SwipeableMessage({
                 className={`absolute left-0 top-0 bottom-0 flex items-center justify-center w-16 ${leftColor} text-white`}
                 style={{ opacity: leftOpacity }}
             >
-                <motion.div style={{ scale: leftScale }}>
-                    {leftAction}
-                </motion.div>
+                <motion.div style={{ scale: leftScale }}>{leftAction}</motion.div>
             </motion.div>
 
             {/* Right action (delete) - appears when swiping left */}
@@ -80,9 +88,7 @@ export function SwipeableMessage({
                 className={`absolute right-0 top-0 bottom-0 flex items-center justify-center w-16 ${rightColor} text-white`}
                 style={{ opacity: rightOpacity }}
             >
-                <motion.div style={{ scale: rightScale }}>
-                    {rightAction}
-                </motion.div>
+                <motion.div style={{ scale: rightScale }}>{rightAction}</motion.div>
             </motion.div>
 
             {/* Draggable content */}
@@ -100,4 +106,4 @@ export function SwipeableMessage({
             </motion.div>
         </div>
     );
-}
+});

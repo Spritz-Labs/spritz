@@ -4,21 +4,14 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useSolanaDisplayLabel } from "@/hooks/useSolanaDisplayNames";
 import { motion, AnimatePresence } from "motion/react";
 import { type Address } from "viem";
-import {
-    useXMTPContext,
-    DECRYPTION_FAILED_MARKER,
-} from "@/context/WakuProvider";
+import { useXMTPContext, DECRYPTION_FAILED_MARKER } from "@/context/WakuProvider";
 import { PixelArtEditor } from "./PixelArtEditor";
 import { PixelArtImage } from "./PixelArtImage";
 import { PixelArtShare } from "./PixelArtShare";
 import { useReactions, REACTION_EMOJIS } from "@/hooks/useReactions";
 import { EmojiPicker, QuickReactionPicker } from "./EmojiPicker";
 import { LinkPreview, detectUrls } from "./LinkPreview";
-import {
-    MessageStatusIndicator,
-    TypingIndicator,
-    EncryptionIndicator,
-} from "./MessageStatus";
+import { MessageStatusIndicator, TypingIndicator, EncryptionIndicator } from "./MessageStatus";
 import {
     useTypingIndicator,
     useReadReceipts,
@@ -27,10 +20,10 @@ import {
 } from "@/hooks/useChatFeatures";
 import { VoiceRecorder, EncryptedVoiceMessage } from "./VoiceRecorder";
 import { EncryptedImage } from "./EncryptedImage";
-import { 
-    encryptAudio, 
-    formatVoiceMessage, 
-    isVoiceMessage, 
+import {
+    encryptAudio,
+    formatVoiceMessage,
+    isVoiceMessage,
     parseVoiceMessage,
     encryptImage,
     formatEncryptedImageMessage,
@@ -54,11 +47,7 @@ import {
 } from "./LocationMessage";
 import { useUserTimezone } from "@/hooks/useUserTimezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
-import {
-    useMutedConversations,
-    useBlockedUsers,
-    useReportUser,
-} from "@/hooks/useMuteBlockReport";
+import { useMutedConversations, useBlockedUsers, useReportUser } from "@/hooks/useMuteBlockReport";
 import {
     MuteOptionsModal,
     BlockUserModal,
@@ -69,21 +58,14 @@ import { ScrollToBottom, useScrollToBottom } from "./ScrollToBottom";
 import { ChatSkeleton } from "./ChatSkeleton";
 import { ChatEmptyState } from "./ChatEmptyState";
 import { DateDivider } from "./UnreadDivider";
-import {
-    ImageGallery,
-    useImageGallery,
-    extractImagesFromMessages,
-} from "./ImageGallery";
+import { ImageGallery, useImageGallery, extractImagesFromMessages } from "./ImageGallery";
 import { useDraftMessages } from "@/hooks/useDraftMessages";
-import {
-    useMessageEdit,
-    EditIndicator,
-    EditControls,
-} from "@/hooks/useMessageEdit";
+import { useMessageEdit, EditIndicator, EditControls } from "@/hooks/useMessageEdit";
 import { SwipeableMessage } from "./SwipeableMessage";
 import { MessageActionBar, type MessageActionConfig } from "./MessageActionBar";
 import { ImageViewerModal } from "./ImageViewerModal";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { reportError } from "@/lib/reportError";
 
 const log = createLogger("Chat");
 
@@ -160,7 +142,12 @@ function VoiceMessageWrapper({
         return (
             <div className="flex items-center gap-2 text-red-400 text-sm">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                    />
                 </svg>
                 <span>Voice memo unavailable</span>
             </div>
@@ -221,7 +208,12 @@ function EncryptedImageMessageWrapper({
         return (
             <div className="flex items-center gap-2 text-red-400 text-sm p-4 bg-red-500/10 rounded-lg">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                    />
                 </svg>
                 <span>Image unavailable</span>
             </div>
@@ -262,21 +254,18 @@ export function ChatModal({
     const [showPixelArt, setShowPixelArt] = useState(false);
     const [isUploadingPixelArt, setIsUploadingPixelArt] = useState(false);
     const [viewingImage, setViewingImage] = useState<string | null>(null);
-    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null
-    );
+    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState(false);
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
-    const [showMsgReactions, setShowMsgReactions] = useState<string | null>(
-        null
-    );
+    const [showMsgReactions, setShowMsgReactions] = useState<string | null>(null);
     const [isFullscreen, setIsFullscreen] = useState(true);
     const [showSearch, setShowSearch] = useState(false);
     const [hasMoreMessages, setHasMoreMessages] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
-    const [selectedMessageConfig, setSelectedMessageConfig] =
-        useState<MessageActionConfig | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(
+        null
+    );
     const [securityStatus, setSecurityStatus] = useState<{
         isSecure?: boolean;
         isLoading: boolean;
@@ -302,11 +291,9 @@ export function ChatModal({
     // Fetch peer online status
     useEffect(() => {
         if (peerAddress) {
-            fetchOnlineStatuses([peerAddress.toLowerCase()]).then(
-                (statuses) => {
-                    setPeerOnline(statuses[peerAddress.toLowerCase()] || false);
-                }
-            );
+            fetchOnlineStatuses([peerAddress.toLowerCase()]).then((statuses) => {
+                setPeerOnline(statuses[peerAddress.toLowerCase()] || false);
+            });
         }
     }, [peerAddress]);
 
@@ -320,16 +307,17 @@ export function ChatModal({
         .join("-");
 
     // Reactions hook (for pixel art)
-    const { reactions, fetchReactions, toggleReaction } =
-        useReactions(userAddress);
+    const { reactions, fetchReactions, toggleReaction } = useReactions(userAddress);
 
     // New chat features
     const { peerTyping, handleTyping, stopTyping } = useTypingIndicator(
         userAddress,
         conversationId
     );
-    const { markMessagesRead, getMessageStatus, getReadAt, fetchReadReceipts } =
-        useReadReceipts(userAddress, conversationId);
+    const { markMessagesRead, getMessageStatus, getReadAt, fetchReadReceipts } = useReadReceipts(
+        userAddress,
+        conversationId
+    );
     const {
         reactions: msgReactions,
         fetchReactions: fetchMsgReactions,
@@ -339,10 +327,8 @@ export function ChatModal({
     // Mute/Block/Report hooks
     const { isMuted, muteConversation, unmuteConversation, getMuteInfo } =
         useMutedConversations(userAddress);
-    const { isBlockedByMe, blockUser, unblockUser } =
-        useBlockedUsers(userAddress);
-    const { reportUser, isSubmitting: isReportSubmitting } =
-        useReportUser(userAddress);
+    const { isBlockedByMe, blockUser, unblockUser } = useBlockedUsers(userAddress);
+    const { reportUser, isSubmitting: isReportSubmitting } = useReportUser(userAddress);
     const { isAdmin: isGlobalAdmin } = useAdminCheck(userAddress);
 
     const userTimezone = useUserTimezone();
@@ -360,11 +346,7 @@ export function ChatModal({
     const previousScrollHeightRef = useRef(0);
 
     // Draft messages persistence
-    const { draft, saveDraft, clearDraft } = useDraftMessages(
-        "dm",
-        peerAddress,
-        userAddress
-    );
+    const { draft, saveDraft, clearDraft } = useDraftMessages("dm", peerAddress, userAddress);
 
     // Image gallery for viewing multiple images
     const {
@@ -461,9 +443,7 @@ export function ChatModal({
 
     const userAddressLabel = useSolanaDisplayLabel(userAddress);
     const peerAddressLabel = useSolanaDisplayLabel(peerAddress);
-    const replyToAddressLabel = useSolanaDisplayLabel(
-        replyingTo?.senderAddress ?? null,
-    );
+    const replyToAddressLabel = useSolanaDisplayLabel(replyingTo?.senderAddress ?? null);
 
     const displayName = peerName || peerAddressLabel;
 
@@ -477,9 +457,7 @@ export function ChatModal({
             setNewMessage(draft.text);
             draftAppliedRef.current = true;
             if (draft.replyToId) {
-                const replyTarget = messages.find(
-                    (m) => m.id === draft.replyToId
-                );
+                const replyTarget = messages.find((m) => m.id === draft.replyToId);
                 if (replyTarget) setReplyingTo(replyTarget);
             }
         }
@@ -556,11 +534,7 @@ export function ChatModal({
     // Save draft when message changes (debounced in hook)
     useEffect(() => {
         if (isOpen) {
-            saveDraft(
-                newMessage,
-                replyingTo?.id,
-                replyingTo?.content?.slice(0, 50)
-            );
+            saveDraft(newMessage, replyingTo?.id, replyingTo?.content?.slice(0, 50));
         }
     }, [newMessage, replyingTo, isOpen, saveDraft]);
 
@@ -602,11 +576,19 @@ export function ChatModal({
 
         // Format special message types
         let text = lastMsg.content;
-        if (text.startsWith("VOICE:") || text.startsWith("ENCRYPTED_VOICE:")) text = "Voice message";
-        else if (text.startsWith("PIXEL_ART:") || text.startsWith("[PIXEL_ART]") || text.startsWith("data:image/png;base64,")) text = "Pixel art";
+        if (text.startsWith("VOICE:") || text.startsWith("ENCRYPTED_VOICE:"))
+            text = "Voice message";
+        else if (
+            text.startsWith("PIXEL_ART:") ||
+            text.startsWith("[PIXEL_ART]") ||
+            text.startsWith("data:image/png;base64,")
+        )
+            text = "Pixel art";
         else if (text.startsWith("ENCRYPTED_IMAGE:")) text = "Photo";
-        else if (text.startsWith("LOCATION:") || text.startsWith("[LOCATION]")) text = "Shared a location";
-        else if (text.startsWith("GIF:") || text.match(/^https?:\/\/.*\.(gif|giphy)/i)) text = "GIF";
+        else if (text.startsWith("LOCATION:") || text.startsWith("[LOCATION]"))
+            text = "Shared a location";
+        else if (text.startsWith("GIF:") || text.match(/^https?:\/\/.*\.(gif|giphy)/i))
+            text = "GIF";
         const maxLen = isOwn ? 46 : 50;
         if (text.length > maxLen) text = text.slice(0, maxLen) + "...";
 
@@ -635,11 +617,7 @@ export function ChatModal({
 
     // Clear messages when peer changes (prevent showing wrong user's messages)
     useEffect(() => {
-        if (
-            peerAddress &&
-            previousPeerRef.current &&
-            previousPeerRef.current !== peerAddress
-        ) {
+        if (peerAddress && previousPeerRef.current && previousPeerRef.current !== peerAddress) {
             console.log(
                 "[Chat] Peer changed from",
                 previousPeerRef.current,
@@ -671,22 +649,14 @@ export function ChatModal({
             // Also explicitly mark as read to clear any existing unread count
             markAsRead(peerAddress);
             // With column-reverse, scrollTop=0 is at bottom (no scroll needed)
-            console.log(
-                "[Chat] Opened chat with",
-                peerAddress,
-                "- marking as read"
-            );
+            console.log("[Chat] Opened chat with", peerAddress, "- marking as read");
         } else {
             // Final mark-as-read before closing: write read receipts for all
             // peer messages to the database so they persist and don't come back as unread.
             const currentMessages = messagesRef.current;
             if (currentMessages.length > 0) {
                 const peerMsgIds = currentMessages
-                    .filter(
-                        (m) =>
-                            m.senderAddress.toLowerCase() !==
-                            userAddress.toLowerCase()
-                    )
+                    .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
                     .map((m) => m.id);
                 if (peerMsgIds.length > 0) {
                     markMessagesRead(peerMsgIds);
@@ -703,7 +673,15 @@ export function ChatModal({
             // Clear active chat peer (triggers grace period in WakuProvider)
             setActiveChatPeer(null);
         }
-    }, [isOpen, stopTyping, setActiveChatPeer, markAsRead, peerAddress, userAddress, markMessagesRead]);
+    }, [
+        isOpen,
+        stopTyping,
+        setActiveChatPeer,
+        markAsRead,
+        peerAddress,
+        userAddress,
+        markMessagesRead,
+    ]);
 
     // Load messages and start streaming when initialized
     useEffect(() => {
@@ -733,19 +711,13 @@ export function ChatModal({
                 try {
                     // First load from cache (fast), then refresh in background
                     const existingMessages = await getMessages(peerAddress);
-                    console.log(
-                        "[Chat] Got messages:",
-                        existingMessages.length
-                    );
+                    console.log("[Chat] Got messages:", existingMessages.length);
 
                     // Filter and format messages
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                     
                     const formattedMessages: Message[] = existingMessages
                         .filter((msg: any) => {
-                            return (
-                                typeof msg.content === "string" &&
-                                msg.content.trim() !== ""
-                            );
+                            return typeof msg.content === "string" && msg.content.trim() !== "";
                         })
                         .map((msg: any) => ({
                             id: msg.id,
@@ -763,8 +735,7 @@ export function ChatModal({
                         const myMessageIds = formattedMessages
                             .filter(
                                 (m: Message) =>
-                                    m.senderAddress.toLowerCase() ===
-                                    userAddress.toLowerCase()
+                                    m.senderAddress.toLowerCase() === userAddress.toLowerCase()
                             )
                             .map((m: Message) => m.id);
                         if (myMessageIds.length > 0) {
@@ -772,15 +743,10 @@ export function ChatModal({
                         }
 
                         // Mark all loaded messages as read in the database
-                        markMessagesRead(
-                            formattedMessages.map((m: Message) => m.id)
-                        );
+                        markMessagesRead(formattedMessages.map((m: Message) => m.id));
                     }
                 } catch (loadErr) {
-                    console.log(
-                        "[Chat] Failed to load messages, continuing anyway:",
-                        loadErr
-                    );
+                    console.log("[Chat] Failed to load messages, continuing anyway:", loadErr);
                 }
 
                 // Set to ready regardless of load success so we can send/receive
@@ -790,48 +756,33 @@ export function ChatModal({
                 // Start streaming new messages
                 log.debug("[Chat] Setting up message stream...");
                 try {
-                    const stream = await streamMessages(
-                        peerAddress,
-                        (message: unknown) => {
-                            console.log(
-                                "[Chat] Received streamed message:",
-                                message
-                            );
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            const msg = message as any;
+                    const stream = await streamMessages(peerAddress, (message: unknown) => {
+                        console.log("[Chat] Received streamed message:", message);
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const msg = message as any;
 
-                            if (
-                                typeof msg.content !== "string" ||
-                                msg.content.trim() === ""
-                            ) {
-                                return;
-                            }
-
-                            const newMsg: Message = {
-                                id: msg.id,
-                                content: msg.content,
-                                senderAddress: msg.senderInboxId,
-                                sentAt: new Date(
-                                    Number(msg.sentAtNs) / 1000000
-                                ),
-                            };
-                            setMessages((prev) => {
-                                if (prev.some((m) => m.id === newMsg.id))
-                                    return prev;
-                                return [...prev, newMsg];
-                            });
-                            markAsRead(peerAddress);
-                            // Mark the new message as read in the database
-                            markMessagesRead([newMsg.id]);
+                        if (typeof msg.content !== "string" || msg.content.trim() === "") {
+                            return;
                         }
-                    );
+
+                        const newMsg: Message = {
+                            id: msg.id,
+                            content: msg.content,
+                            senderAddress: msg.senderInboxId,
+                            sentAt: new Date(Number(msg.sentAtNs) / 1000000),
+                        };
+                        setMessages((prev) => {
+                            if (prev.some((m) => m.id === newMsg.id)) return prev;
+                            return [...prev, newMsg];
+                        });
+                        markAsRead(peerAddress);
+                        // Mark the new message as read in the database
+                        markMessagesRead([newMsg.id]);
+                    });
                     log.debug("[Chat] Stream setup complete:", stream);
                     streamRef.current = stream;
                 } catch (streamErr) {
-                    console.log(
-                        "[Chat] Failed to setup stream, relying on polling:",
-                        streamErr
-                    );
+                    console.log("[Chat] Failed to setup stream, relying on polling:", streamErr);
                 }
             } catch (error) {
                 console.error("[Chat] Error in chat setup:", error);
@@ -870,12 +821,11 @@ export function ChatModal({
                 const newMessages = await getMessages(peerAddress, true);
 
                 if (newMessages.length > 0) {
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                     
                     const formattedMessages: Message[] = newMessages
                         .filter((msg: any) => {
                             const valid =
-                                typeof msg.content === "string" &&
-                                msg.content.trim() !== "";
+                                typeof msg.content === "string" && msg.content.trim() !== "";
                             // Skip messages with invalid content
                             return valid;
                         })
@@ -889,9 +839,7 @@ export function ChatModal({
                     setMessages((prev) => {
                         // Merge new messages, avoiding duplicates
                         const existingIds = new Set(prev.map((m) => m.id));
-                        const newOnes = formattedMessages.filter(
-                            (m) => !existingIds.has(m.id)
-                        );
+                        const newOnes = formattedMessages.filter((m) => !existingIds.has(m.id));
 
                         if (newOnes.length > 0) {
                             console.log(
@@ -907,8 +855,7 @@ export function ChatModal({
                             markMessagesRead(newOnes.map((m) => m.id));
 
                             return [...prev, ...newOnes].sort(
-                                (a, b) =>
-                                    a.sentAt.getTime() - b.sentAt.getTime()
+                                (a, b) => a.sentAt.getTime() - b.sentAt.getTime()
                             );
                         }
                         return prev;
@@ -916,11 +863,7 @@ export function ChatModal({
 
                     // Also refresh read receipts for our sent messages
                     const myMsgIds = formattedMessages
-                        .filter(
-                            (m) =>
-                                m.senderAddress.toLowerCase() ===
-                                userAddress.toLowerCase()
-                        )
+                        .filter((m) => m.senderAddress.toLowerCase() === userAddress.toLowerCase())
                         .map((m) => m.id);
                     if (myMsgIds.length > 0) {
                         fetchReadReceipts(myMsgIds);
@@ -928,11 +871,7 @@ export function ChatModal({
 
                     // Mark ALL messages from peer as read (in case any were missed)
                     const peerMsgIds = formattedMessages
-                        .filter(
-                            (m) =>
-                                m.senderAddress.toLowerCase() !==
-                                userAddress.toLowerCase()
-                        )
+                        .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
                         .map((m) => m.id);
                     if (peerMsgIds.length > 0) {
                         markMessagesRead(peerMsgIds);
@@ -973,11 +912,7 @@ export function ChatModal({
     // Load more messages on scroll (pagination). Stable identity via refs.
     const loadMoreMessages = useCallback(async () => {
         const currentMessages = messagesRef.current;
-        if (
-            isLoadingMoreRef.current ||
-            !hasMoreMessagesRef.current ||
-            currentMessages.length === 0
-        )
+        if (isLoadingMoreRef.current || !hasMoreMessagesRef.current || currentMessages.length === 0)
             return;
 
         setIsLoadingMore(true);
@@ -989,13 +924,10 @@ export function ChatModal({
             const result = await fetchOlderMessages(peerAddress, beforeTimestamp);
 
             if (result.messages.length > 0) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                 
                 const olderFormatted: Message[] = result.messages
                     .filter((msg: any) => {
-                        return (
-                            typeof msg.content === "string" &&
-                            msg.content.trim() !== ""
-                        );
+                        return typeof msg.content === "string" && msg.content.trim() !== "";
                     })
                     .map((msg: any) => ({
                         id: msg.id,
@@ -1007,9 +939,7 @@ export function ChatModal({
                 // Prepend older messages, avoiding duplicates
                 setMessages((prev) => {
                     const existingIds = new Set(prev.map((m) => m.id));
-                    const newOnes = olderFormatted.filter(
-                        (m) => !existingIds.has(m.id)
-                    );
+                    const newOnes = olderFormatted.filter((m) => !existingIds.has(m.id));
                     return [...newOnes, ...prev];
                 });
             }
@@ -1078,19 +1008,13 @@ export function ChatModal({
     // Update message ID refs when messages change
     useEffect(() => {
         const myMsgIds = messages
-            .filter(
-                (m) =>
-                    m.senderAddress.toLowerCase() === userAddress.toLowerCase()
-            )
+            .filter((m) => m.senderAddress.toLowerCase() === userAddress.toLowerCase())
             .filter((m) => m.status !== "pending" && m.status !== "failed")
             .map((m) => m.id);
         sentMessageIdsRef.current = myMsgIds;
 
         const peerMsgIds = messages
-            .filter(
-                (m) =>
-                    m.senderAddress.toLowerCase() !== userAddress.toLowerCase()
-            )
+            .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
             .map((m) => m.id);
         peerMessageIdsRef.current = peerMsgIds;
     }, [messages, userAddress]);
@@ -1105,11 +1029,7 @@ export function ChatModal({
         readFlushTimerRef.current = setTimeout(() => {
             readFlushTimerRef.current = null;
             const peerMsgIds = messages
-                .filter(
-                    (m) =>
-                        m.senderAddress.toLowerCase() !==
-                        userAddress.toLowerCase()
-                )
+                .filter((m) => m.senderAddress.toLowerCase() !== userAddress.toLowerCase())
                 .map((m) => m.id);
             if (peerMsgIds.length > 0) {
                 void markMessagesRead(peerMsgIds);
@@ -1123,14 +1043,7 @@ export function ChatModal({
                 readFlushTimerRef.current = null;
             }
         };
-    }, [
-        isOpen,
-        messages,
-        userAddress,
-        peerAddress,
-        markMessagesRead,
-        markAsRead,
-    ]);
+    }, [isOpen, messages, userAddress, peerAddress, markMessagesRead, markAsRead]);
 
     // Periodically check read receipts for all sent messages while chat is open
     useEffect(() => {
@@ -1139,11 +1052,7 @@ export function ChatModal({
         const checkReadReceipts = () => {
             const myMsgIds = sentMessageIdsRef.current;
             if (myMsgIds.length > 0) {
-                log.debug(
-                    "[Chat] Checking read receipts for",
-                    myMsgIds.length,
-                    "sent messages"
-                );
+                log.debug("[Chat] Checking read receipts for", myMsgIds.length, "sent messages");
                 fetchReadReceipts(myMsgIds);
             }
         };
@@ -1168,11 +1077,7 @@ export function ChatModal({
         const markAllAsRead = () => {
             const peerMsgIds = peerMessageIdsRef.current;
             if (peerMsgIds.length > 0) {
-                log.debug(
-                    "[Chat] Marking",
-                    peerMsgIds.length,
-                    "peer messages as read"
-                );
+                log.debug("[Chat] Marking", peerMsgIds.length, "peer messages as read");
                 void markMessagesRead(peerMsgIds);
             }
             // Always refresh DM read cursor (badge + shout_read_receipts_dm), even
@@ -1226,8 +1131,7 @@ export function ChatModal({
         };
         if (selectedMessage) {
             document.addEventListener("click", handleClickOutside);
-            return () =>
-                document.removeEventListener("click", handleClickOutside);
+            return () => document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedMessage]);
 
@@ -1241,8 +1145,7 @@ export function ChatModal({
             if (replyingTo) {
                 const replySender = replyingTo.senderAddress;
                 const replyPreview =
-                    replyingTo.content.slice(0, 50) +
-                    (replyingTo.content.length > 50 ? "..." : "");
+                    replyingTo.content.slice(0, 50) + (replyingTo.content.length > 50 ? "..." : "");
                 const senderDisplay =
                     replySender.toLowerCase() === userAddress.toLowerCase()
                         ? "yourself"
@@ -1250,9 +1153,7 @@ export function ChatModal({
                 messageContent = `↩️ ${senderDisplay}: "${replyPreview}"\n\n${messageContent}`;
             }
 
-            const tempId = `pending-${Date.now()}-${Math.random()
-                .toString(36)
-                .substr(2, 9)}`;
+            const tempId = `pending-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
             // Immediately add message to UI with pending status (optimistic update)
             const pendingMessage: Message = {
@@ -1279,10 +1180,10 @@ export function ChatModal({
                     const preview = messageContent.startsWith("[GIF]")
                         ? "🎬 GIF"
                         : messageContent.startsWith("[PIXEL_ART]")
-                        ? "🎨 Pixel Art"
-                        : messageContent.startsWith("[LOCATION]")
-                        ? "📍 Location"
-                        : messageContent;
+                          ? "🎨 Pixel Art"
+                          : messageContent.startsWith("[LOCATION]")
+                            ? "📍 Location"
+                            : messageContent;
                     onMessageSent?.(preview);
                     setMessages((prev) =>
                         prev.map((m) =>
@@ -1297,27 +1198,19 @@ export function ChatModal({
                     );
                 } else {
                     setMessages((prev) =>
-                        prev.map((m) =>
-                            m.id === tempId ? { ...m, status: "failed" } : m
-                        )
+                        prev.map((m) => (m.id === tempId ? { ...m, status: "failed" } : m))
                     );
-                    setChatError(
-                        `Failed to send: ${result.error || "Unknown error"}`
-                    );
+                    setChatError(`Failed to send: ${result.error || "Unknown error"}`);
                     setNewMessage(prevMessage);
                     setReplyingTo(prevReplyingTo);
                 }
             } catch (error) {
-                console.error("[Chat] Send error:", error);
+                reportError(error, { context: "chatSendMessage", silent: true });
                 setMessages((prev) =>
-                    prev.map((m) =>
-                        m.id === tempId ? { ...m, status: "failed" } : m
-                    )
+                    prev.map((m) => (m.id === tempId ? { ...m, status: "failed" } : m))
                 );
                 setChatError(
-                    `Failed to send: ${
-                        error instanceof Error ? error.message : "Unknown error"
-                    }`
+                    `Failed to send: ${error instanceof Error ? error.message : "Unknown error"}`
                 );
                 setNewMessage(prevMessage);
                 setReplyingTo(prevReplyingTo);
@@ -1352,7 +1245,7 @@ export function ChatModal({
             try {
                 await sendMessage(peerAddress, `[GIF]${gifUrl}`);
             } catch (err) {
-                console.error("Failed to send GIF:", err);
+                reportError(err, { context: "chatSendGIF", silent: true });
             }
         },
         [sendMessage, peerAddress]
@@ -1407,7 +1300,7 @@ export function ChatModal({
 
                 setShowPixelArt(false);
             } catch (error) {
-                console.error("[Chat] Pixel art error:", error);
+                reportError(error, { context: "chatPixelArt", silent: true });
                 setChatError(
                     `Failed to send pixel art: ${
                         error instanceof Error ? error.message : "Unknown error"
@@ -1434,40 +1327,40 @@ export function ChatModal({
             try {
                 // Get the encryption key for this conversation
                 const encryptionKey = await getDmEncryptionKey(peerAddress);
-                
+
                 // Encrypt the audio
                 const { encryptedBlob } = await encryptAudio(audioBlob, encryptionKey);
-                
+
                 // Upload encrypted audio
                 const formData = new FormData();
                 formData.append("file", encryptedBlob, "voice.enc");
                 formData.append("duration", duration.toString());
                 formData.append("conversationId", conversationId);
-                
+
                 const uploadResponse = await fetch("/api/upload/voice", {
                     method: "POST",
                     body: formData,
                 });
-                
+
                 if (!uploadResponse.ok) {
                     const error = await uploadResponse.json();
                     throw new Error(error.error || "Failed to upload voice memo");
                 }
-                
+
                 const uploadResult = await uploadResponse.json();
-                
+
                 // Format and send the voice message
                 const voiceMessage = formatVoiceMessage(duration, uploadResult.url);
                 const result = await sendMessage(peerAddress, voiceMessage);
-                
+
                 if (!result.success) {
                     throw new Error(result.error || "Failed to send voice message");
                 }
-                
+
                 // Track for analytics
                 trackMessageSent();
                 onMessageSent?.("🎤 Voice memo");
-                
+
                 // Add to UI immediately
                 if (result.message && userAddress) {
                     const sentMessage: Message = {
@@ -1478,11 +1371,11 @@ export function ChatModal({
                     };
                     setMessages((prev) => [...prev, sentMessage]);
                 }
-                
+
                 setShowVoiceRecorder(false);
                 log.info("Voice memo sent successfully");
             } catch (error) {
-                log.error("Voice memo error:", error);
+                reportError(error, { context: "chatVoiceMemo", silent: true });
                 setChatError(
                     `Failed to send voice memo: ${
                         error instanceof Error ? error.message : "Unknown error"
@@ -1492,7 +1385,15 @@ export function ChatModal({
                 setIsUploadingVoice(false);
             }
         },
-        [peerAddress, getDmEncryptionKey, conversationId, sendMessage, userAddress, trackMessageSent, onMessageSent]
+        [
+            peerAddress,
+            getDmEncryptionKey,
+            conversationId,
+            sendMessage,
+            userAddress,
+            trackMessageSent,
+            onMessageSent,
+        ]
     );
 
     // Handle encrypted image upload
@@ -1527,43 +1428,43 @@ export function ChatModal({
             try {
                 // Get the encryption key for this conversation
                 const encryptionKey = await getDmEncryptionKey(peerAddress);
-                
+
                 // Convert file to blob
                 const imageBlob = new Blob([await file.arrayBuffer()], { type: file.type });
-                
+
                 // Encrypt the image
                 const { encryptedBlob } = await encryptImage(imageBlob, encryptionKey);
-                
+
                 // Upload encrypted image
                 const formData = new FormData();
                 formData.append("file", encryptedBlob, "image.enc");
                 formData.append("conversationId", conversationId);
                 formData.append("originalType", file.type);
-                
+
                 const uploadResponse = await fetch("/api/upload/image", {
                     method: "POST",
                     body: formData,
                 });
-                
+
                 if (!uploadResponse.ok) {
                     const error = await uploadResponse.json();
                     throw new Error(error.error || "Failed to upload image");
                 }
-                
+
                 const uploadResult = await uploadResponse.json();
-                
+
                 // Format and send the image message
                 const imageMessage = formatEncryptedImageMessage(file.type, uploadResult.url);
                 const result = await sendMessage(peerAddress, imageMessage);
-                
+
                 if (!result.success) {
                     throw new Error(result.error || "Failed to send image");
                 }
-                
+
                 // Track for analytics
                 trackMessageSent();
                 onMessageSent?.("📷 Photo");
-                
+
                 // Add to UI immediately
                 if (result.message && userAddress) {
                     const sentMessage: Message = {
@@ -1574,10 +1475,10 @@ export function ChatModal({
                     };
                     setMessages((prev) => [...prev, sentMessage]);
                 }
-                
+
                 log.info("Encrypted image sent successfully");
             } catch (error) {
-                log.error("Image upload error:", error);
+                reportError(error, { context: "chatImageUpload", silent: true });
                 setChatError(
                     `Failed to send image: ${
                         error instanceof Error ? error.message : "Unknown error"
@@ -1591,14 +1492,20 @@ export function ChatModal({
                 }
             }
         },
-        [peerAddress, getDmEncryptionKey, conversationId, sendMessage, userAddress, trackMessageSent, onMessageSent]
+        [
+            peerAddress,
+            getDmEncryptionKey,
+            conversationId,
+            sendMessage,
+            userAddress,
+            trackMessageSent,
+            onMessageSent,
+        ]
     );
 
     // Check if a message is pixel art
-    const isPixelArtMessage = (content: string) =>
-        content.startsWith("[PIXEL_ART]");
-    const getPixelArtUrl = (content: string) =>
-        content.replace("[PIXEL_ART]", "");
+    const isPixelArtMessage = (content: string) => content.startsWith("[PIXEL_ART]");
+    const getPixelArtUrl = (content: string) => content.replace("[PIXEL_ART]", "");
 
     // Check if a message is a GIF
     const isGifMessage = (content: string) => content.startsWith("[GIF]");
@@ -1704,14 +1611,13 @@ export function ChatModal({
                 const viewportHeight = window.innerHeight;
                 const padding = 8;
 
-                let newPosition: typeof position = {};
+                const newPosition: typeof position = {};
 
                 // Check if we should show above or below
                 const spaceAbove = parentRect.top;
                 const spaceBelow = viewportHeight - parentRect.bottom;
                 const showAbove =
-                    spaceAbove >= pickerRect.height + padding ||
-                    spaceBelow < spaceAbove;
+                    spaceAbove >= pickerRect.height + padding || spaceBelow < spaceAbove;
 
                 // Horizontal positioning
                 if (isOwn) {
@@ -1788,17 +1694,13 @@ export function ChatModal({
             >
                 <div className="flex gap-1">
                     {reactionEmojis.map((emoji) => {
-                        const currentReaction = reactions?.find(
-                            (r: any) => r.emoji === emoji
-                        );
+                        const currentReaction = reactions?.find((r: any) => r.emoji === emoji);
                         return (
                             <button
                                 key={emoji}
                                 onClick={() => onReaction(emoji)}
                                 className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg hover:bg-zinc-700 transition-colors ${
-                                    currentReaction?.hasReacted
-                                        ? "bg-[#FB8D22]/30"
-                                        : ""
+                                    currentReaction?.hasReacted ? "bg-[#FB8D22]/30" : ""
                                 }`}
                             >
                                 {emoji}
@@ -1839,19 +1741,14 @@ export function ChatModal({
                             role="dialog"
                             aria-modal="true"
                             className={`bg-zinc-900 flex flex-col min-h-0 h-full overflow-hidden ${
-                                isFullscreen
-                                    ? ""
-                                    : "border border-zinc-800 rounded-2xl shadow-2xl"
+                                isFullscreen ? "" : "border border-zinc-800 rounded-2xl shadow-2xl"
                             }`}
                             style={
                                 isFullscreen
                                     ? {
-                                          paddingTop:
-                                              "env(safe-area-inset-top)",
-                                          paddingLeft:
-                                              "env(safe-area-inset-left)",
-                                          paddingRight:
-                                              "env(safe-area-inset-right)",
+                                          paddingTop: "env(safe-area-inset-top)",
+                                          paddingLeft: "env(safe-area-inset-left)",
+                                          paddingRight: "env(safe-area-inset-right)",
                                       }
                                     : undefined
                             }
@@ -1862,9 +1759,7 @@ export function ChatModal({
                                 <div className="shrink-0 ml-1 relative">
                                     <button
                                         type="button"
-                                        onClick={() =>
-                                            onOpenUserCard?.(peerAddress)
-                                        }
+                                        onClick={() => onOpenUserCard?.(peerAddress)}
                                         className="w-9 h-9 rounded-full overflow-hidden focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 focus:outline-none"
                                         aria-label="View profile"
                                     >
@@ -1903,11 +1798,19 @@ export function ChatModal({
                                         {(() => {
                                             const secondary: string[] = [];
                                             // If display name is username, show ENS below
-                                            if (peerUsername && peerName?.startsWith("@") && peerEnsName) {
+                                            if (
+                                                peerUsername &&
+                                                peerName?.startsWith("@") &&
+                                                peerEnsName
+                                            ) {
                                                 secondary.push(peerEnsName);
                                             }
                                             // If display name is ENS, show username below
-                                            if (peerEnsName && peerName === peerEnsName && peerUsername) {
+                                            if (
+                                                peerEnsName &&
+                                                peerName === peerEnsName &&
+                                                peerUsername
+                                            ) {
                                                 secondary.push(`@${peerUsername}`);
                                             }
                                             // Always show truncated address if name isn't already the address
@@ -1928,10 +1831,7 @@ export function ChatModal({
                                 <div className="shrink-0 flex items-center">
                                     {/* Muted indicator */}
                                     {conversationMuted && (
-                                        <span
-                                            className="p-2 text-zinc-500"
-                                            title="Muted"
-                                        >
+                                        <span className="p-2 text-zinc-500" title="Muted">
                                             <svg
                                                 className="w-4 h-4"
                                                 fill="none"
@@ -1993,15 +1893,9 @@ export function ChatModal({
                                         </svg>
                                     </button>
                                     <button
-                                        onClick={() =>
-                                            setIsFullscreen(!isFullscreen)
-                                        }
+                                        onClick={() => setIsFullscreen(!isFullscreen)}
                                         className="hidden sm:flex p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
-                                        aria-label={
-                                            isFullscreen
-                                                ? "Exit fullscreen"
-                                                : "Fullscreen"
-                                        }
+                                        aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
                                     >
                                         <svg
                                             className="w-5 h-5"
@@ -2056,12 +1950,10 @@ export function ChatModal({
                                     <div className="flex flex-col h-full">
                                         <div className="text-center py-4">
                                             <p className="text-zinc-400 text-sm">
-                                                Initializing secure
-                                                connection...
+                                                Initializing secure connection...
                                             </p>
                                             <p className="text-zinc-500 text-xs mt-1">
-                                                Please sign the message in your
-                                                wallet
+                                                Please sign the message in your wallet
                                             </p>
                                         </div>
                                         <ChatSkeleton messageCount={6} />
@@ -2070,69 +1962,56 @@ export function ChatModal({
 
                                 {(wakuError || chatError) && (
                                     <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-                                        <p className="text-red-400">
-                                            {wakuError || chatError}
-                                        </p>
-                                        {chatState === "error" &&
-                                            !bypassCheck && (
-                                                <button
-                                                    onClick={() =>
-                                                        setBypassCheck(true)
-                                                    }
-                                                    className="mt-3 py-2 px-4 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm transition-colors"
-                                                >
-                                                    Try Anyway
-                                                </button>
-                                            )}
+                                        <p className="text-red-400">{wakuError || chatError}</p>
+                                        {chatState === "error" && !bypassCheck && (
+                                            <button
+                                                onClick={() => setBypassCheck(true)}
+                                                className="mt-3 py-2 px-4 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm transition-colors"
+                                            >
+                                                Try Anyway
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
-                                {isInitialized &&
-                                    !chatError &&
-                                    messages.length === 0 && (
-                                        <ChatEmptyState
-                                            icon={
-                                                <svg
-                                                    className="w-8 h-8 text-[#FFBBA7]"
-                                                    fill="none"
-                                                    viewBox="0 0 24 24"
-                                                    stroke="currentColor"
-                                                >
-                                                    <path
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        strokeWidth={1.5}
-                                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                                    />
-                                                </svg>
-                                            }
-                                            title="No messages yet"
-                                            subtitle="Say hello to start the conversation!"
-                                            cta={
-                                                <div className="flex flex-wrap gap-2 justify-center">
-                                                    {[
-                                                        "Hey! 👋",
-                                                        "What's up?",
-                                                        "Let's chat!",
-                                                    ].map((suggestion) => (
+                                {isInitialized && !chatError && messages.length === 0 && (
+                                    <ChatEmptyState
+                                        icon={
+                                            <svg
+                                                className="w-8 h-8 text-[#FFBBA7]"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={1.5}
+                                                    d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+                                                />
+                                            </svg>
+                                        }
+                                        title="No messages yet"
+                                        subtitle="Say hello to start the conversation!"
+                                        cta={
+                                            <div className="flex flex-wrap gap-2 justify-center">
+                                                {["Hey! 👋", "What's up?", "Let's chat!"].map(
+                                                    (suggestion) => (
                                                         <button
                                                             key={suggestion}
                                                             type="button"
-                                                            onClick={() =>
-                                                                handleSend(
-                                                                    suggestion
-                                                                )
-                                                            }
+                                                            onClick={() => handleSend(suggestion)}
                                                             disabled={isSending}
                                                             className="px-4 py-2 rounded-xl bg-zinc-700/80 hover:bg-zinc-600 text-zinc-200 text-sm font-medium transition-colors disabled:opacity-50"
                                                         >
                                                             {suggestion}
                                                         </button>
-                                                    ))}
-                                                </div>
-                                            }
-                                        />
-                                    )}
+                                                    )
+                                                )}
+                                            </div>
+                                        }
+                                    />
+                                )}
 
                                 {/* Messages container - flows bottom to top with column-reverse */}
                                 <div className="space-y-3">
@@ -2147,32 +2026,26 @@ export function ChatModal({
                                                 ? msg.senderAddress?.toLowerCase() ===
                                                   userAddress.toLowerCase()
                                                 : false;
-                                            const isPixelArt =
-                                                isPixelArtMessage(msg.content);
-                                            const isGif = isGifMessage(
-                                                msg.content
-                                            );
-                                            const isLocation =
-                                                isLocationMessage(msg.content);
+                                            const isPixelArt = isPixelArtMessage(msg.content);
+                                            const isGif = isGifMessage(msg.content);
+                                            const isLocation = isLocationMessage(msg.content);
                                             const locationData = isLocation
-                                                ? parseLocationMessage(
-                                                      msg.content
-                                                  )
+                                                ? parseLocationMessage(msg.content)
                                                 : null;
                                             const isVoice = isVoiceMessage(msg.content);
                                             const voiceData = isVoice
                                                 ? parseVoiceMessage(msg.content)
                                                 : null;
-                                            const isEncryptedImage = isEncryptedImageMessage(msg.content);
+                                            const isEncryptedImage = isEncryptedImageMessage(
+                                                msg.content
+                                            );
                                             const encryptedImageData = isEncryptedImage
                                                 ? parseEncryptedImageMessage(msg.content)
                                                 : null;
 
                                             // Check if we need a date divider
-                                            const msgDate =
-                                                msg.sentAt.toDateString();
-                                            const showDateDivider =
-                                                msgDate !== lastDate;
+                                            const msgDate = msg.sentAt.toDateString();
+                                            const showDateDivider = msgDate !== lastDate;
                                             lastDate = msgDate;
 
                                             return (
@@ -2187,14 +2060,10 @@ export function ChatModal({
 
                                                     {/* Swipeable + Unified Menu Wrapper */}
                                                     <SwipeableMessage
-                                                        onSwipeRight={() =>
-                                                            setReplyingTo(msg)
-                                                        }
+                                                        onSwipeRight={() => setReplyingTo(msg)}
                                                         disabled={
-                                                            typeof window !==
-                                                                "undefined" &&
-                                                            window.innerWidth >
-                                                                768
+                                                            typeof window !== "undefined" &&
+                                                            window.innerWidth > 768
                                                         }
                                                         leftAction={
                                                             <svg
@@ -2206,9 +2075,7 @@ export function ChatModal({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
                                                                 />
                                                             </svg>
@@ -2235,15 +2102,15 @@ export function ChatModal({
                                                                     type="button"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        onOpenUserCard?.(peerAddress);
+                                                                        onOpenUserCard?.(
+                                                                            peerAddress
+                                                                        );
                                                                     }}
                                                                     className="flex-shrink-0 mb-1"
                                                                 >
                                                                     {peerAvatar ? (
                                                                         <img
-                                                                            src={
-                                                                                peerAvatar
-                                                                            }
+                                                                            src={peerAvatar}
                                                                             alt=""
                                                                             className="w-7 h-7 rounded-full object-cover cursor-pointer hover:opacity-80 transition-opacity"
                                                                         />
@@ -2251,10 +2118,7 @@ export function ChatModal({
                                                                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-zinc-600 to-zinc-700 flex items-center justify-center text-white text-xs font-bold cursor-pointer hover:opacity-80 transition-opacity">
                                                                             {peerName?.[0]?.toUpperCase() ||
                                                                                 peerAddress
-                                                                                    .slice(
-                                                                                        2,
-                                                                                        4
-                                                                                    )
+                                                                                    .slice(2, 4)
                                                                                     .toUpperCase()}
                                                                         </div>
                                                                     )}
@@ -2267,13 +2131,12 @@ export function ChatModal({
                                                                         : "max-w-[70%]"
                                                                 } rounded-2xl px-4 py-2.5 ${
                                                                     isOwn
-                                                                        ? msg.status ===
-                                                                          "failed"
+                                                                        ? msg.status === "failed"
                                                                             ? "bg-red-500/80 text-white rounded-br-md"
                                                                             : msg.status ===
-                                                                              "pending"
-                                                                            ? "bg-[#FF5500]/70 text-white rounded-br-md"
-                                                                            : "bg-[#FF5500] text-white rounded-br-md"
+                                                                                "pending"
+                                                                              ? "bg-[#FF5500]/70 text-white rounded-br-md"
+                                                                              : "bg-[#FF5500] text-white rounded-br-md"
                                                                         : "bg-zinc-800 text-white rounded-bl-md"
                                                                 }`}
                                                             >
@@ -2294,11 +2157,11 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
-                                                                                    canDelete: isOwn || isGlobalAdmin,
-                                                                                    hasMedia:
-                                                                                        true,
-                                                                                    isPixelArt:
-                                                                                        true,
+                                                                                    canDelete:
+                                                                                        isOwn ||
+                                                                                        isGlobalAdmin,
+                                                                                    hasMedia: true,
+                                                                                    isPixelArt: true,
                                                                                     mediaUrl:
                                                                                         getPixelArtUrl(
                                                                                             msg.content
@@ -2324,9 +2187,7 @@ export function ChatModal({
                                                                         {/* Quick Share Actions - shows on hover/tap */}
                                                                         <div
                                                                             className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                            onClick={(
-                                                                                e
-                                                                            ) =>
+                                                                            onClick={(e) =>
                                                                                 e.stopPropagation()
                                                                             }
                                                                         >
@@ -2344,11 +2205,7 @@ export function ChatModal({
                                                                                 msg.content
                                                                             )
                                                                         ]?.some(
-                                                                            (
-                                                                                r
-                                                                            ) =>
-                                                                                r.count >
-                                                                                0
+                                                                            (r) => r.count > 0
                                                                         ) && (
                                                                             <div className="flex flex-wrap gap-1.5 mt-2">
                                                                                 {reactions[
@@ -2357,9 +2214,7 @@ export function ChatModal({
                                                                                     )
                                                                                 ]
                                                                                     ?.filter(
-                                                                                        (
-                                                                                            r
-                                                                                        ) =>
+                                                                                        (r) =>
                                                                                             r.count >
                                                                                             0
                                                                                     )
@@ -2434,9 +2289,7 @@ export function ChatModal({
                                                                     }
                                                                 `}
                                                                             >
-                                                                                <span>
-                                                                                    😊
-                                                                                </span>
+                                                                                <span>😊</span>
                                                                                 <span className="hidden sm:inline">
                                                                                     React
                                                                                 </span>
@@ -2484,10 +2337,7 @@ export function ChatModal({
                                                                                     : "text-zinc-500"
                                                                             }`}
                                                                         >
-                                                                            🎨
-                                                                            Pixel
-                                                                            Art
-                                                                            •{" "}
+                                                                            🎨 Pixel Art •{" "}
                                                                             {formatTimeInTimezone(
                                                                                 msg.sentAt,
                                                                                 userTimezone
@@ -2511,9 +2361,10 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
-                                                                                    canDelete: isOwn || isGlobalAdmin,
-                                                                                    hasMedia:
-                                                                                        true,
+                                                                                    canDelete:
+                                                                                        isOwn ||
+                                                                                        isGlobalAdmin,
+                                                                                    hasMedia: true,
                                                                                     mediaUrl:
                                                                                         getGifUrl(
                                                                                             msg.content
@@ -2537,41 +2388,41 @@ export function ChatModal({
                                                                                     : "text-zinc-500"
                                                                             }`}
                                                                         >
-                                                                            🎬
-                                                                            GIF
-                                                                            •{" "}
+                                                                            🎬 GIF •{" "}
                                                                             {formatTimeInTimezone(
                                                                                 msg.sentAt,
                                                                                 userTimezone
                                                                             )}
                                                                         </p>
                                                                     </div>
-                                                                ) : isLocation &&
-                                                                  locationData ? (
+                                                                ) : isLocation && locationData ? (
                                                                     <LocationMessage
-                                                                        location={
-                                                                            locationData
-                                                                        }
-                                                                        isOwn={
-                                                                            isOwn
-                                                                        }
+                                                                        location={locationData}
+                                                                        isOwn={isOwn}
                                                                     />
-                                                                ) : isVoice &&
-                                                                  voiceData ? (
+                                                                ) : isVoice && voiceData ? (
                                                                     <VoiceMessageWrapper
                                                                         encryptedUrl={voiceData.url}
-                                                                        duration={voiceData.duration}
+                                                                        duration={
+                                                                            voiceData.duration
+                                                                        }
                                                                         isOwn={isOwn}
                                                                         peerAddress={peerAddress}
                                                                     />
                                                                 ) : isEncryptedImage &&
                                                                   encryptedImageData ? (
                                                                     <EncryptedImageMessageWrapper
-                                                                        encryptedUrl={encryptedImageData.url}
-                                                                        mimeType={encryptedImageData.mimeType}
+                                                                        encryptedUrl={
+                                                                            encryptedImageData.url
+                                                                        }
+                                                                        mimeType={
+                                                                            encryptedImageData.mimeType
+                                                                        }
                                                                         isOwn={isOwn}
                                                                         peerAddress={peerAddress}
-                                                                        onViewImage={(url) => setViewerImage(url)}
+                                                                        onViewImage={(url) =>
+                                                                            setViewerImage(url)
+                                                                        }
                                                                     />
                                                                 ) : (
                                                                     <div
@@ -2585,7 +2436,9 @@ export function ChatModal({
                                                                                     messageContent:
                                                                                         msg.content,
                                                                                     isOwn,
-                                                                                    canDelete: isOwn || isGlobalAdmin,
+                                                                                    canDelete:
+                                                                                        isOwn ||
+                                                                                        isGlobalAdmin,
                                                                                     canEdit:
                                                                                         isOwn &&
                                                                                         canEditMessage(
@@ -2601,10 +2454,10 @@ export function ChatModal({
                                                                                                   msg.content
                                                                                               )
                                                                                             : isGif
-                                                                                            ? getGifUrl(
-                                                                                                  msg.content
-                                                                                              )
-                                                                                            : undefined,
+                                                                                              ? getGifUrl(
+                                                                                                    msg.content
+                                                                                                )
+                                                                                              : undefined,
                                                                                 }
                                                                             )
                                                                         }
@@ -2679,8 +2532,7 @@ export function ChatModal({
                                                                                             ?.replace(
                                                                                                 /\"$/,
                                                                                                 ""
-                                                                                            ) ||
-                                                                                            ""}
+                                                                                            ) || ""}
                                                                                     </p>
                                                                                 </div>
                                                                             )}
@@ -2698,9 +2550,7 @@ export function ChatModal({
                                                                                           .split(
                                                                                               "\n\n"
                                                                                           )
-                                                                                          .slice(
-                                                                                              1
-                                                                                          )
+                                                                                          .slice(1)
                                                                                           .join(
                                                                                               "\n\n"
                                                                                           )
@@ -2736,63 +2586,36 @@ export function ChatModal({
                                                                                             : ""
                                                                                     }`}
                                                                                 >
-                                                                                    {
-                                                                                        displayContent
-                                                                                    }
+                                                                                    {displayContent}
                                                                                 </p>
                                                                             );
                                                                         })()}
 
                                                                         {/* Link Previews */}
-                                                                        {detectUrls(
-                                                                            msg.content
-                                                                        )
-                                                                            .slice(
-                                                                                0,
-                                                                                1
-                                                                            )
-                                                                            .map(
-                                                                                (
-                                                                                    url
-                                                                                ) => (
-                                                                                    <LinkPreview
-                                                                                        key={
-                                                                                            url
-                                                                                        }
-                                                                                        url={
-                                                                                            url
-                                                                                        }
-                                                                                    />
-                                                                                )
-                                                                            )}
+                                                                        {detectUrls(msg.content)
+                                                                            .slice(0, 1)
+                                                                            .map((url) => (
+                                                                                <LinkPreview
+                                                                                    key={url}
+                                                                                    url={url}
+                                                                                />
+                                                                            ))}
 
                                                                         {/* Message Reactions */}
-                                                                        {msgReactions[
-                                                                            msg
-                                                                                .id
-                                                                        ]?.some(
-                                                                            (
-                                                                                r
-                                                                            ) =>
-                                                                                r.count >
-                                                                                0
+                                                                        {msgReactions[msg.id]?.some(
+                                                                            (r) => r.count > 0
                                                                         ) && (
                                                                             <div
                                                                                 className="flex flex-wrap gap-1 mt-1"
-                                                                                onClick={(
-                                                                                    e
-                                                                                ) =>
+                                                                                onClick={(e) =>
                                                                                     e.stopPropagation()
                                                                                 }
                                                                             >
                                                                                 {msgReactions[
-                                                                                    msg
-                                                                                        .id
+                                                                                    msg.id
                                                                                 ]
                                                                                     ?.filter(
-                                                                                        (
-                                                                                            r
-                                                                                        ) =>
+                                                                                        (r) =>
                                                                                             r.count >
                                                                                             0
                                                                                     )
@@ -2945,9 +2768,7 @@ export function ChatModal({
                                                                                         opacity: 0,
                                                                                         scale: 0.9,
                                                                                     }}
-                                                                                    onClick={(
-                                                                                        e
-                                                                                    ) =>
+                                                                                    onClick={(e) =>
                                                                                         e.stopPropagation()
                                                                                     }
                                                                                     className={`absolute ${
@@ -3013,16 +2834,12 @@ export function ChatModal({
                                                                                         ? "right-0"
                                                                                         : "left-0"
                                                                                 } -top-12 z-20`}
-                                                                                onClick={(
-                                                                                    e
-                                                                                ) =>
+                                                                                onClick={(e) =>
                                                                                     e.stopPropagation()
                                                                                 }
                                                                             >
                                                                                 <QuickReactionPicker
-                                                                                    isOpen={
-                                                                                        true
-                                                                                    }
+                                                                                    isOpen={true}
                                                                                     onClose={() =>
                                                                                         setShowMsgReactions(
                                                                                             null
@@ -3074,15 +2891,13 @@ export function ChatModal({
                                         <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
                                     </div>
                                 )}
-                                {!isLoadingMore &&
-                                    hasMoreMessages &&
-                                    messages.length > 0 && (
-                                        <div className="flex justify-center py-2">
-                                            <span className="text-xs text-zinc-500">
-                                                Scroll up to load more
-                                            </span>
-                                        </div>
-                                    )}
+                                {!isLoadingMore && hasMoreMessages && messages.length > 0 && (
+                                    <div className="flex justify-center py-2">
+                                        <span className="text-xs text-zinc-500">
+                                            Scroll up to load more
+                                        </span>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Typing Indicator - positioned above input area */}
@@ -3157,14 +2972,14 @@ export function ChatModal({
                                     className="hidden"
                                     onChange={handleImageSelected}
                                 />
-                                
+
                                 {/* Voice Recorder */}
                                 <VoiceRecorder
                                     isOpen={showVoiceRecorder}
                                     onSend={handleSendVoice}
                                     onCancel={() => setShowVoiceRecorder(false)}
                                 />
-                                
+
                                 <div
                                     className={`flex items-center ${
                                         isFullscreen ? "gap-3" : "gap-2"
@@ -3176,18 +2991,18 @@ export function ChatModal({
                                         onPixelArt={() => setShowPixelArt(true)}
                                         onGif={handleSendGif}
                                         onLocation={async (location) => {
-                                            const locationMsg =
-                                                formatLocationMessage(location);
-                                            await sendMessage(
-                                                peerAddress,
-                                                locationMsg
-                                            );
+                                            const locationMsg = formatLocationMessage(location);
+                                            await sendMessage(peerAddress, locationMsg);
                                             onMessageSent?.("📍 Location");
                                         }}
                                         onVoice={() => setShowVoiceRecorder(true)}
                                         showLocation={true}
                                         showVoice={true}
-                                        isUploading={isUploadingPixelArt || isUploadingVoice || isUploadingImage}
+                                        isUploading={
+                                            isUploadingPixelArt ||
+                                            isUploadingVoice ||
+                                            isUploadingImage
+                                        }
                                         disabled={!isInitialized || !!chatError}
                                     />
                                     <div className="flex-1 relative">
@@ -3205,31 +3020,22 @@ export function ChatModal({
                                                     ? "Type a message..."
                                                     : "Initializing..."
                                             }
-                                            disabled={
-                                                !isInitialized || !!chatError
-                                            }
+                                            disabled={!isInitialized || !!chatError}
                                             users={[]} // DMs don't need mention suggestions
                                             poaps={userPoaps}
                                             className={`w-full pr-10 bg-zinc-800 border border-zinc-700 rounded-xl text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#FF5500]/50 focus:ring-2 focus:ring-[#FF5500]/20 transition-all disabled:opacity-50 ${
-                                                isFullscreen
-                                                    ? "py-4 px-5 text-lg"
-                                                    : "py-3 px-4"
+                                                isFullscreen ? "py-4 px-5 text-lg" : "py-3 px-4"
                                             }`}
                                         />
                                         {newMessage.length > 500 && (
                                             <p className="text-xs text-zinc-500">
-                                                {newMessage.length.toLocaleString()}{" "}
-                                                / 10,000
+                                                {newMessage.length.toLocaleString()} / 10,000
                                             </p>
                                         )}
                                         {/* Emoji Picker Button */}
                                         <button
                                             type="button"
-                                            onClick={() =>
-                                                setShowEmojiPicker(
-                                                    !showEmojiPicker
-                                                )
-                                            }
+                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                                             className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
                                         >
                                             😊
@@ -3237,13 +3043,9 @@ export function ChatModal({
                                         {/* Emoji Picker Dropdown */}
                                         <EmojiPicker
                                             isOpen={showEmojiPicker}
-                                            onClose={() =>
-                                                setShowEmojiPicker(false)
-                                            }
+                                            onClose={() => setShowEmojiPicker(false)}
                                             onSelect={(emoji) => {
-                                                setNewMessage(
-                                                    (prev) => prev + emoji
-                                                );
+                                                setNewMessage((prev) => prev + emoji);
                                             }}
                                             position="top"
                                         />
@@ -3263,9 +3065,7 @@ export function ChatModal({
                                         {isSending ? (
                                             <svg
                                                 className={`${
-                                                    isFullscreen
-                                                        ? "w-6 h-6"
-                                                        : "w-5 h-5"
+                                                    isFullscreen ? "w-6 h-6" : "w-5 h-5"
                                                 } animate-spin`}
                                                 viewBox="0 0 24 24"
                                                 fill="none"
@@ -3286,11 +3086,7 @@ export function ChatModal({
                                             </svg>
                                         ) : (
                                             <svg
-                                                className={
-                                                    isFullscreen
-                                                        ? "w-6 h-6"
-                                                        : "w-5 h-5"
-                                                }
+                                                className={isFullscreen ? "w-6 h-6" : "w-5 h-5"}
                                                 fill="none"
                                                 viewBox="0 0 24 24"
                                                 stroke="currentColor"
@@ -3306,9 +3102,8 @@ export function ChatModal({
                                     </button>
                                 </div>
                                 <p className="text-zinc-600 text-xs text-center mt-2">
-                                    Powered by{" "}
-                                    <span className="text-[#FFBBA7]">Waku</span>{" "}
-                                    • End-to-end encrypted
+                                    Powered by <span className="text-[#FFBBA7]">Waku</span> •
+                                    End-to-end encrypted
                                 </p>
                             </div>
                         </div>
@@ -3414,9 +3209,7 @@ export function ChatModal({
                                             </svg>
                                             Open Original
                                         </a>
-                                        <PixelArtShare
-                                            imageUrl={viewingImage}
-                                        />
+                                        <PixelArtShare imageUrl={viewingImage} />
                                     </div>
                                 </motion.div>
                             </motion.div>
@@ -3436,9 +3229,7 @@ export function ChatModal({
                         fetchAllMessages={() => searchAllMessages(peerAddress)}
                         onSelectMessage={(msgId) => {
                             // Scroll to message (could implement smooth scrolling)
-                            const element = document.getElementById(
-                                `msg-${msgId}`
-                            );
+                            const element = document.getElementById(`msg-${msgId}`);
                             element?.scrollIntoView({
                                 behavior: "smooth",
                                 block: "center",
@@ -3470,18 +3261,11 @@ export function ChatModal({
                         isOpen={showMuteModal}
                         onClose={() => setShowMuteModal(false)}
                         onMute={async (duration) => {
-                            const success = await muteConversation(
-                                "dm",
-                                peerAddress,
-                                duration
-                            );
+                            const success = await muteConversation("dm", peerAddress, duration);
                             return success;
                         }}
                         onUnmute={async () => {
-                            const success = await unmuteConversation(
-                                "dm",
-                                peerAddress
-                            );
+                            const success = await unmuteConversation("dm", peerAddress);
                             return success;
                         }}
                         isMuted={conversationMuted}
@@ -3536,7 +3320,10 @@ export function ChatModal({
                             onReaction: selectedMessageConfig
                                 ? (emoji) => {
                                       // Pixel art uses IPFS-URL based reactions; regular messages use message-ID based
-                                      if (selectedMessageConfig.isPixelArt && selectedMessageConfig.mediaUrl) {
+                                      if (
+                                          selectedMessageConfig.isPixelArt &&
+                                          selectedMessageConfig.mediaUrl
+                                      ) {
                                           handleReaction(selectedMessageConfig.mediaUrl, emoji);
                                       } else {
                                           toggleMsgReaction(selectedMessageConfig.messageId, emoji);
@@ -3546,21 +3333,17 @@ export function ChatModal({
                             onReply: selectedMessageConfig
                                 ? () => {
                                       const msg = messages.find(
-                                          (m) =>
-                                              m.id ===
-                                              selectedMessageConfig.messageId
+                                          (m) => m.id === selectedMessageConfig.messageId
                                       );
                                       if (msg) setReplyingTo(msg);
                                   }
                                 : undefined,
                             onCopy: () => {},
-                            onDelete: (selectedMessageConfig?.canDelete)
+                            onDelete: selectedMessageConfig?.canDelete
                                 ? async () => {
                                       const msgId = selectedMessageConfig?.messageId;
                                       // Optimistic removal from UI
-                                      setMessages((prev) =>
-                                          prev.filter((m) => m.id !== msgId)
-                                      );
+                                      setMessages((prev) => prev.filter((m) => m.id !== msgId));
                                       // Soft delete on backend
                                       try {
                                           await fetch("/api/messages/delete", {
@@ -3570,7 +3353,10 @@ export function ChatModal({
                                               credentials: "include",
                                           });
                                       } catch (err) {
-                                          console.error("[Chat] Failed to delete message:", err);
+                                          reportError(err, {
+                                              context: "chatDeleteMessage",
+                                              silent: true,
+                                          });
                                       }
                                   }
                                 : undefined,
@@ -3614,8 +3400,18 @@ export function ChatModal({
                                     onClick={() => setShowDMMembers(false)}
                                     className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
                                 >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    <svg
+                                        className="w-5 h-5"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M6 18L18 6M6 6l12 12"
+                                        />
                                     </svg>
                                 </button>
                             </div>
@@ -3626,20 +3422,30 @@ export function ChatModal({
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-[#FFF0E0]">You</p>
-                                        <p className="text-xs text-zinc-500 font-mono truncate">{userAddressLabel}</p>
+                                        <p className="text-xs text-zinc-500 font-mono truncate">
+                                            {userAddressLabel}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-zinc-800/50">
                                     {peerAvatar ? (
-                                        <img src={peerAvatar} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                                        <img
+                                            src={peerAvatar}
+                                            alt=""
+                                            className="w-10 h-10 rounded-full object-cover shrink-0"
+                                        />
                                     ) : (
                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FB8D22] to-[#FF5500] flex items-center justify-center text-white font-bold text-sm shrink-0">
                                             {displayName[0].toUpperCase()}
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-zinc-300 truncate">{displayName}</p>
-                                        <p className="text-xs text-zinc-500 font-mono truncate">{peerAddressLabel}</p>
+                                        <p className="text-sm font-medium text-zinc-300 truncate">
+                                            {displayName}
+                                        </p>
+                                        <p className="text-xs text-zinc-500 font-mono truncate">
+                                            {peerAddressLabel}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
