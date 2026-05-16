@@ -1179,11 +1179,12 @@ export function WakuProvider({
         return false;
     }, [userAddress, isInitialized, isInitializing]);
 
-    // Auto-initialize Waku when SDK is loaded and we have a user address
     useEffect(() => {
         if (sdkLoaded && userAddress && !isInitialized && !isInitializing) {
             log.debug("[Waku] Auto-initializing...");
-            initialize();
+            initialize().catch((err) => {
+                log.error("[Waku] Auto-initialization failed:", err);
+            });
         }
     }, [sdkLoaded, userAddress, isInitialized, isInitializing, initialize]);
 

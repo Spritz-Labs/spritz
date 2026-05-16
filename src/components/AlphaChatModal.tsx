@@ -686,10 +686,10 @@ export function AlphaChatModal({
         }
     }, [selectedUser]);
 
-    // Auto-focus input when replying to a message
     useEffect(() => {
         if (replyingTo) {
-            setTimeout(() => inputRef.current?.focus(), 50);
+            const t = setTimeout(() => inputRef.current?.focus(), 50);
+            return () => clearTimeout(t);
         }
     }, [replyingTo]);
 

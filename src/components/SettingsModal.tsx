@@ -4,10 +4,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { type UserSettings } from "@/hooks/useUserSettings";
 import { useCalendar } from "@/hooks/useCalendar";
-import {
-    useAddressBook,
-    type AddressBookEntry,
-} from "@/hooks/useSendSuggestions";
+import { useNotificationPreferences } from "@/hooks/useNotificationPreferences";
+import { useAddressBook, type AddressBookEntry } from "@/hooks/useSendSuggestions";
 import { AvailabilityWindowsModal } from "./AvailabilityWindowsModal";
 import { KeyBackupModal } from "./KeyBackupModal";
 import { PasskeyManager } from "./PasskeyManager";
@@ -106,8 +104,18 @@ export function SettingsModal({
     const [showAddressBook, setShowAddressBook] = useState(false);
     const [showRegistrationPrefs, setShowRegistrationPrefs] = useState(false);
 
+    const { prefs: notifPrefs, updatePrefs: updateNotifPrefs } = useNotificationPreferences(
+        userAddress || ""
+    );
+
     // Developer API keys
-    type DevKey = { id: string; name: string; status: string; api_key_preview: string; created_at: string };
+    type DevKey = {
+        id: string;
+        name: string;
+        status: string;
+        api_key_preview: string;
+        created_at: string;
+    };
     const [developerKeys, setDeveloperKeys] = useState<DevKey[]>([]);
     const [developerKeysLoading, setDeveloperKeysLoading] = useState(false);
     const [developerKeysCreating, setDeveloperKeysCreating] = useState(false);
@@ -127,17 +135,13 @@ export function SettingsModal({
     const [newAddressValue, setNewAddressValue] = useState("");
     const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
     const [editingLabel, setEditingLabel] = useState("");
-    const [addressBookError, setAddressBookError] = useState<string | null>(
-        null
-    );
+    const [addressBookError, setAddressBookError] = useState<string | null>(null);
 
     const [isAddingAddress, setIsAddingAddress] = useState(false);
 
     // Check if input looks like an ENS name
     const isEnsName = useCallback((input: string) => {
-        return /\.(eth|xyz|com|org|id|art|luxury|kred|club|luxe|reverse)$/i.test(
-            input.trim()
-        );
+        return /\.(eth|xyz|com|org|id|art|luxury|kred|club|luxe|reverse)$/i.test(input.trim());
     }, []);
 
     // Handle adding new address to address book
@@ -151,9 +155,7 @@ export function SettingsModal({
 
         // Basic validation - must be either a valid address or look like an ENS name
         if (!isAddress(input) && !isEnsName(input)) {
-            setAddressBookError(
-                "Enter a valid address (0x...) or ENS name (e.g., vitalik.eth)"
-            );
+            setAddressBookError("Enter a valid address (0x...) or ENS name (e.g., vitalik.eth)");
             return;
         }
 
@@ -167,9 +169,7 @@ export function SettingsModal({
             setNewAddressLabel("");
             setNewAddressValue("");
         } catch (err) {
-            setAddressBookError(
-                err instanceof Error ? err.message : "Failed to add"
-            );
+            setAddressBookError(err instanceof Error ? err.message : "Failed to add");
         } finally {
             setIsAddingAddress(false);
         }
@@ -219,7 +219,10 @@ export function SettingsModal({
             .then((res) => res.json())
             .then((data) => {
                 if (data.keys) setDeveloperKeys(data.keys);
-                if (data.error) setDeveloperKeysError(data.details ? `${data.error}: ${data.details}` : data.error);
+                if (data.error)
+                    setDeveloperKeysError(
+                        data.details ? `${data.error}: ${data.details}` : data.error
+                    );
             })
             .catch(() => setDeveloperKeysError("Failed to load API keys"))
             .finally(() => setDeveloperKeysLoading(false));
@@ -259,9 +262,14 @@ export function SettingsModal({
     const handleRevokeApiKey = useCallback(async (id: string) => {
         if (!confirm("Revoke this API key? It will stop working immediately.")) return;
         try {
-            const res = await fetch(`/api/developer/keys/${id}`, { method: "DELETE", credentials: "include" });
+            const res = await fetch(`/api/developer/keys/${id}`, {
+                method: "DELETE",
+                credentials: "include",
+            });
             if (!res.ok) throw new Error("Failed to revoke");
-            setDeveloperKeys((prev) => prev.map((k) => (k.id === id ? { ...k, status: "revoked" } : k)));
+            setDeveloperKeys((prev) =>
+                prev.map((k) => (k.id === id ? { ...k, status: "revoked" } : k))
+            );
         } catch {
             setDeveloperKeysError("Failed to revoke key");
         }
@@ -269,9 +277,14 @@ export function SettingsModal({
 
     // ENS subname state
     const [ensStatus, setEnsStatus] = useState<{
-        enabled: boolean; eligible: boolean; reason?: string;
-        claimed: boolean; subname: string | null; resolveAddress?: string;
-        username?: string; walletType?: string;
+        enabled: boolean;
+        eligible: boolean;
+        reason?: string;
+        claimed: boolean;
+        subname: string | null;
+        resolveAddress?: string;
+        username?: string;
+        walletType?: string;
         fundsNotice?: string;
         eoaOnlyMode?: boolean;
     } | null>(null);
@@ -304,7 +317,16 @@ export function SettingsModal({
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to claim");
             setEnsSuccess(`Claimed ${data.subname}`);
-            setEnsStatus((prev) => prev ? { ...prev, claimed: true, subname: data.subname, resolveAddress: data.resolveAddress } : prev);
+            setEnsStatus((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          claimed: true,
+                          subname: data.subname,
+                          resolveAddress: data.resolveAddress,
+                      }
+                    : prev
+            );
         } catch (e) {
             setEnsError(e instanceof Error ? e.message : "Failed to claim subname");
         } finally {
@@ -314,10 +336,7 @@ export function SettingsModal({
 
     // Resize image for avatar (ensure high quality)
     // Increased to 1024px and 95% quality for sharper profile photos
-    const resizeImageForAvatar = (
-        file: File,
-        maxSize: number = 1024
-    ): Promise<Blob> => {
+    const resizeImageForAvatar = (file: File, maxSize: number = 1024): Promise<Blob> => {
         return new Promise((resolve, reject) => {
             const img = new Image();
             const canvas = document.createElement("canvas");
@@ -344,17 +363,7 @@ export function SettingsModal({
                 ctx.imageSmoothingQuality = "high";
 
                 // Draw cropped and resized image
-                ctx.drawImage(
-                    img,
-                    sx,
-                    sy,
-                    size,
-                    size,
-                    0,
-                    0,
-                    targetSize,
-                    targetSize
-                );
+                ctx.drawImage(img, sx, sy, size, size, 0, 0, targetSize, targetSize);
 
                 // Convert to blob with high quality
                 canvas.toBlob(
@@ -376,9 +385,7 @@ export function SettingsModal({
     };
 
     // Handle avatar file upload
-    const handleAvatarUpload = async (
-        e: React.ChangeEvent<HTMLInputElement>
-    ) => {
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !userAddress) return;
 
@@ -418,9 +425,7 @@ export function SettingsModal({
             const { url } = await res.json();
             onSetCustomAvatar(url);
         } catch (err) {
-            setAvatarError(
-                err instanceof Error ? err.message : "Upload failed"
-            );
+            setAvatarError(err instanceof Error ? err.message : "Upload failed");
         } finally {
             setIsUploadingAvatar(false);
             // Reset input
@@ -484,11 +489,7 @@ export function SettingsModal({
     // Load scheduling settings
     useEffect(() => {
         if (userAddress && isOpen) {
-            fetch(
-                `/api/scheduling/settings?userAddress=${encodeURIComponent(
-                    userAddress
-                )}`
-            )
+            fetch(`/api/scheduling/settings?userAddress=${encodeURIComponent(userAddress)}`)
                 .then((res) => res.json())
                 .then((data) => {
                     if (data.scheduling_enabled !== undefined) {
@@ -496,40 +497,22 @@ export function SettingsModal({
                         setSchedulingSlug(data.scheduling_slug || "");
                         setSchedulingTitle(data.scheduling_title || "");
                         setSchedulingBio(data.scheduling_bio || "");
-                        setSchedulingFreeEnabled(
-                            data.scheduling_free_enabled ?? true
-                        );
-                        setSchedulingPaidEnabled(
-                            data.scheduling_paid_enabled ?? false
-                        );
-                        setSchedulingFreeDuration(
-                            data.scheduling_free_duration_minutes || 15
-                        );
-                        setSchedulingPaidDuration(
-                            data.scheduling_paid_duration_minutes || 30
-                        );
+                        setSchedulingFreeEnabled(data.scheduling_free_enabled ?? true);
+                        setSchedulingPaidEnabled(data.scheduling_paid_enabled ?? false);
+                        setSchedulingFreeDuration(data.scheduling_free_duration_minutes || 15);
+                        setSchedulingPaidDuration(data.scheduling_paid_duration_minutes || 30);
                         setSchedulingPrice(data.scheduling_price_cents || 0);
-                        setSchedulingWallet(
-                            data.scheduling_wallet_address || ""
-                        );
+                        setSchedulingWallet(data.scheduling_wallet_address || "");
                         setSchedulingNetwork(data.scheduling_network || "base");
                         // Initialize input strings - always set them, never leave empty
                         // Only update if inputs are not currently focused to avoid interrupting user typing
-                        const freeDur =
-                            data.scheduling_free_duration_minutes || 15;
-                        const paidDur =
-                            data.scheduling_paid_duration_minutes || 30;
+                        const freeDur = data.scheduling_free_duration_minutes || 15;
+                        const paidDur = data.scheduling_paid_duration_minutes || 30;
                         const price = data.scheduling_price_cents || 0;
-                        if (
-                            document.activeElement !==
-                            freeDurationInputRef.current
-                        ) {
+                        if (document.activeElement !== freeDurationInputRef.current) {
                             setFreeDurationInput(freeDur.toString());
                         }
-                        if (
-                            document.activeElement !==
-                            paidDurationInputRef.current
-                        ) {
+                        if (document.activeElement !== paidDurationInputRef.current) {
                             setPaidDurationInput(paidDur.toString());
                         }
                         if (document.activeElement !== priceInputRef.current) {
@@ -538,10 +521,7 @@ export function SettingsModal({
                     }
                 })
                 .catch((err) =>
-                    console.error(
-                        "[Settings] Failed to load scheduling settings:",
-                        err
-                    )
+                    console.error("[Settings] Failed to load scheduling settings:", err)
                 );
         }
     }, [userAddress, isOpen]);
@@ -576,17 +556,13 @@ export function SettingsModal({
             const data = await res.json();
 
             if (!res.ok) {
-                throw new Error(
-                    data.error || "Failed to save scheduling settings"
-                );
+                throw new Error(data.error || "Failed to save scheduling settings");
             }
 
             setSchedulingSaved(true);
             setTimeout(() => setSchedulingSaved(false), 2000);
         } catch (err) {
-            setSchedulingError(
-                err instanceof Error ? err.message : "Failed to save settings"
-            );
+            setSchedulingError(err instanceof Error ? err.message : "Failed to save settings");
         } finally {
             setSchedulingLoading(false);
         }
@@ -648,9 +624,7 @@ export function SettingsModal({
                                                 />
                                             </svg>
                                         </div>
-                                        <h2 className="text-xl font-bold text-white">
-                                            Settings
-                                        </h2>
+                                        <h2 className="text-xl font-bold text-white">Settings</h2>
                                     </div>
                                     <button
                                         onClick={onClose}
@@ -687,8 +661,7 @@ export function SettingsModal({
                                                 <div className="relative">
                                                     {(settings.useCustomAvatar &&
                                                         settings.customAvatarUrl) ||
-                                                    (!settings.useCustomAvatar &&
-                                                        ensAvatar) ? (
+                                                    (!settings.useCustomAvatar && ensAvatar) ? (
                                                         <img
                                                             src={
                                                                 settings.useCustomAvatar
@@ -702,12 +675,8 @@ export function SettingsModal({
                                                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center border-2 border-zinc-700">
                                                             <span className="text-white text-xl font-bold">
                                                                 {userAddress
-                                                                    ?.slice(
-                                                                        2,
-                                                                        4
-                                                                    )
-                                                                    .toUpperCase() ||
-                                                                    "?"}
+                                                                    ?.slice(2, 4)
+                                                                    .toUpperCase() || "?"}
                                                             </span>
                                                         </div>
                                                     )}
@@ -728,9 +697,7 @@ export function SettingsModal({
                                                             ref={avatarInputRef}
                                                             type="file"
                                                             accept="image/*"
-                                                            onChange={
-                                                                handleAvatarUpload
-                                                            }
+                                                            onChange={handleAvatarUpload}
                                                             className="hidden"
                                                             id="avatar-upload"
                                                         />
@@ -738,9 +705,7 @@ export function SettingsModal({
                                                             onClick={() =>
                                                                 avatarInputRef.current?.click()
                                                             }
-                                                            disabled={
-                                                                isUploadingAvatar
-                                                            }
+                                                            disabled={isUploadingAvatar}
                                                             className="px-3 py-1.5 text-xs rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white transition-colors disabled:opacity-50"
                                                         >
                                                             {isUploadingAvatar
@@ -750,9 +715,7 @@ export function SettingsModal({
                                                         {settings.customAvatarUrl && (
                                                             <button
                                                                 onClick={() =>
-                                                                    onSetCustomAvatar(
-                                                                        null
-                                                                    )
+                                                                    onSetCustomAvatar(null)
                                                                 }
                                                                 className="px-3 py-1.5 text-xs rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
                                                             >
@@ -769,13 +732,10 @@ export function SettingsModal({
                                             </div>
 
                                             {/* Toggle ENS vs Custom Avatar */}
-                                            {(settings.customAvatarUrl ||
-                                                ensAvatar) && (
+                                            {(settings.customAvatarUrl || ensAvatar) && (
                                                 <div className="mt-3 pt-3 border-t border-zinc-700/50">
                                                     <button
-                                                        onClick={
-                                                            onToggleUseCustomAvatar
-                                                        }
+                                                        onClick={onToggleUseCustomAvatar}
                                                         disabled={
                                                             settings.useCustomAvatar
                                                                 ? !ensAvatar
@@ -834,12 +794,9 @@ export function SettingsModal({
                                                     {settings.statusEmoji}
                                                 </div>
                                                 <div className="text-left">
-                                                    <p className="text-white font-medium">
-                                                        Status
-                                                    </p>
+                                                    <p className="text-white font-medium">Status</p>
                                                     <p className="text-zinc-500 text-xs truncate max-w-[150px]">
-                                                        {settings.statusText ||
-                                                            "Set your status"}
+                                                        {settings.statusText || "Set your status"}
                                                     </p>
                                                 </div>
                                             </div>
@@ -894,8 +851,7 @@ export function SettingsModal({
                                                         Invites
                                                     </p>
                                                     <p className="text-zinc-500 text-xs">
-                                                        Earn 100 pts per
-                                                        referral
+                                                        Earn 100 pts per referral
                                                     </p>
                                                 </div>
                                             </div>
@@ -945,9 +901,7 @@ export function SettingsModal({
                                                             Get email updates
                                                         </p>
                                                         <p className="text-zinc-500 text-xs">
-                                                            Product news and
-                                                            updates at{" "}
-                                                            {userEmail}
+                                                            Product news and updates at {userEmail}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -981,24 +935,19 @@ export function SettingsModal({
 
                                         {/* Registration Preferences */}
                                         <button
-                                            onClick={() =>
-                                                setShowRegistrationPrefs(true)
-                                            }
+                                            onClick={() => setShowRegistrationPrefs(true)}
                                             className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
                                         >
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                                                    <span className="text-lg">
-                                                        🎫
-                                                    </span>
+                                                    <span className="text-lg">🎫</span>
                                                 </div>
                                                 <div className="text-left">
                                                     <p className="text-white font-medium">
                                                         Event Registration
                                                     </p>
                                                     <p className="text-zinc-500 text-xs">
-                                                        Save info for quick
-                                                        registration
+                                                        Save info for quick registration
                                                     </p>
                                                 </div>
                                             </div>
@@ -1088,10 +1037,8 @@ export function SettingsModal({
                                         </button>
                                         {!isHuddle01Configured && (
                                             <p className="text-amber-500/80 text-xs mt-2 px-4">
-                                                Set
-                                                NEXT_PUBLIC_HUDDLE01_PROJECT_ID
-                                                and NEXT_PUBLIC_HUDDLE01_API_KEY
-                                                to enable
+                                                Set NEXT_PUBLIC_HUDDLE01_PROJECT_ID and
+                                                NEXT_PUBLIC_HUDDLE01_API_KEY to enable
                                             </p>
                                         )}
 
@@ -1099,16 +1046,12 @@ export function SettingsModal({
                                         <MessagingKeyStatus
                                             userAddress={userAddress}
                                             authType={authType}
-                                            passkeyCredentialId={
-                                                passkeyCredentialId
-                                            }
+                                            passkeyCredentialId={passkeyCredentialId}
                                         />
 
                                         {/* Passkeys */}
                                         <button
-                                            onClick={() =>
-                                                setShowPasskeyManager(true)
-                                            }
+                                            onClick={() => setShowPasskeyManager(true)}
                                             className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
                                         >
                                             <div className="flex items-center gap-3">
@@ -1153,9 +1096,7 @@ export function SettingsModal({
 
                                         {/* Address Book */}
                                         <button
-                                            onClick={() =>
-                                                setShowAddressBook(true)
-                                            }
+                                            onClick={() => setShowAddressBook(true)}
                                             className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors mt-2"
                                         >
                                             <div className="flex items-center gap-3">
@@ -1179,13 +1120,11 @@ export function SettingsModal({
                                                         Address Book
                                                     </p>
                                                     <p className="text-zinc-500 text-xs">
-                                                        {addressBookEntries.length >
-                                                        0
+                                                        {addressBookEntries.length > 0
                                                             ? `${
                                                                   addressBookEntries.length
                                                               } saved address${
-                                                                  addressBookEntries.length ===
-                                                                  1
+                                                                  addressBookEntries.length === 1
                                                                       ? ""
                                                                       : "es"
                                                               }`
@@ -1222,9 +1161,7 @@ export function SettingsModal({
                                         >
                                             <div className="flex items-center gap-3">
                                                 <span className="text-xl">
-                                                    {settings.soundEnabled
-                                                        ? "🔊"
-                                                        : "🔇"}
+                                                    {settings.soundEnabled ? "🔊" : "🔇"}
                                                 </span>
                                                 <div className="text-left">
                                                     <p className="text-white font-medium">
@@ -1258,26 +1195,20 @@ export function SettingsModal({
                                                 <button
                                                     onClick={handlePushToggle}
                                                     disabled={
-                                                        pushLoading ||
-                                                        pushPermission ===
-                                                            "denied"
+                                                        pushLoading || pushPermission === "denied"
                                                     }
                                                     className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors disabled:opacity-50"
                                                 >
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-xl">
-                                                            {pushSubscribed
-                                                                ? "🔔"
-                                                                : "🔕"}
+                                                            {pushSubscribed ? "🔔" : "🔕"}
                                                         </span>
                                                         <div className="text-left">
                                                             <p className="text-white font-medium">
-                                                                Push
-                                                                Notifications
+                                                                Push Notifications
                                                             </p>
                                                             <p className="text-zinc-500 text-xs">
-                                                                {pushPermission ===
-                                                                "denied"
+                                                                {pushPermission === "denied"
                                                                     ? "Blocked in browser settings"
                                                                     : "Get notified of incoming calls"}
                                                             </p>
@@ -1311,27 +1242,134 @@ export function SettingsModal({
                                             </div>
                                         )}
 
+                                        {/* Notification Preferences */}
+                                        {pushSubscribed && (
+                                            <div className="mt-3 space-y-2">
+                                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider px-1">
+                                                    Notification Types
+                                                </p>
+                                                {(
+                                                    [
+                                                        ["notifyDms", "Direct Messages"],
+                                                        ["notifyGroups", "Group Messages"],
+                                                        ["notifyChannels", "Channel Messages"],
+                                                        ["notifyCalls", "Incoming Calls"],
+                                                    ] as const
+                                                ).map(([key, label]) => (
+                                                    <button
+                                                        key={key}
+                                                        onClick={() =>
+                                                            updateNotifPrefs({
+                                                                [key]: !notifPrefs[key],
+                                                            })
+                                                        }
+                                                        className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
+                                                    >
+                                                        <span className="text-sm text-zinc-300">
+                                                            {label}
+                                                        </span>
+                                                        <div
+                                                            className={`w-10 h-6 rounded-full transition-colors relative ${
+                                                                notifPrefs[key]
+                                                                    ? "bg-[#FF5500]"
+                                                                    : "bg-zinc-700"
+                                                            }`}
+                                                        >
+                                                            <div
+                                                                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                                                                    notifPrefs[key]
+                                                                        ? "translate-x-5"
+                                                                        : "translate-x-0.5"
+                                                                }`}
+                                                            />
+                                                        </div>
+                                                    </button>
+                                                ))}
+
+                                                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider px-1 pt-2">
+                                                    Quiet Hours
+                                                </p>
+                                                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-800/50">
+                                                    <span className="text-sm text-zinc-300 flex-shrink-0">
+                                                        From
+                                                    </span>
+                                                    <select
+                                                        value={notifPrefs.quietStart ?? ""}
+                                                        onChange={(e) =>
+                                                            updateNotifPrefs({
+                                                                quietStart:
+                                                                    e.target.value === ""
+                                                                        ? null
+                                                                        : Number(e.target.value),
+                                                            })
+                                                        }
+                                                        className="bg-zinc-700 text-white text-sm rounded-lg px-2 py-1 border border-zinc-600 flex-1"
+                                                    >
+                                                        <option value="">Off</option>
+                                                        {Array.from({ length: 24 }, (_, i) => (
+                                                            <option key={i} value={i}>
+                                                                {i === 0
+                                                                    ? "12 AM"
+                                                                    : i < 12
+                                                                      ? `${i} AM`
+                                                                      : i === 12
+                                                                        ? "12 PM"
+                                                                        : `${i - 12} PM`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <span className="text-sm text-zinc-300 flex-shrink-0">
+                                                        to
+                                                    </span>
+                                                    <select
+                                                        value={notifPrefs.quietEnd ?? ""}
+                                                        onChange={(e) =>
+                                                            updateNotifPrefs({
+                                                                quietEnd:
+                                                                    e.target.value === ""
+                                                                        ? null
+                                                                        : Number(e.target.value),
+                                                            })
+                                                        }
+                                                        className="bg-zinc-700 text-white text-sm rounded-lg px-2 py-1 border border-zinc-600 flex-1"
+                                                    >
+                                                        <option value="">Off</option>
+                                                        {Array.from({ length: 24 }, (_, i) => (
+                                                            <option key={i} value={i}>
+                                                                {i === 0
+                                                                    ? "12 AM"
+                                                                    : i < 12
+                                                                      ? `${i} AM`
+                                                                      : i === 12
+                                                                        ? "12 PM"
+                                                                        : `${i - 12} PM`}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <p className="text-zinc-600 text-xs px-4">
+                                                    No notifications during quiet hours (your local
+                                                    time).
+                                                </p>
+                                            </div>
+                                        )}
+
                                         {/* Check for App Updates - only show for PWA */}
                                         {typeof window !== "undefined" &&
-                                            (window.matchMedia(
-                                                "(display-mode: standalone)"
-                                            ).matches ||
+                                            (window.matchMedia("(display-mode: standalone)")
+                                                .matches ||
                                                 // @ts-expect-error - iOS Safari specific
-                                                window.navigator.standalone ===
-                                                    true) && (
+                                                window.navigator.standalone === true) && (
                                                 <div className="mt-2">
                                                     <button
                                                         onClick={async () => {
                                                             try {
                                                                 const registration =
-                                                                    await navigator
-                                                                        .serviceWorker
+                                                                    await navigator.serviceWorker
                                                                         .ready;
                                                                 await registration.update();
 
-                                                                if (
-                                                                    registration.waiting
-                                                                ) {
+                                                                if (registration.waiting) {
                                                                     // New version available - reload
                                                                     registration.waiting.postMessage(
                                                                         {
@@ -1358,18 +1396,13 @@ export function SettingsModal({
                                                         className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
                                                     >
                                                         <div className="flex items-center gap-3">
-                                                            <span className="text-xl">
-                                                                🔄
-                                                            </span>
+                                                            <span className="text-xl">🔄</span>
                                                             <div className="text-left">
                                                                 <p className="text-white font-medium">
-                                                                    Check for
-                                                                    Updates
+                                                                    Check for Updates
                                                                 </p>
                                                                 <p className="text-zinc-500 text-xs">
-                                                                    Manually
-                                                                    check for
-                                                                    app updates
+                                                                    Manually check for app updates
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -1399,27 +1432,21 @@ export function SettingsModal({
 
                                         {/* Set Availability Windows */}
                                         <button
-                                            onClick={() =>
-                                                setShowAvailabilityModal(true)
-                                            }
+                                            onClick={() => setShowAvailabilityModal(true)}
                                             className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <span className="text-xl">
-                                                    🕐
-                                                </span>
+                                                <span className="text-xl">🕐</span>
                                                 <div className="text-left">
                                                     <p className="text-white font-medium">
                                                         Availability Windows
                                                     </p>
                                                     <p className="text-zinc-500 text-xs">
-                                                        {availabilityWindows.length >
-                                                        0
+                                                        {availabilityWindows.length > 0
                                                             ? `${
                                                                   availabilityWindows.length
                                                               } time slot${
-                                                                  availabilityWindows.length >
-                                                                  1
+                                                                  availabilityWindows.length > 1
                                                                       ? "s"
                                                                       : ""
                                                               } configured`
@@ -1428,12 +1455,9 @@ export function SettingsModal({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                {availabilityWindows.length >
-                                                    0 && (
+                                                {availabilityWindows.length > 0 && (
                                                     <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
-                                                        {
-                                                            availabilityWindows.length
-                                                        }
+                                                        {availabilityWindows.length}
                                                     </span>
                                                 )}
                                                 <svg
@@ -1475,17 +1499,14 @@ export function SettingsModal({
                                                                     <path
                                                                         strokeLinecap="round"
                                                                         strokeLinejoin="round"
-                                                                        strokeWidth={
-                                                                            2
-                                                                        }
+                                                                        strokeWidth={2}
                                                                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                                                                     />
                                                                 </svg>
                                                             </div>
                                                             <div className="text-left flex-1">
                                                                 <p className="text-white font-medium text-sm">
-                                                                    Google
-                                                                    Calendar
+                                                                    Google Calendar
                                                                 </p>
                                                                 <p className="text-zinc-500 text-xs">
                                                                     {connection?.calendar_email ||
@@ -1493,8 +1514,7 @@ export function SettingsModal({
                                                                 </p>
                                                                 {connection?.last_sync_at && (
                                                                     <p className="text-zinc-600 text-xs mt-0.5">
-                                                                        Last
-                                                                        synced:{" "}
+                                                                        Last synced:{" "}
                                                                         {new Date(
                                                                             connection.last_sync_at
                                                                         ).toLocaleDateString()}
@@ -1511,37 +1531,24 @@ export function SettingsModal({
                                                     </div>
                                                     <div className="flex gap-2">
                                                         <button
-                                                            onClick={
-                                                                connectCalendar
-                                                            }
-                                                            disabled={
-                                                                calendarLoading
-                                                            }
+                                                            onClick={connectCalendar}
+                                                            disabled={calendarLoading}
                                                             className="flex-1 px-3 py-2 text-xs rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 transition-colors disabled:opacity-50"
                                                             title="Reconnect calendar"
                                                         >
-                                                            {calendarLoading
-                                                                ? "..."
-                                                                : "Reconnect"}
+                                                            {calendarLoading ? "..." : "Reconnect"}
                                                         </button>
                                                         <button
-                                                            onClick={
-                                                                disconnectCalendar
-                                                            }
-                                                            disabled={
-                                                                calendarLoading
-                                                            }
+                                                            onClick={disconnectCalendar}
+                                                            disabled={calendarLoading}
                                                             className="flex-1 px-3 py-2 text-xs rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors disabled:opacity-50"
                                                             title="Disconnect calendar"
                                                         >
-                                                            {calendarLoading
-                                                                ? "..."
-                                                                : "Disconnect"}
+                                                            {calendarLoading ? "..." : "Disconnect"}
                                                         </button>
                                                     </div>
                                                     <p className="text-zinc-600 text-xs mt-2">
-                                                        Syncs busy times to
-                                                        prevent double-booking
+                                                        Syncs busy times to prevent double-booking
                                                     </p>
                                                 </div>
                                             ) : (
@@ -1561,22 +1568,17 @@ export function SettingsModal({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                                                                 />
                                                             </svg>
                                                         </div>
                                                         <div className="text-left">
                                                             <p className="text-white font-medium">
-                                                                Connect Google
-                                                                Calendar
+                                                                Connect Google Calendar
                                                             </p>
                                                             <p className="text-zinc-500 text-xs">
-                                                                Optional: Sync
-                                                                busy times to
-                                                                prevent
+                                                                Optional: Sync busy times to prevent
                                                                 conflicts
                                                             </p>
                                                         </div>
@@ -1613,8 +1615,7 @@ export function SettingsModal({
                                                             <code className="bg-red-500/20 px-1 rounded">
                                                                 google_calendar.sql
                                                             </code>{" "}
-                                                            migration in
-                                                            Supabase.
+                                                            migration in Supabase.
                                                         </p>
                                                     )}
                                                 </div>
@@ -1635,8 +1636,7 @@ export function SettingsModal({
                                                     // Check if email is required and not present
                                                     if (
                                                         !schedulingEnabled &&
-                                                        (!userEmail ||
-                                                            !isEmailVerified)
+                                                        (!userEmail || !isEmailVerified)
                                                     ) {
                                                         setSchedulingError(
                                                             "Email verification is required to enable scheduling. Please verify your email first."
@@ -1646,23 +1646,18 @@ export function SettingsModal({
                                                         }, 500);
                                                         return;
                                                     }
-                                                    setSchedulingEnabled(
-                                                        !schedulingEnabled
-                                                    );
+                                                    setSchedulingEnabled(!schedulingEnabled);
                                                 }}
                                                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-colors"
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <span className="text-xl">
-                                                        📅
-                                                    </span>
+                                                    <span className="text-xl">📅</span>
                                                     <div className="text-left">
                                                         <p className="text-white font-medium">
                                                             Enable Scheduling
                                                         </p>
                                                         <p className="text-zinc-500 text-xs">
-                                                            {!userEmail ||
-                                                            !isEmailVerified
+                                                            {!userEmail || !isEmailVerified
                                                                 ? "Email verification required"
                                                                 : "Get a public booking page"}
                                                         </p>
@@ -1694,8 +1689,7 @@ export function SettingsModal({
                                                     <div className="flex items-center justify-between gap-2">
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-xs text-zinc-500 mb-1">
-                                                                Your booking
-                                                                link
+                                                                Your booking link
                                                             </p>
                                                             <p className="text-sm text-orange-400 font-mono truncate">
                                                                 spritz.chat/
@@ -1712,14 +1706,10 @@ export function SettingsModal({
                                                             </p>
                                                         </div>
                                                         <button
-                                                            onClick={
-                                                                copySchedulingLink
-                                                            }
+                                                            onClick={copySchedulingLink}
                                                             className="shrink-0 px-3 py-1.5 rounded-lg bg-orange-500/20 text-orange-400 text-xs font-medium hover:bg-orange-500/30 transition-colors"
                                                         >
-                                                            {linkCopied
-                                                                ? "Copied!"
-                                                                : "Copy"}
+                                                            {linkCopied ? "Copied!" : "Copy"}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1735,17 +1725,12 @@ export function SettingsModal({
                                                         </span>
                                                         <input
                                                             type="text"
-                                                            value={
-                                                                schedulingSlug
-                                                            }
+                                                            value={schedulingSlug}
                                                             onChange={(e) =>
                                                                 setSchedulingSlug(
                                                                     e.target.value
                                                                         .toLowerCase()
-                                                                        .replace(
-                                                                            /[^a-z0-9-]/g,
-                                                                            ""
-                                                                        )
+                                                                        .replace(/[^a-z0-9-]/g, "")
                                                                 )
                                                             }
                                                             placeholder="yourname"
@@ -1763,9 +1748,7 @@ export function SettingsModal({
                                                         type="text"
                                                         value={schedulingTitle}
                                                         onChange={(e) =>
-                                                            setSchedulingTitle(
-                                                                e.target.value
-                                                            )
+                                                            setSchedulingTitle(e.target.value)
                                                         }
                                                         placeholder="Book a call with me"
                                                         className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 text-white placeholder-zinc-600 focus:outline-none focus:border-orange-500 text-sm"
@@ -1780,9 +1763,7 @@ export function SettingsModal({
                                                     <textarea
                                                         value={schedulingBio}
                                                         onChange={(e) =>
-                                                            setSchedulingBio(
-                                                                e.target.value
-                                                            )
+                                                            setSchedulingBio(e.target.value)
                                                         }
                                                         placeholder="Tell visitors about yourself..."
                                                         rows={2}
@@ -1830,17 +1811,14 @@ export function SettingsModal({
                                                                             <path
                                                                                 strokeLinecap="round"
                                                                                 strokeLinejoin="round"
-                                                                                strokeWidth={
-                                                                                    3
-                                                                                }
+                                                                                strokeWidth={3}
                                                                                 d="M5 13l4 4L19 7"
                                                                             />
                                                                         </svg>
                                                                     )}
                                                                 </div>
                                                                 <span className="text-white text-sm font-medium">
-                                                                    Free
-                                                                    Consultation
+                                                                    Free Consultation
                                                                 </span>
                                                             </div>
                                                             <span className="text-emerald-400 text-xs font-medium">
@@ -1851,75 +1829,50 @@ export function SettingsModal({
                                                             <div className="px-3 pb-3 pt-1">
                                                                 <div className="flex items-center gap-2">
                                                                     <input
-                                                                        ref={
-                                                                            freeDurationInputRef
-                                                                        }
+                                                                        ref={freeDurationInputRef}
                                                                         type="number"
                                                                         min="5"
                                                                         max="60"
                                                                         step="5"
-                                                                        value={
-                                                                            freeDurationInput
-                                                                        }
-                                                                        onChange={(
-                                                                            e
-                                                                        ) => {
+                                                                        value={freeDurationInput}
+                                                                        onChange={(e) => {
                                                                             const val =
-                                                                                e
-                                                                                    .target
-                                                                                    .value;
+                                                                                e.target.value;
                                                                             // Always update the input string, even if empty
                                                                             setFreeDurationInput(
                                                                                 val
                                                                             );
                                                                             // Only update numeric state if valid
-                                                                            const num =
-                                                                                parseInt(
-                                                                                    val,
-                                                                                    10
-                                                                                );
+                                                                            const num = parseInt(
+                                                                                val,
+                                                                                10
+                                                                            );
                                                                             if (
-                                                                                !isNaN(
-                                                                                    num
-                                                                                ) &&
-                                                                                num >=
-                                                                                    5 &&
-                                                                                num <=
-                                                                                    60
+                                                                                !isNaN(num) &&
+                                                                                num >= 5 &&
+                                                                                num <= 60
                                                                             ) {
                                                                                 setSchedulingFreeDuration(
                                                                                     num
                                                                                 );
                                                                             }
                                                                         }}
-                                                                        onFocus={(
-                                                                            e
-                                                                        ) => {
+                                                                        onFocus={(e) => {
                                                                             // Select all text on focus for easy editing
                                                                             e.target.select();
                                                                         }}
-                                                                        onBlur={(
-                                                                            e
-                                                                        ) => {
+                                                                        onBlur={(e) => {
                                                                             const val =
-                                                                                e
-                                                                                    .target
-                                                                                    .value;
-                                                                            const num =
-                                                                                parseInt(
-                                                                                    val,
-                                                                                    10
-                                                                                );
+                                                                                e.target.value;
+                                                                            const num = parseInt(
+                                                                                val,
+                                                                                10
+                                                                            );
                                                                             if (
-                                                                                val ===
-                                                                                    "" ||
-                                                                                isNaN(
-                                                                                    num
-                                                                                ) ||
-                                                                                num <
-                                                                                    5 ||
-                                                                                num >
-                                                                                    60
+                                                                                val === "" ||
+                                                                                isNaN(num) ||
+                                                                                num < 5 ||
+                                                                                num > 60
                                                                             ) {
                                                                                 setSchedulingFreeDuration(
                                                                                     15
@@ -1977,17 +1930,14 @@ export function SettingsModal({
                                                                             <path
                                                                                 strokeLinecap="round"
                                                                                 strokeLinejoin="round"
-                                                                                strokeWidth={
-                                                                                    3
-                                                                                }
+                                                                                strokeWidth={3}
                                                                                 d="M5 13l4 4L19 7"
                                                                             />
                                                                         </svg>
                                                                     )}
                                                                 </div>
                                                                 <span className="text-white text-sm font-medium">
-                                                                    Priority
-                                                                    Session
+                                                                    Priority Session
                                                                 </span>
                                                             </div>
                                                             <span className="text-orange-400 text-xs font-medium">
@@ -1998,75 +1948,50 @@ export function SettingsModal({
                                                             <div className="px-3 pb-3 pt-1 space-y-2">
                                                                 <div className="flex items-center gap-2">
                                                                     <input
-                                                                        ref={
-                                                                            paidDurationInputRef
-                                                                        }
+                                                                        ref={paidDurationInputRef}
                                                                         type="number"
                                                                         min="5"
                                                                         max="120"
                                                                         step="5"
-                                                                        value={
-                                                                            paidDurationInput
-                                                                        }
-                                                                        onChange={(
-                                                                            e
-                                                                        ) => {
+                                                                        value={paidDurationInput}
+                                                                        onChange={(e) => {
                                                                             const val =
-                                                                                e
-                                                                                    .target
-                                                                                    .value;
+                                                                                e.target.value;
                                                                             // Always update the input string, even if empty
                                                                             setPaidDurationInput(
                                                                                 val
                                                                             );
                                                                             // Only update numeric state if valid
-                                                                            const num =
-                                                                                parseInt(
-                                                                                    val,
-                                                                                    10
-                                                                                );
+                                                                            const num = parseInt(
+                                                                                val,
+                                                                                10
+                                                                            );
                                                                             if (
-                                                                                !isNaN(
-                                                                                    num
-                                                                                ) &&
-                                                                                num >=
-                                                                                    5 &&
-                                                                                num <=
-                                                                                    120
+                                                                                !isNaN(num) &&
+                                                                                num >= 5 &&
+                                                                                num <= 120
                                                                             ) {
                                                                                 setSchedulingPaidDuration(
                                                                                     num
                                                                                 );
                                                                             }
                                                                         }}
-                                                                        onFocus={(
-                                                                            e
-                                                                        ) => {
+                                                                        onFocus={(e) => {
                                                                             // Select all text on focus for easy editing
                                                                             e.target.select();
                                                                         }}
-                                                                        onBlur={(
-                                                                            e
-                                                                        ) => {
+                                                                        onBlur={(e) => {
                                                                             const val =
-                                                                                e
-                                                                                    .target
-                                                                                    .value;
-                                                                            const num =
-                                                                                parseInt(
-                                                                                    val,
-                                                                                    10
-                                                                                );
+                                                                                e.target.value;
+                                                                            const num = parseInt(
+                                                                                val,
+                                                                                10
+                                                                            );
                                                                             if (
-                                                                                val ===
-                                                                                    "" ||
-                                                                                isNaN(
-                                                                                    num
-                                                                                ) ||
-                                                                                num <
-                                                                                    5 ||
-                                                                                num >
-                                                                                    120
+                                                                                val === "" ||
+                                                                                isNaN(num) ||
+                                                                                num < 5 ||
+                                                                                num > 120
                                                                             ) {
                                                                                 setSchedulingPaidDuration(
                                                                                     30
@@ -2091,71 +2016,43 @@ export function SettingsModal({
                                                                         $
                                                                     </span>
                                                                     <input
-                                                                        ref={
-                                                                            priceInputRef
-                                                                        }
+                                                                        ref={priceInputRef}
                                                                         type="number"
                                                                         min="1"
                                                                         step="1"
-                                                                        value={
-                                                                            priceInput
-                                                                        }
-                                                                        onChange={(
-                                                                            e
-                                                                        ) => {
+                                                                        value={priceInput}
+                                                                        onChange={(e) => {
                                                                             const val =
-                                                                                e
-                                                                                    .target
-                                                                                    .value;
+                                                                                e.target.value;
                                                                             // Always update the input string, even if empty
-                                                                            setPriceInput(
-                                                                                val
-                                                                            );
+                                                                            setPriceInput(val);
                                                                             // Only update numeric state if valid
                                                                             const num =
-                                                                                parseFloat(
-                                                                                    val
-                                                                                );
+                                                                                parseFloat(val);
                                                                             if (
-                                                                                !isNaN(
-                                                                                    num
-                                                                                ) &&
-                                                                                num >=
-                                                                                    0
+                                                                                !isNaN(num) &&
+                                                                                num >= 0
                                                                             ) {
                                                                                 setSchedulingPrice(
                                                                                     Math.round(
-                                                                                        num *
-                                                                                            100
+                                                                                        num * 100
                                                                                     )
                                                                                 );
                                                                             }
                                                                         }}
-                                                                        onFocus={(
-                                                                            e
-                                                                        ) => {
+                                                                        onFocus={(e) => {
                                                                             // Select all text on focus for easy editing
                                                                             e.target.select();
                                                                         }}
-                                                                        onBlur={(
-                                                                            e
-                                                                        ) => {
+                                                                        onBlur={(e) => {
                                                                             const val =
-                                                                                e
-                                                                                    .target
-                                                                                    .value;
+                                                                                e.target.value;
                                                                             const num =
-                                                                                parseFloat(
-                                                                                    val
-                                                                                );
+                                                                                parseFloat(val);
                                                                             if (
-                                                                                val ===
-                                                                                    "" ||
-                                                                                isNaN(
-                                                                                    num
-                                                                                ) ||
-                                                                                num <
-                                                                                    1
+                                                                                val === "" ||
+                                                                                isNaN(num) ||
+                                                                                num < 1
                                                                             ) {
                                                                                 const defaultPrice =
                                                                                     schedulingPrice >
@@ -2188,28 +2085,19 @@ export function SettingsModal({
                                                                 {/* Network selector */}
                                                                 <div>
                                                                     <label className="block text-zinc-500 text-xs mb-1">
-                                                                        Payment
-                                                                        Network
+                                                                        Payment Network
                                                                     </label>
                                                                     <select
-                                                                        value={
-                                                                            schedulingNetwork
-                                                                        }
-                                                                        onChange={(
-                                                                            e
-                                                                        ) =>
+                                                                        value={schedulingNetwork}
+                                                                        onChange={(e) =>
                                                                             setSchedulingNetwork(
-                                                                                e
-                                                                                    .target
-                                                                                    .value
+                                                                                e.target.value
                                                                             )
                                                                         }
                                                                         className="w-full px-2 py-1.5 rounded bg-zinc-900 border border-zinc-700 text-white text-sm focus:outline-none focus:border-orange-500"
                                                                     >
                                                                         {PAYMENT_NETWORKS.map(
-                                                                            (
-                                                                                network
-                                                                            ) => (
+                                                                            (network) => (
                                                                                 <option
                                                                                     key={
                                                                                         network.value
@@ -2218,12 +2106,8 @@ export function SettingsModal({
                                                                                         network.value
                                                                                     }
                                                                                 >
-                                                                                    {
-                                                                                        network.icon
-                                                                                    }{" "}
-                                                                                    {
-                                                                                        network.label
-                                                                                    }
+                                                                                    {network.icon}{" "}
+                                                                                    {network.label}
                                                                                 </option>
                                                                             )
                                                                         )}
@@ -2231,22 +2115,14 @@ export function SettingsModal({
                                                                 </div>
                                                                 <input
                                                                     type="text"
-                                                                    value={
-                                                                        schedulingWallet
-                                                                    }
-                                                                    onChange={(
-                                                                        e
-                                                                    ) =>
+                                                                    value={schedulingWallet}
+                                                                    onChange={(e) =>
                                                                         setSchedulingWallet(
-                                                                            e
-                                                                                .target
-                                                                                .value
+                                                                            e.target.value
                                                                         )
                                                                     }
                                                                     placeholder="Payment wallet (0x...)"
-                                                                    spellCheck={
-                                                                        false
-                                                                    }
+                                                                    spellCheck={false}
                                                                     autoComplete="off"
                                                                     autoCorrect="off"
                                                                     autoCapitalize="off"
@@ -2259,14 +2135,11 @@ export function SettingsModal({
 
                                                 {/* Save Button */}
                                                 <button
-                                                    onClick={
-                                                        handleSaveSchedulingSettings
-                                                    }
+                                                    onClick={handleSaveSchedulingSettings}
                                                     disabled={
                                                         schedulingLoading ||
                                                         (schedulingPaidEnabled &&
-                                                            schedulingPrice >
-                                                                0 &&
+                                                            schedulingPrice > 0 &&
                                                             !schedulingWallet) ||
                                                         (!schedulingFreeEnabled &&
                                                             !schedulingPaidEnabled)
@@ -2289,9 +2162,7 @@ export function SettingsModal({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M5 13l4 4L19 7"
                                                                 />
                                                             </svg>
@@ -2311,19 +2182,16 @@ export function SettingsModal({
                                                 {!schedulingFreeEnabled &&
                                                     !schedulingPaidEnabled && (
                                                         <p className="text-amber-500/80 text-xs text-center">
-                                                            Enable at least one
-                                                            meeting type
+                                                            Enable at least one meeting type
                                                         </p>
                                                     )}
 
-                                                {schedulingEnabled &&
-                                                    !isConnected && (
-                                                        <p className="text-zinc-500 text-xs text-center">
-                                                            💡 Connect Google
-                                                            Calendar above to
-                                                            sync availability
-                                                        </p>
-                                                    )}
+                                                {schedulingEnabled && !isConnected && (
+                                                    <p className="text-zinc-500 text-xs text-center">
+                                                        💡 Connect Google Calendar above to sync
+                                                        availability
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -2339,11 +2207,17 @@ export function SettingsModal({
                                             ) : ensStatus?.claimed ? (
                                                 <div className="space-y-2">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-green-400 text-lg">🔗</span>
-                                                        <span className="text-white font-medium">{ensStatus.subname}</span>
+                                                        <span className="text-green-400 text-lg">
+                                                            🔗
+                                                        </span>
+                                                        <span className="text-white font-medium">
+                                                            {ensStatus.subname}
+                                                        </span>
                                                     </div>
                                                     {ensStatus.resolveAddress && (
-                                                        <p className="text-zinc-500 text-xs font-mono break-all">Resolves to: {ensStatus.resolveAddress}</p>
+                                                        <p className="text-zinc-500 text-xs font-mono break-all">
+                                                            Resolves to: {ensStatus.resolveAddress}
+                                                        </p>
                                                     )}
                                                     {ensStatus.fundsNotice && (
                                                         <p className="text-amber-200/80 text-xs border border-amber-500/25 bg-amber-500/5 rounded-lg p-2">
@@ -2355,7 +2229,8 @@ export function SettingsModal({
                                                 <div className="space-y-2">
                                                     {ensStatus.eoaOnlyMode && (
                                                         <p className="text-amber-400/90 text-xs">
-                                                            External wallets (EOA) only while Spritz Wallet is in beta.
+                                                            External wallets (EOA) only while Spritz
+                                                            Wallet is in beta.
                                                         </p>
                                                     )}
                                                     {ensStatus.fundsNotice && (
@@ -2364,22 +2239,43 @@ export function SettingsModal({
                                                         </p>
                                                     )}
                                                     <p className="text-zinc-400 text-sm">
-                                                        Claim <span className="text-white font-medium">{ensStatus.username}.spritz.eth</span> as your ENS subname.
+                                                        Claim{" "}
+                                                        <span className="text-white font-medium">
+                                                            {ensStatus.username}.spritz.eth
+                                                        </span>{" "}
+                                                        as your ENS subname.
                                                     </p>
                                                     <button
                                                         onClick={handleClaimEns}
                                                         disabled={ensClaiming || !ensStatus.enabled}
                                                         className="bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg font-medium"
                                                     >
-                                                        {ensClaiming ? "Claiming..." : !ensStatus.enabled ? "Coming Soon" : "Claim Subname"}
+                                                        {ensClaiming
+                                                            ? "Claiming..."
+                                                            : !ensStatus.enabled
+                                                              ? "Coming Soon"
+                                                              : "Claim Subname"}
                                                     </button>
-                                                    {ensError && <p className="text-red-400 text-xs">{ensError}</p>}
-                                                    {ensSuccess && <p className="text-green-400 text-xs">{ensSuccess}</p>}
+                                                    {ensError && (
+                                                        <p className="text-red-400 text-xs">
+                                                            {ensError}
+                                                        </p>
+                                                    )}
+                                                    {ensSuccess && (
+                                                        <p className="text-green-400 text-xs">
+                                                            {ensSuccess}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             ) : ensStatus ? (
-                                                <p className="text-zinc-500 text-sm">{ensStatus.reason || "Not eligible for an ENS subname"}</p>
+                                                <p className="text-zinc-500 text-sm">
+                                                    {ensStatus.reason ||
+                                                        "Not eligible for an ENS subname"}
+                                                </p>
                                             ) : (
-                                                <p className="text-zinc-500 text-sm">ENS subname info unavailable</p>
+                                                <p className="text-zinc-500 text-sm">
+                                                    ENS subname info unavailable
+                                                </p>
                                             )}
                                         </div>
                                     </div>
@@ -2391,7 +2287,10 @@ export function SettingsModal({
                                         </h3>
                                         <div className="px-4 py-3 rounded-xl bg-zinc-800/50 space-y-3">
                                             <p className="text-zinc-400 text-sm">
-                                                Use API keys with the Spritz TypeScript SDK. {isAdmin ? "As an admin, new keys work immediately." : "New keys require admin approval before they work."}
+                                                Use API keys with the Spritz TypeScript SDK.{" "}
+                                                {isAdmin
+                                                    ? "As an admin, new keys work immediately."
+                                                    : "New keys require admin approval before they work."}
                                             </p>
                                             {developerKeysLoading ? (
                                                 <p className="text-zinc-500 text-sm">Loading…</p>
@@ -2399,13 +2298,20 @@ export function SettingsModal({
                                                 <>
                                                     {newlyCreatedKey && (
                                                         <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 space-y-2">
-                                                            <p className="text-emerald-400 text-xs font-medium">Copy your key now — it won’t be shown again.</p>
+                                                            <p className="text-emerald-400 text-xs font-medium">
+                                                                Copy your key now — it won’t be
+                                                                shown again.
+                                                            </p>
                                                             <div className="flex items-center gap-2">
-                                                                <code className="flex-1 text-xs text-zinc-300 font-mono truncate">{newlyCreatedKey}</code>
+                                                                <code className="flex-1 text-xs text-zinc-300 font-mono truncate">
+                                                                    {newlyCreatedKey}
+                                                                </code>
                                                                 <button
                                                                     type="button"
                                                                     onClick={() => {
-                                                                        navigator.clipboard.writeText(newlyCreatedKey);
+                                                                        navigator.clipboard.writeText(
+                                                                            newlyCreatedKey
+                                                                        );
                                                                         setNewlyCreatedKey(null);
                                                                     }}
                                                                     className="shrink-0 px-2 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-white text-xs"
@@ -2417,18 +2323,29 @@ export function SettingsModal({
                                                     )}
                                                     <ul className="space-y-2">
                                                         {developerKeys.map((k) => (
-                                                            <li key={k.id} className="flex items-center justify-between gap-2 py-2 border-b border-zinc-700/50 last:border-0">
+                                                            <li
+                                                                key={k.id}
+                                                                className="flex items-center justify-between gap-2 py-2 border-b border-zinc-700/50 last:border-0"
+                                                            >
                                                                 <div className="min-w-0">
-                                                                    <p className="text-white text-sm font-medium truncate">{k.name}</p>
-                                                                    <p className="text-zinc-500 text-xs font-mono truncate">{k.api_key_preview}</p>
-                                                                    <span className={`inline-block mt-0.5 text-xs px-1.5 py-0.5 rounded ${k.status === "approved" ? "bg-emerald-500/20 text-emerald-400" : k.status === "revoked" ? "bg-zinc-600 text-zinc-400" : "bg-amber-500/20 text-amber-400"}`}>
+                                                                    <p className="text-white text-sm font-medium truncate">
+                                                                        {k.name}
+                                                                    </p>
+                                                                    <p className="text-zinc-500 text-xs font-mono truncate">
+                                                                        {k.api_key_preview}
+                                                                    </p>
+                                                                    <span
+                                                                        className={`inline-block mt-0.5 text-xs px-1.5 py-0.5 rounded ${k.status === "approved" ? "bg-emerald-500/20 text-emerald-400" : k.status === "revoked" ? "bg-zinc-600 text-zinc-400" : "bg-amber-500/20 text-amber-400"}`}
+                                                                    >
                                                                         {k.status}
                                                                     </span>
                                                                 </div>
                                                                 {k.status !== "revoked" && (
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => handleRevokeApiKey(k.id)}
+                                                                        onClick={() =>
+                                                                            handleRevokeApiKey(k.id)
+                                                                        }
                                                                         className="shrink-0 text-red-400 hover:text-red-300 text-xs"
                                                                     >
                                                                         Revoke
@@ -2443,10 +2360,16 @@ export function SettingsModal({
                                                         disabled={developerKeysCreating}
                                                         className="w-full py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white text-sm font-medium disabled:opacity-50"
                                                     >
-                                                        {developerKeysCreating ? "Creating…" : isAdmin ? "Create API key" : "Apply for API key"}
+                                                        {developerKeysCreating
+                                                            ? "Creating…"
+                                                            : isAdmin
+                                                              ? "Create API key"
+                                                              : "Apply for API key"}
                                                     </button>
                                                     {developerKeysError && (
-                                                        <p className="text-red-400 text-xs">{developerKeysError}</p>
+                                                        <p className="text-red-400 text-xs">
+                                                            {developerKeysError}
+                                                        </p>
                                                     )}
                                                 </>
                                             )}
@@ -2568,9 +2491,7 @@ export function SettingsModal({
                                     <input
                                         type="text"
                                         value={newAddressLabel}
-                                        onChange={(e) =>
-                                            setNewAddressLabel(e.target.value)
-                                        }
+                                        onChange={(e) => setNewAddressLabel(e.target.value)}
                                         placeholder="Label (e.g., Mom, Work)"
                                         maxLength={50}
                                         className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
@@ -2578,9 +2499,7 @@ export function SettingsModal({
                                     <input
                                         type="text"
                                         value={newAddressValue}
-                                        onChange={(e) =>
-                                            setNewAddressValue(e.target.value)
-                                        }
+                                        onChange={(e) => setNewAddressValue(e.target.value)}
                                         placeholder="0x... or ENS (vitalik.eth)"
                                         spellCheck={false}
                                         autoComplete="off"
@@ -2589,9 +2508,7 @@ export function SettingsModal({
                                         className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                                     />
                                     {addressBookError && (
-                                        <p className="text-xs text-red-400">
-                                            {addressBookError}
-                                        </p>
+                                        <p className="text-xs text-red-400">{addressBookError}</p>
                                     )}
                                     <button
                                         onClick={handleAddToAddressBook}
@@ -2631,8 +2548,7 @@ export function SettingsModal({
                                             No saved addresses yet
                                         </p>
                                         <p className="text-zinc-500 text-xs mt-1">
-                                            Add addresses above or save them
-                                            when sending
+                                            Add addresses above or save them when sending
                                         </p>
                                     </div>
                                 ) : (
@@ -2645,60 +2561,37 @@ export function SettingsModal({
                                                 <div className="flex items-center gap-3">
                                                     {/* Avatar/icon */}
                                                     <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center flex-shrink-0">
-                                                        <span className="text-lg">
-                                                            📖
-                                                        </span>
+                                                        <span className="text-lg">📖</span>
                                                     </div>
 
                                                     {/* Info */}
                                                     <div className="flex-1 min-w-0">
-                                                        {editingEntryId ===
-                                                        entry.id ? (
+                                                        {editingEntryId === entry.id ? (
                                                             <div className="flex items-center gap-2">
                                                                 <input
                                                                     type="text"
-                                                                    value={
-                                                                        editingLabel
-                                                                    }
-                                                                    onChange={(
-                                                                        e
-                                                                    ) =>
+                                                                    value={editingLabel}
+                                                                    onChange={(e) =>
                                                                         setEditingLabel(
-                                                                            e
-                                                                                .target
-                                                                                .value
+                                                                            e.target.value
                                                                         )
                                                                     }
                                                                     className="flex-1 px-2 py-1 bg-zinc-800 border border-zinc-600 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                                                                     autoFocus
-                                                                    onKeyDown={(
-                                                                        e
-                                                                    ) => {
-                                                                        if (
-                                                                            e.key ===
-                                                                            "Enter"
-                                                                        )
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === "Enter")
                                                                             handleUpdateLabel(
                                                                                 entry.id
                                                                             );
-                                                                        if (
-                                                                            e.key ===
-                                                                            "Escape"
-                                                                        ) {
-                                                                            setEditingEntryId(
-                                                                                null
-                                                                            );
-                                                                            setEditingLabel(
-                                                                                ""
-                                                                            );
+                                                                        if (e.key === "Escape") {
+                                                                            setEditingEntryId(null);
+                                                                            setEditingLabel("");
                                                                         }
                                                                     }}
                                                                 />
                                                                 <button
                                                                     onClick={() =>
-                                                                        handleUpdateLabel(
-                                                                            entry.id
-                                                                        )
+                                                                        handleUpdateLabel(entry.id)
                                                                     }
                                                                     className="p-1 text-emerald-400 hover:text-emerald-300"
                                                                 >
@@ -2711,21 +2604,15 @@ export function SettingsModal({
                                                                         <path
                                                                             strokeLinecap="round"
                                                                             strokeLinejoin="round"
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
+                                                                            strokeWidth={2}
                                                                             d="M5 13l4 4L19 7"
                                                                         />
                                                                     </svg>
                                                                 </button>
                                                                 <button
                                                                     onClick={() => {
-                                                                        setEditingEntryId(
-                                                                            null
-                                                                        );
-                                                                        setEditingLabel(
-                                                                            ""
-                                                                        );
+                                                                        setEditingEntryId(null);
+                                                                        setEditingLabel("");
                                                                     }}
                                                                     className="p-1 text-zinc-400 hover:text-zinc-300"
                                                                 >
@@ -2738,9 +2625,7 @@ export function SettingsModal({
                                                                         <path
                                                                             strokeLinecap="round"
                                                                             strokeLinejoin="round"
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
+                                                                            strokeWidth={2}
                                                                             d="M6 18L18 6M6 6l12 12"
                                                                         />
                                                                     </svg>
@@ -2750,9 +2635,7 @@ export function SettingsModal({
                                                             <>
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="text-sm font-medium text-white truncate">
-                                                                        {
-                                                                            entry.label
-                                                                        }
+                                                                        {entry.label}
                                                                     </span>
                                                                     {entry.isFavorite && (
                                                                         <span className="text-yellow-400 text-xs">
@@ -2762,20 +2645,13 @@ export function SettingsModal({
                                                                 </div>
                                                                 <div className="flex items-center gap-2 text-xs text-zinc-500">
                                                                     <span className="font-mono truncate">
-                                                                        {entry.address.slice(
-                                                                            0,
-                                                                            8
-                                                                        )}
+                                                                        {entry.address.slice(0, 8)}
                                                                         ...
-                                                                        {entry.address.slice(
-                                                                            -6
-                                                                        )}
+                                                                        {entry.address.slice(-6)}
                                                                     </span>
                                                                     {entry.ensName && (
                                                                         <span className="text-emerald-400">
-                                                                            {
-                                                                                entry.ensName
-                                                                            }
+                                                                            {entry.ensName}
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -2784,14 +2660,11 @@ export function SettingsModal({
                                                     </div>
 
                                                     {/* Actions */}
-                                                    {editingEntryId !==
-                                                        entry.id && (
+                                                    {editingEntryId !== entry.id && (
                                                         <div className="flex items-center gap-1">
                                                             <button
                                                                 onClick={() =>
-                                                                    handleToggleFavorite(
-                                                                        entry
-                                                                    )
+                                                                    handleToggleFavorite(entry)
                                                                 }
                                                                 className={`p-1.5 rounded hover:bg-zinc-700 transition-colors ${
                                                                     entry.isFavorite
@@ -2813,9 +2686,7 @@ export function SettingsModal({
                                                                     }
                                                                     viewBox="0 0 24 24"
                                                                     stroke="currentColor"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                 >
                                                                     <path
                                                                         strokeLinecap="round"
@@ -2826,12 +2697,8 @@ export function SettingsModal({
                                                             </button>
                                                             <button
                                                                 onClick={() => {
-                                                                    setEditingEntryId(
-                                                                        entry.id
-                                                                    );
-                                                                    setEditingLabel(
-                                                                        entry.label
-                                                                    );
+                                                                    setEditingEntryId(entry.id);
+                                                                    setEditingLabel(entry.label);
                                                                 }}
                                                                 className="p-1.5 rounded text-zinc-500 hover:text-white hover:bg-zinc-700 transition-colors"
                                                                 title="Edit label"
@@ -2841,9 +2708,7 @@ export function SettingsModal({
                                                                     fill="none"
                                                                     viewBox="0 0 24 24"
                                                                     stroke="currentColor"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                 >
                                                                     <path
                                                                         strokeLinecap="round"
@@ -2866,9 +2731,7 @@ export function SettingsModal({
                                                                     fill="none"
                                                                     viewBox="0 0 24 24"
                                                                     stroke="currentColor"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                 >
                                                                     <path
                                                                         strokeLinecap="round"
@@ -2879,9 +2742,7 @@ export function SettingsModal({
                                                             </button>
                                                             <button
                                                                 onClick={() =>
-                                                                    handleDeleteEntry(
-                                                                        entry.id
-                                                                    )
+                                                                    handleDeleteEntry(entry.id)
                                                                 }
                                                                 className="p-1.5 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-700 transition-colors"
                                                                 title="Delete"
@@ -2891,9 +2752,7 @@ export function SettingsModal({
                                                                     fill="none"
                                                                     viewBox="0 0 24 24"
                                                                     stroke="currentColor"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                 >
                                                                     <path
                                                                         strokeLinecap="round"

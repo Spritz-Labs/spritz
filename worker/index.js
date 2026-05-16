@@ -42,7 +42,9 @@ self.addEventListener("push", (event) => {
                           { action: "answer", title: "Answer" },
                           { action: "decline", title: "Decline" },
                       ]
-                    : [],
+                    : data.type === "message" || data.type === "group_message"
+                      ? [{ action: "open", title: "Reply" }]
+                      : [],
         };
 
         console.log("[SW] Showing notification with title:", data.title || "Spritz");

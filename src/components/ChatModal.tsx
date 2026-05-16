@@ -695,16 +695,19 @@ export function ChatModal({
             setChatError(null);
 
             try {
-                // Quick check in background (non-blocking)
                 if (!bypassCheck) {
-                    canMessage(peerAddress).then((canChat) => {
-                        if (!canChat) {
-                            setChatState("error");
-                            setChatError(
-                                `${displayName} hasn't enabled chat yet. They need to click "Enable Chat" in Spritz first.`
-                            );
-                        }
-                    });
+                    canMessage(peerAddress)
+                        .then((canChat) => {
+                            if (!canChat) {
+                                setChatState("error");
+                                setChatError(
+                                    `${displayName} hasn't enabled chat yet. They need to click "Enable Chat" in Spritz first.`
+                                );
+                            }
+                        })
+                        .catch((err) => {
+                            log.debug("[Chat] canMessage check failed:", err);
+                        });
                 }
 
                 // Load messages immediately (may be from cache)

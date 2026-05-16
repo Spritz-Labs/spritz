@@ -4527,28 +4527,30 @@ function DashboardContent({
                                 )}
 
                                 <div className="px-1.5 py-2 sm:px-4 sm:py-4">
-                                    <FriendsList
-                                        friends={friendsListData}
-                                        userAddress={userAddress}
-                                        onCall={handleCall}
-                                        onVideoCall={handleVideoCall}
-                                        onChat={handleChat}
-                                        onRemove={handleRemoveFriend}
-                                        onUpdateNote={updateNickname}
-                                        isCallActive={callState !== "idle"}
-                                        unreadCounts={unreadCounts}
-                                        hideChat={false}
-                                        friendsWakuStatus={friendsWakuStatus}
-                                        onAddFriendClick={() => setIsAddFriendOpen(true)}
-                                        pendingRequestsCount={incomingRequests.length}
-                                        onViewRequestsClick={() =>
-                                            document
-                                                .getElementById("friend-requests-section")
-                                                ?.scrollIntoView({
-                                                    behavior: "smooth",
-                                                })
-                                        }
-                                    />
+                                    <LoggingErrorBoundary>
+                                        <FriendsList
+                                            friends={friendsListData}
+                                            userAddress={userAddress}
+                                            onCall={handleCall}
+                                            onVideoCall={handleVideoCall}
+                                            onChat={handleChat}
+                                            onRemove={handleRemoveFriend}
+                                            onUpdateNote={updateNickname}
+                                            isCallActive={callState !== "idle"}
+                                            unreadCounts={unreadCounts}
+                                            hideChat={false}
+                                            friendsWakuStatus={friendsWakuStatus}
+                                            onAddFriendClick={() => setIsAddFriendOpen(true)}
+                                            pendingRequestsCount={incomingRequests.length}
+                                            onViewRequestsClick={() =>
+                                                document
+                                                    .getElementById("friend-requests-section")
+                                                    ?.scrollIntoView({
+                                                        behavior: "smooth",
+                                                    })
+                                            }
+                                        />
+                                    </LoggingErrorBoundary>
                                 </div>
                             </div>
                         </>

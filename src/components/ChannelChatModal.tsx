@@ -906,13 +906,12 @@ export function ChannelChatModal({
         });
         // Deliberately NOT depending on localUserInfoCache to avoid re-running
         // this effect (and dedup logic above) every time a fetch resolves.
-         
     }, [messages, userAddress, getUserInfo]);
 
-    // Focus input when opened
     useEffect(() => {
         if (isOpen) {
-            setTimeout(() => inputRef.current?.focus(), 100);
+            const t = setTimeout(() => inputRef.current?.focus(), 100);
+            return () => clearTimeout(t);
         }
     }, [isOpen]);
 
@@ -937,10 +936,10 @@ export function ChannelChatModal({
         }
     }, [selectedUser]);
 
-    // Auto-focus input when replying to a message
     useEffect(() => {
         if (replyingTo) {
-            setTimeout(() => inputRef.current?.focus(), 50);
+            const t = setTimeout(() => inputRef.current?.focus(), 50);
+            return () => clearTimeout(t);
         }
     }, [replyingTo]);
 
@@ -1307,7 +1306,6 @@ export function ChannelChatModal({
                 console.error("[ChannelChat] Error fetching agent info:", err);
             }
         });
-         
     }, [messages]);
 
     // Check if sender is an agent
