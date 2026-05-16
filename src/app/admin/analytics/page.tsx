@@ -39,42 +39,163 @@ import {
 // V2 analytics data types
 type V2OverviewData = {
     section: string;
-    activeUsers: { dau: number; wau: number; mau: number; prev_dau: number; prev_wau: number; prev_mau: number } | null;
-    dauSparkline: { date: string; value: number }[] | null;
-    segments: { total: number; power: number; active: number; casual: number; dormant: number; churned: number } | null;
-    funnel: { signed_up: number; sent_message: number; used_ai: number; used_wallet: number; repeat_users: number } | null;
-    comparison: {
-        current: { new_users: number; active_users: number; messages: number; dm_messages: number; channel_messages: number; alpha_messages: number; ai_prompts: number; friendships: number; agents_created: number };
-        previous: { new_users: number; active_users: number; messages: number; dm_messages: number; channel_messages: number; alpha_messages: number; ai_prompts: number; friendships: number; agents_created: number };
+    activeUsers: {
+        dau: number;
+        wau: number;
+        mau: number;
+        prev_dau: number;
+        prev_wau: number;
+        prev_mau: number;
     } | null;
-    totals: { users: number; agents: number; messages: number; organicMessages: number; dmMessages: number; organicDmMessages: number; automatedDmMessages: number; welcomeDms: number; broadcastDms: number; channelMessages: number; alphaMessages: number } | null;
+    dauSparkline: { date: string; value: number }[] | null;
+    segments: {
+        total: number;
+        power: number;
+        active: number;
+        casual: number;
+        dormant: number;
+        churned: number;
+    } | null;
+    funnel: {
+        signed_up: number;
+        sent_message: number;
+        used_ai: number;
+        used_wallet: number;
+        repeat_users: number;
+    } | null;
+    comparison: {
+        current: {
+            new_users: number;
+            active_users: number;
+            messages: number;
+            dm_messages: number;
+            channel_messages: number;
+            alpha_messages: number;
+            ai_prompts: number;
+            friendships: number;
+            agents_created: number;
+        };
+        previous: {
+            new_users: number;
+            active_users: number;
+            messages: number;
+            dm_messages: number;
+            channel_messages: number;
+            alpha_messages: number;
+            ai_prompts: number;
+            friendships: number;
+            agents_created: number;
+        };
+    } | null;
+    totals: {
+        users: number;
+        agents: number;
+        messages: number;
+        organicMessages: number;
+        dmMessages: number;
+        organicDmMessages: number;
+        automatedDmMessages: number;
+        welcomeDms: number;
+        broadcastDms: number;
+        channelMessages: number;
+        alphaMessages: number;
+    } | null;
 };
 
 type V2UsersData = {
     section: string;
     signupCurve: { date: string; new_users: number; cumulative: number }[] | null;
-    retention: { cohort: string; size: number; d1: number; d3: number; d7: number; d14: number; d30: number }[] | null;
-    segments: { total: number; power: number; active: number; casual: number; dormant: number; churned: number } | null;
-    funnel: { signed_up: number; sent_message: number; used_ai: number; used_wallet: number; repeat_users: number } | null;
+    retention:
+        | {
+              cohort: string;
+              size: number;
+              d1: number;
+              d3: number;
+              d7: number;
+              d14: number;
+              d30: number;
+          }[]
+        | null;
+    segments: {
+        total: number;
+        power: number;
+        active: number;
+        casual: number;
+        dormant: number;
+        churned: number;
+    } | null;
+    funnel: {
+        signed_up: number;
+        sent_message: number;
+        used_ai: number;
+        used_wallet: number;
+        repeat_users: number;
+    } | null;
     peakHours: { day: number; hour: number; count: number }[] | null;
     topUsers: {
-        byMessages: { wallet_address: string; username: string | null; ens_name: string | null; messages_sent: number; last_login: string }[];
-        byPoints: { wallet_address: string; username: string | null; ens_name: string | null; points: number; last_login: string }[];
-        byFriends: { wallet_address: string; username: string | null; ens_name: string | null; friends_count: number; last_login: string }[];
+        byMessages: {
+            wallet_address: string;
+            username: string | null;
+            ens_name: string | null;
+            messages_sent: number;
+            last_login: string;
+        }[];
+        byPoints: {
+            wallet_address: string;
+            username: string | null;
+            ens_name: string | null;
+            points: number;
+            last_login: string;
+        }[];
+        byFriends: {
+            wallet_address: string;
+            username: string | null;
+            ens_name: string | null;
+            friends_count: number;
+            last_login: string;
+        }[];
     };
 };
 
 type V2ChatData = {
     section: string;
-    messageVolume: { date: string; dms: number; channels: number; alpha: number; ai_prompts: number; ai_responses: number; total: number }[] | null;
+    messageVolume:
+        | {
+              date: string;
+              dms: number;
+              channels: number;
+              alpha: number;
+              ai_prompts: number;
+              ai_responses: number;
+              total: number;
+          }[]
+        | null;
     peakHours: { day: number; hour: number; count: number }[] | null;
     comparison: V2OverviewData["comparison"];
-    topChannels: { id: string; name: string; emoji: string; member_count: number; message_count: number }[];
+    topChannels: {
+        id: string;
+        name: string;
+        emoji: string;
+        member_count: number;
+        message_count: number;
+    }[];
 };
 
 type V2AgentData = {
     section: string;
-    agentLeaderboard: { id: string; name: string; emoji: string; visibility: string; owner: string; total_messages: number; period_prompts: number; unique_users: number; errors: number }[] | null;
+    agentLeaderboard:
+        | {
+              id: string;
+              name: string;
+              emoji: string;
+              visibility: string;
+              owner: string;
+              total_messages: number;
+              period_prompts: number;
+              unique_users: number;
+              errors: number;
+          }[]
+        | null;
     messageVolume: V2ChatData["messageVolume"];
     comparison: V2OverviewData["comparison"];
     totals: { totalAiMessages: number; totalAgents: number };
@@ -105,7 +226,12 @@ type TimeSeriesItem = {
 
 type AgentMessagesBySource = { direct: number; public: number; channel: number };
 
-type TopChannelByAgentUsage = { channelId: string | null; channelType: string; channelName: string; count: number };
+type TopChannelByAgentUsage = {
+    channelId: string | null;
+    channelType: string;
+    channelName: string;
+    count: number;
+};
 
 type TopUser = {
     address: string;
@@ -297,6 +423,20 @@ const SECTION_TABS: { value: SectionTab; label: string; icon: string }[] = [
 
 const PIE_COLORS = ["#FF5500", "#3B82F6", "#10B981", "#8B5CF6", "#F59E0B", "#EC4899"];
 
+const USER_TYPE_FILTERS: { id: string; label: string; walletTypes: string[]; color: string }[] = [
+    {
+        id: "wallet",
+        label: "Wallet (EOA)",
+        walletTypes: ["wallet", "metamask", "walletconnect", "coinbase", "evm"],
+        color: "#3B82F6",
+    },
+    { id: "passkey", label: "Passkey", walletTypes: ["passkey"], color: "#10B981" },
+    { id: "email", label: "Email", walletTypes: ["email"], color: "#8B5CF6" },
+    { id: "solana", label: "Solana", walletTypes: ["solana", "phantom"], color: "#F59E0B" },
+    { id: "world_id", label: "World ID", walletTypes: ["world_id", "world"], color: "#06B6D4" },
+    { id: "alien_id", label: "Alien ID", walletTypes: ["alien_id", "alien"], color: "#EC4899" },
+];
+
 export default function AnalyticsPage() {
     const {
         isAdmin,
@@ -310,11 +450,28 @@ export default function AnalyticsPage() {
     } = useAdmin();
 
     const [data, setData] = useState<AnalyticsData | null>(null);
-    const [v2Data, setV2Data] = useState<V2OverviewData | V2UsersData | V2ChatData | V2AgentData | null>(null);
+    const [v2Data, setV2Data] = useState<
+        V2OverviewData | V2UsersData | V2ChatData | V2AgentData | null
+    >(null);
     const [isLoadingData, setIsLoadingData] = useState(false);
     const [isLoadingV2, setIsLoadingV2] = useState(false);
     const [selectedPeriod, setSelectedPeriod] = useState<Period>("7d");
     const [activeSection, setActiveSection] = useState<SectionTab>("overview");
+    const [excludedTypes, setExcludedTypes] = useState<Set<string>>(new Set());
+    const [showFilters, setShowFilters] = useState(false);
+
+    const toggleExclude = (typeId: string) => {
+        setExcludedTypes((prev) => {
+            const next = new Set(prev);
+            if (next.has(typeId)) next.delete(typeId);
+            else next.add(typeId);
+            return next;
+        });
+    };
+
+    const excludeParam = Array.from(excludedTypes)
+        .flatMap((id) => USER_TYPE_FILTERS.find((f) => f.id === id)?.walletTypes ?? [])
+        .join(",");
 
     const formatAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
@@ -325,26 +482,31 @@ export default function AnalyticsPage() {
     };
 
     // Fetch v2 data for the active section (uses RPC functions for richer insights)
-    const fetchV2Data = useCallback(async (section: string) => {
-        if (!isReady) return;
-        const authHeaders = getAuthHeaders();
-        if (!authHeaders) return;
+    const fetchV2Data = useCallback(
+        async (section: string) => {
+            if (!isReady) return;
+            const authHeaders = getAuthHeaders();
+            if (!authHeaders) return;
 
-        setIsLoadingV2(true);
-        try {
-            const res = await fetch(`/api/admin/analytics/v2?section=${section}&period=${selectedPeriod}`, {
-                headers: authHeaders,
-            });
-            if (res.ok) {
-                const result = await res.json();
-                setV2Data(result);
+            setIsLoadingV2(true);
+            try {
+                const params = new URLSearchParams({ section, period: selectedPeriod });
+                if (excludeParam) params.set("exclude", excludeParam);
+                const res = await fetch(`/api/admin/analytics/v2?${params}`, {
+                    headers: authHeaders,
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    setV2Data(result);
+                }
+            } catch (err) {
+                console.error("[Analytics v2] Error:", err);
+            } finally {
+                setIsLoadingV2(false);
             }
-        } catch (err) {
-            console.error("[Analytics v2] Error:", err);
-        } finally {
-            setIsLoadingV2(false);
-        }
-    }, [isReady, getAuthHeaders, selectedPeriod]);
+        },
+        [isReady, getAuthHeaders, selectedPeriod, excludeParam]
+    );
 
     const fetchAnalytics = useCallback(async () => {
         if (!isReady) return;
@@ -353,7 +515,9 @@ export default function AnalyticsPage() {
 
         setIsLoadingData(true);
         try {
-            const res = await fetch(`/api/admin/analytics?period=${selectedPeriod}`, {
+            const params = new URLSearchParams({ period: selectedPeriod });
+            if (excludeParam) params.set("exclude", excludeParam);
+            const res = await fetch(`/api/admin/analytics?${params}`, {
                 headers: authHeaders,
             });
             if (res.ok) {
@@ -365,7 +529,7 @@ export default function AnalyticsPage() {
         } finally {
             setIsLoadingData(false);
         }
-    }, [isReady, getAuthHeaders, selectedPeriod]);
+    }, [isReady, getAuthHeaders, selectedPeriod, excludeParam]);
 
     useEffect(() => {
         if (isAuthenticated && isAdmin) {
@@ -400,12 +564,17 @@ export default function AnalyticsPage() {
                 {!isConnected ? (
                     <>
                         <p className="text-zinc-400 mb-6">Connect your wallet to view analytics.</p>
-                        <div className="mb-4"><appkit-button /></div>
+                        <div className="mb-4">
+                            <appkit-button />
+                        </div>
                     </>
                 ) : (
                     <>
                         <p className="text-zinc-400 mb-6">Sign in to view analytics.</p>
-                        <button onClick={signIn} className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4">
+                        <button
+                            onClick={signIn}
+                            className="w-full py-3 px-4 bg-[#FF5500] hover:bg-[#E04D00] text-white font-semibold rounded-xl transition-colors mb-4"
+                        >
                             Sign In with Ethereum
                         </button>
                     </>
@@ -417,7 +586,9 @@ export default function AnalyticsPage() {
     if (!isReady || !isAdmin) {
         return (
             <AdminAuthWrapper title={!isAdmin ? "Access Denied" : "Loading..."}>
-                <p className="text-zinc-400 mb-6">{!isAdmin ? "You do not have permission to view analytics." : "Please wait..."}</p>
+                <p className="text-zinc-400 mb-6">
+                    {!isAdmin ? "You do not have permission to view analytics." : "Please wait..."}
+                </p>
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
             </AdminAuthWrapper>
         );
@@ -452,8 +623,18 @@ export default function AnalyticsPage() {
                         {isLoadingData ? (
                             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                />
                             </svg>
                         )}
                     </button>
@@ -476,6 +657,112 @@ export default function AnalyticsPage() {
                         </button>
                     ))}
                 </div>
+
+                {/* User Type Filter */}
+                <div className="mt-3">
+                    <button
+                        onClick={() => setShowFilters(!showFilters)}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                            excludedTypes.size > 0
+                                ? "bg-amber-500/10 border border-amber-500/30 text-amber-400"
+                                : "bg-zinc-800/50 text-zinc-400 hover:text-white"
+                        }`}
+                    >
+                        <svg
+                            className="w-3.5 h-3.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                            />
+                        </svg>
+                        {excludedTypes.size > 0
+                            ? `Filtering out ${excludedTypes.size} user type${excludedTypes.size > 1 ? "s" : ""}`
+                            : "Filter by user type"}
+                        <svg
+                            className={`w-3 h-3 transition-transform ${showFilters ? "rotate-180" : ""}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                        >
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 9l-7 7-7-7"
+                            />
+                        </svg>
+                    </button>
+
+                    <AnimatePresence>
+                        {showFilters && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="mt-2 p-3 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs text-zinc-400">
+                                            Toggle off user types to exclude from all metrics:
+                                        </p>
+                                        {excludedTypes.size > 0 && (
+                                            <button
+                                                onClick={() => setExcludedTypes(new Set())}
+                                                className="text-xs text-zinc-500 hover:text-white transition-colors"
+                                            >
+                                                Clear all
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {USER_TYPE_FILTERS.map((filter) => {
+                                            const isExcluded = excludedTypes.has(filter.id);
+                                            return (
+                                                <button
+                                                    key={filter.id}
+                                                    onClick={() => toggleExclude(filter.id)}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                                                        isExcluded
+                                                            ? "bg-zinc-900 border-zinc-600 text-zinc-500 line-through opacity-60"
+                                                            : "border-zinc-600 text-white hover:border-zinc-500"
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className="w-2 h-2 rounded-full"
+                                                        style={{
+                                                            backgroundColor: isExcluded
+                                                                ? "#52525b"
+                                                                : filter.color,
+                                                        }}
+                                                    />
+                                                    {filter.label}
+                                                    {isExcluded && (
+                                                        <span className="ml-1 text-zinc-600">
+                                                            hidden
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-2 text-[10px] text-zinc-500">
+                                        Filters apply to user counts, messages, and activity
+                                        metrics. Useful for isolating organic growth from specific
+                                        onboarding campaigns.
+                                    </p>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </div>
             </div>
 
             {/* Loading State */}
@@ -496,12 +783,44 @@ export default function AnalyticsPage() {
                             exit={{ opacity: 0, y: -10 }}
                             transition={{ duration: 0.2 }}
                         >
-                            {activeSection === "overview" && <OverviewSection data={data} period={selectedPeriod} v2={v2Data as V2OverviewData} isLoadingV2={isLoadingV2} />}
-                            {activeSection === "users" && <UsersSection data={data} period={selectedPeriod} getDisplayName={getDisplayName} v2={v2Data as V2UsersData} isLoadingV2={isLoadingV2} />}
-                            {activeSection === "wallets" && <WalletsSection data={data} period={selectedPeriod} />}
-                            {activeSection === "communication" && <CommunicationSection data={data} period={selectedPeriod} />}
-                            {activeSection === "chats" && <ChatsSection period={selectedPeriod} v2={v2Data as V2ChatData} isLoadingV2={isLoadingV2} />}
-                            {activeSection === "agents" && <AgentsSection data={data} period={selectedPeriod} v2={v2Data as V2AgentData} isLoadingV2={isLoadingV2} />}
+                            {activeSection === "overview" && (
+                                <OverviewSection
+                                    data={data}
+                                    period={selectedPeriod}
+                                    v2={v2Data as V2OverviewData}
+                                    isLoadingV2={isLoadingV2}
+                                />
+                            )}
+                            {activeSection === "users" && (
+                                <UsersSection
+                                    data={data}
+                                    period={selectedPeriod}
+                                    getDisplayName={getDisplayName}
+                                    v2={v2Data as V2UsersData}
+                                    isLoadingV2={isLoadingV2}
+                                />
+                            )}
+                            {activeSection === "wallets" && (
+                                <WalletsSection data={data} period={selectedPeriod} />
+                            )}
+                            {activeSection === "communication" && (
+                                <CommunicationSection data={data} period={selectedPeriod} />
+                            )}
+                            {activeSection === "chats" && (
+                                <ChatsSection
+                                    period={selectedPeriod}
+                                    v2={v2Data as V2ChatData}
+                                    isLoadingV2={isLoadingV2}
+                                />
+                            )}
+                            {activeSection === "agents" && (
+                                <AgentsSection
+                                    data={data}
+                                    period={selectedPeriod}
+                                    v2={v2Data as V2AgentData}
+                                    isLoadingV2={isLoadingV2}
+                                />
+                            )}
                         </motion.div>
                     </AnimatePresence>
                 </div>
@@ -514,7 +833,17 @@ export default function AnalyticsPage() {
 // SECTION COMPONENTS
 // ============================================
 
-function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData; period: Period; v2: V2OverviewData | null; isLoadingV2: boolean }) {
+function OverviewSection({
+    data,
+    period,
+    v2,
+    isLoadingV2,
+}: {
+    data: AnalyticsData;
+    period: Period;
+    v2: V2OverviewData | null;
+    isLoadingV2: boolean;
+}) {
     const comp = v2?.comparison;
     const curr = comp?.current;
     const prev = comp?.previous;
@@ -562,6 +891,129 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                     />
                 </div>
             )}
+
+            {/* Product Insights — engagement rates & conversion */}
+            <div className="bg-gradient-to-br from-zinc-800/80 to-zinc-900/80 border border-zinc-700/50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                    <span className="text-sm">🎯</span>
+                    <h3 className="text-sm font-semibold text-white">Product Insights</h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-medium">
+                        Live
+                    </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {(() => {
+                        const total = data.summary.totalUsers || 1;
+                        const messagingRate =
+                            ((data.summary.totalOrganicDms > 0
+                                ? Math.min(data.summary.activeUsers, total)
+                                : 0) /
+                                total) *
+                            100;
+                        const walletAdoption = (data.summary.usersWithSmartWallet / total) * 100;
+                        const aiUsage = (data.summary.uniqueAgentUsers / total) * 100;
+                        const socialRate = (data.summary.acceptedFriendships / total) * 100;
+                        return (
+                            <>
+                                <div className="bg-zinc-900/60 rounded-lg p-3 border border-zinc-700/30">
+                                    <p className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1">
+                                        Messaging Activation
+                                    </p>
+                                    <p className="text-xl font-bold text-white">
+                                        {messagingRate.toFixed(1)}%
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                                        {data.summary.activeUsers.toLocaleString()} users with
+                                        activity
+                                    </p>
+                                </div>
+                                <div className="bg-zinc-900/60 rounded-lg p-3 border border-zinc-700/30">
+                                    <p className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1">
+                                        Wallet Adoption
+                                    </p>
+                                    <p className="text-xl font-bold text-white">
+                                        {walletAdoption.toFixed(1)}%
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                                        {data.summary.usersWithSmartWallet.toLocaleString()} smart
+                                        wallets
+                                    </p>
+                                </div>
+                                <div className="bg-zinc-900/60 rounded-lg p-3 border border-zinc-700/30">
+                                    <p className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1">
+                                        AI Agent Usage
+                                    </p>
+                                    <p className="text-xl font-bold text-white">
+                                        {aiUsage.toFixed(1)}%
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                                        {data.summary.uniqueAgentUsers.toLocaleString()} users tried
+                                        AI
+                                    </p>
+                                </div>
+                                <div className="bg-zinc-900/60 rounded-lg p-3 border border-zinc-700/30">
+                                    <p className="text-[10px] text-zinc-400 uppercase tracking-wide mb-1">
+                                        Social Connectivity
+                                    </p>
+                                    <p className="text-xl font-bold text-white">
+                                        {socialRate.toFixed(1)}%
+                                    </p>
+                                    <p className="text-[10px] text-zinc-500 mt-0.5">
+                                        {data.summary.acceptedFriendships.toLocaleString()}{" "}
+                                        friendships
+                                    </p>
+                                </div>
+                            </>
+                        );
+                    })()}
+                </div>
+                {segments && (
+                    <div className="mt-3 grid grid-cols-5 gap-1.5">
+                        {[
+                            {
+                                label: "Power",
+                                value: segments.power,
+                                color: "text-emerald-400",
+                                bg: "bg-emerald-500/10",
+                            },
+                            {
+                                label: "Active",
+                                value: segments.active,
+                                color: "text-blue-400",
+                                bg: "bg-blue-500/10",
+                            },
+                            {
+                                label: "Casual",
+                                value: segments.casual,
+                                color: "text-amber-400",
+                                bg: "bg-amber-500/10",
+                            },
+                            {
+                                label: "Dormant",
+                                value: segments.dormant,
+                                color: "text-zinc-400",
+                                bg: "bg-zinc-500/10",
+                            },
+                            {
+                                label: "Churned",
+                                value: segments.churned,
+                                color: "text-red-400",
+                                bg: "bg-red-500/10",
+                            },
+                        ].map((seg) => (
+                            <div
+                                key={seg.label}
+                                className={`${seg.bg} rounded-lg px-2 py-1.5 text-center`}
+                            >
+                                <p className={`text-xs font-bold ${seg.color}`}>
+                                    {seg.value.toLocaleString()}
+                                </p>
+                                <p className="text-[9px] text-zinc-500">{seg.label}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* Key Metrics with period comparison */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -613,7 +1065,10 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
 
             {/* User Segments */}
             {segments && (
-                <ChartCard title="User Segments" description="Users segmented by recent activity level">
+                <ChartCard
+                    title="User Segments"
+                    description="Users segmented by recent activity level"
+                >
                     <SegmentDonut
                         segments={[
                             { name: "Power Users", value: segments.power, color: "#FF5500" },
@@ -627,50 +1082,97 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
             )}
 
             {/* Message Breakdown with comparison */}
-            <ChartCard title={`Message Breakdown (in ${period})`} description="User DMs, channel messages & alpha — excludes automated welcome & broadcast DMs">
+            <ChartCard
+                title={`Message Breakdown (in ${period})`}
+                description="User DMs, channel messages & alpha — excludes automated welcome & broadcast DMs"
+            >
                 <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-blue-400">{(data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod).toLocaleString()}</p>
-                        <p className="text-xs text-zinc-500 mt-1">User DMs ({(data.summary.totalOrganicDms ?? data.summary.totalDmMessages).toLocaleString()} total)</p>
+                        <p className="text-2xl font-bold text-blue-400">
+                            {(
+                                data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod
+                            ).toLocaleString()}
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                            User DMs (
+                            {(
+                                data.summary.totalOrganicDms ?? data.summary.totalDmMessages
+                            ).toLocaleString()}{" "}
+                            total)
+                        </p>
                         {curr && prev && (
                             <div className="mt-1">
-                                <TrendBadge current={curr.dm_messages} previous={prev.dm_messages} label="vs prev" />
+                                <TrendBadge
+                                    current={curr.dm_messages}
+                                    previous={prev.dm_messages}
+                                    label="vs prev"
+                                />
                             </div>
                         )}
                     </div>
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-purple-400">{data.summary.channelMessagesInPeriod.toLocaleString()}</p>
-                        <p className="text-xs text-zinc-500 mt-1">Channels ({data.summary.totalChannelMessages.toLocaleString()} total)</p>
+                        <p className="text-2xl font-bold text-purple-400">
+                            {data.summary.channelMessagesInPeriod.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                            Channels ({data.summary.totalChannelMessages.toLocaleString()} total)
+                        </p>
                         {curr && prev && (
                             <div className="mt-1">
-                                <TrendBadge current={curr.channel_messages} previous={prev.channel_messages} label="vs prev" />
+                                <TrendBadge
+                                    current={curr.channel_messages}
+                                    previous={prev.channel_messages}
+                                    label="vs prev"
+                                />
                             </div>
                         )}
                     </div>
                     <div className="text-center p-3 bg-zinc-800/50 rounded-lg">
-                        <p className="text-2xl font-bold text-orange-400">{data.summary.alphaMessagesInPeriod.toLocaleString()}</p>
-                        <p className="text-xs text-zinc-500 mt-1">Alpha ({data.summary.totalAlphaMessages.toLocaleString()} total)</p>
+                        <p className="text-2xl font-bold text-orange-400">
+                            {data.summary.alphaMessagesInPeriod.toLocaleString()}
+                        </p>
+                        <p className="text-xs text-zinc-500 mt-1">
+                            Alpha ({data.summary.totalAlphaMessages.toLocaleString()} total)
+                        </p>
                         {curr && prev && (
                             <div className="mt-1">
-                                <TrendBadge current={curr.alpha_messages} previous={prev.alpha_messages} label="vs prev" />
+                                <TrendBadge
+                                    current={curr.alpha_messages}
+                                    previous={prev.alpha_messages}
+                                    label="vs prev"
+                                />
                             </div>
                         )}
                     </div>
                 </div>
                 {/* Automated DM sub-breakdown */}
                 <div className="border-t border-zinc-700/50 pt-3">
-                    <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Automated DMs (excluded from organic totals)</p>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">
+                        Automated DMs (excluded from organic totals)
+                    </p>
                     <div className="grid grid-cols-3 gap-4">
                         <div className="text-center p-2 bg-zinc-800/30 rounded-lg">
-                            <p className="text-lg font-bold text-zinc-400">{(data.summary.welcomeDmsInPeriod ?? 0).toLocaleString()}</p>
-                            <p className="text-xs text-zinc-600">Welcome ({(data.summary.totalWelcomeDms ?? 0).toLocaleString()} total)</p>
+                            <p className="text-lg font-bold text-zinc-400">
+                                {(data.summary.welcomeDmsInPeriod ?? 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-zinc-600">
+                                Welcome ({(data.summary.totalWelcomeDms ?? 0).toLocaleString()}{" "}
+                                total)
+                            </p>
                         </div>
                         <div className="text-center p-2 bg-zinc-800/30 rounded-lg">
-                            <p className="text-lg font-bold text-zinc-400">{(data.summary.broadcastDmsInPeriod ?? 0).toLocaleString()}</p>
-                            <p className="text-xs text-zinc-600">Broadcasts ({(data.summary.totalBroadcastDms ?? 0).toLocaleString()} total)</p>
+                            <p className="text-lg font-bold text-zinc-400">
+                                {(data.summary.broadcastDmsInPeriod ?? 0).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-zinc-600">
+                                Broadcasts ({(data.summary.totalBroadcastDms ?? 0).toLocaleString()}{" "}
+                                total)
+                            </p>
                         </div>
                         <div className="text-center p-2 bg-zinc-800/30 rounded-lg">
-                            <p className="text-lg font-bold text-zinc-400">{(data.summary.totalAutomatedDms ?? 0).toLocaleString()}</p>
+                            <p className="text-lg font-bold text-zinc-400">
+                                {(data.summary.totalAutomatedDms ?? 0).toLocaleString()}
+                            </p>
                             <p className="text-xs text-zinc-600">All Automated (total)</p>
                         </div>
                     </div>
@@ -679,7 +1181,10 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
 
             {/* User Journey Funnel */}
             {funnel && (
-                <ChartCard title="User Journey Funnel" description="Conversion from signup through key milestones">
+                <ChartCard
+                    title="User Journey Funnel"
+                    description="Conversion from signup through key milestones"
+                >
                     <FunnelChart
                         steps={[
                             { label: "Signed Up", value: funnel.signed_up, color: "#3B82F6" },
@@ -710,12 +1215,36 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                                <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
+                                <XAxis
+                                    dataKey="label"
+                                    stroke="#666"
+                                    tick={{ fill: "#999", fontSize: 10 }}
+                                />
                                 <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
-                                <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "#18181b",
+                                        border: "1px solid #333",
+                                        borderRadius: "8px",
+                                    }}
+                                />
                                 <Legend />
-                                <Area type="monotone" dataKey="newUsers" name="New Users" stroke="#FF5500" fill="url(#colorUsers)" strokeWidth={2} />
-                                <Area type="monotone" dataKey="logins" name="Active" stroke="#3B82F6" fill="url(#colorActive)" strokeWidth={2} />
+                                <Area
+                                    type="monotone"
+                                    dataKey="newUsers"
+                                    name="New Users"
+                                    stroke="#FF5500"
+                                    fill="url(#colorUsers)"
+                                    strokeWidth={2}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="logins"
+                                    name="Active"
+                                    stroke="#3B82F6"
+                                    fill="url(#colorActive)"
+                                    strokeWidth={2}
+                                />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -727,12 +1256,29 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
                         {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie data={data.walletTypeBreakdown} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="count" nameKey="type">
+                                    <Pie
+                                        data={data.walletTypeBreakdown}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={40}
+                                        outerRadius={70}
+                                        dataKey="count"
+                                        nameKey="type"
+                                    >
                                         {data.walletTypeBreakdown.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={PIE_COLORS[index % PIE_COLORS.length]}
+                                            />
                                         ))}
                                     </Pie>
-                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#18181b",
+                                            border: "1px solid #333",
+                                            borderRadius: "8px",
+                                        }}
+                                    />
                                     <Legend wrapperStyle={{ fontSize: "12px" }} />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -760,15 +1306,21 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
             <ChartCard title="Wallet Beta Access">
                 <div className="grid grid-cols-3 gap-4">
                     <div className="text-center">
-                        <p className="text-2xl font-bold text-amber-400">{data.summary.betaApplicantsCount}</p>
+                        <p className="text-2xl font-bold text-amber-400">
+                            {data.summary.betaApplicantsCount}
+                        </p>
                         <p className="text-xs text-zinc-500">Applications</p>
                     </div>
                     <div className="text-center">
-                        <p className="text-2xl font-bold text-green-400">{data.summary.betaApprovedCount}</p>
+                        <p className="text-2xl font-bold text-green-400">
+                            {data.summary.betaApprovedCount}
+                        </p>
                         <p className="text-xs text-zinc-500">Approved</p>
                     </div>
                     <div className="text-center">
-                        <p className="text-2xl font-bold text-orange-400">{data.summary.betaPendingCount}</p>
+                        <p className="text-2xl font-bold text-orange-400">
+                            {data.summary.betaPendingCount}
+                        </p>
                         <p className="text-xs text-zinc-500">Pending</p>
                     </div>
                 </div>
@@ -777,7 +1329,19 @@ function OverviewSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsDat
     );
 }
 
-function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data: AnalyticsData; period: Period; getDisplayName: (user: TopUser) => string; v2: V2UsersData | null; isLoadingV2: boolean }) {
+function UsersSection({
+    data,
+    period,
+    getDisplayName,
+    v2,
+    isLoadingV2,
+}: {
+    data: AnalyticsData;
+    period: Period;
+    getDisplayName: (user: TopUser) => string;
+    v2: V2UsersData | null;
+    isLoadingV2: boolean;
+}) {
     const segments = v2?.segments;
     const funnel = v2?.funnel;
     const signupCurve = v2?.signupCurve;
@@ -789,10 +1353,29 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
             {/* User Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 <KPICard label="Total Users" value={data.summary.totalUsers} icon="👥" />
-                <KPICard label="New Users" value={data.summary.newUsersCount} icon="✨" subtext={`in ${period}`} />
-                <KPICard label="Active Users" value={data.summary.activeUsers} icon="🔥" subtext={`in ${period}`} />
-                <KPICard label="User DMs" value={data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod} icon="💬" subtext={`in ${period} (excl. automated)`} />
-                <KPICard label="Friend Requests" value={data.summary.friendRequestsCount} icon="🤝" />
+                <KPICard
+                    label="New Users"
+                    value={data.summary.newUsersCount}
+                    icon="✨"
+                    subtext={`in ${period}`}
+                />
+                <KPICard
+                    label="Active Users"
+                    value={data.summary.activeUsers}
+                    icon="🔥"
+                    subtext={`in ${period}`}
+                />
+                <KPICard
+                    label="User DMs"
+                    value={data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod}
+                    icon="💬"
+                    subtext={`in ${period} (excl. automated)`}
+                />
+                <KPICard
+                    label="Friend Requests"
+                    value={data.summary.friendRequestsCount}
+                    icon="🤝"
+                />
                 <KPICard label="Invites Used" value={data.summary.invitesUsed} icon="🎟️" />
             </div>
 
@@ -813,7 +1396,10 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
 
             {/* User Journey Funnel */}
             {funnel && (
-                <ChartCard title="User Journey Funnel" description="Conversion from signup through key milestones">
+                <ChartCard
+                    title="User Journey Funnel"
+                    description="Conversion from signup through key milestones"
+                >
                     <FunnelChart
                         steps={[
                             { label: "Signed Up", value: funnel.signed_up, color: "#3B82F6" },
@@ -828,12 +1414,21 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
 
             {/* User Growth Curve (Cumulative) */}
             {signupCurve && signupCurve.length > 0 && (
-                <ChartCard title="User Growth Curve" description="Cumulative signups with daily new user overlay">
+                <ChartCard
+                    title="User Growth Curve"
+                    description="Cumulative signups with daily new user overlay"
+                >
                     <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={signupCurve}>
                                 <defs>
-                                    <linearGradient id="colorCumulative" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient
+                                        id="colorCumulative"
+                                        x1="0"
+                                        y1="0"
+                                        x2="0"
+                                        y2="1"
+                                    >
                                         <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                                     </linearGradient>
@@ -843,17 +1438,56 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
                                     dataKey="date"
                                     stroke="#666"
                                     tick={{ fill: "#999", fontSize: 10 }}
-                                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                    tickFormatter={(d) =>
+                                        new Date(d).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                        })
+                                    }
                                 />
-                                <YAxis yAxisId="left" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
-                                <YAxis yAxisId="right" orientation="right" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
+                                <YAxis
+                                    yAxisId="left"
+                                    stroke="#666"
+                                    tick={{ fill: "#999", fontSize: 10 }}
+                                />
+                                <YAxis
+                                    yAxisId="right"
+                                    orientation="right"
+                                    stroke="#666"
+                                    tick={{ fill: "#999", fontSize: 10 }}
+                                />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }}
-                                    labelFormatter={(d) => new Date(d as string).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                                    contentStyle={{
+                                        backgroundColor: "#18181b",
+                                        border: "1px solid #333",
+                                        borderRadius: "8px",
+                                    }}
+                                    labelFormatter={(d) =>
+                                        new Date(d as string).toLocaleDateString("en-US", {
+                                            month: "long",
+                                            day: "numeric",
+                                            year: "numeric",
+                                        })
+                                    }
                                 />
                                 <Legend />
-                                <Area yAxisId="left" type="monotone" dataKey="cumulative" name="Total Users" stroke="#3B82F6" fill="url(#colorCumulative)" strokeWidth={2} />
-                                <Bar yAxisId="right" dataKey="new_users" name="New Users" fill="#FF5500" radius={[2, 2, 0, 0]} opacity={0.7} />
+                                <Area
+                                    yAxisId="left"
+                                    type="monotone"
+                                    dataKey="cumulative"
+                                    name="Total Users"
+                                    stroke="#3B82F6"
+                                    fill="url(#colorCumulative)"
+                                    strokeWidth={2}
+                                />
+                                <Bar
+                                    yAxisId="right"
+                                    dataKey="new_users"
+                                    name="New Users"
+                                    fill="#FF5500"
+                                    radius={[2, 2, 0, 0]}
+                                    opacity={0.7}
+                                />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -862,20 +1496,29 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
 
             {/* Retention Cohort Heatmap */}
             {retention && retention.length > 0 && (
-                <ChartCard title="Retention Cohorts" description="Percentage of users returning by cohort week">
+                <ChartCard
+                    title="Retention Cohorts"
+                    description="Percentage of users returning by cohort week"
+                >
                     <RetentionHeatmap cohorts={retention} />
                 </ChartCard>
             )}
 
             {/* Peak Hours Heatmap */}
             {peakHours && peakHours.length > 0 && (
-                <ChartCard title="Peak Activity Hours" description="When your users are most active (hour x day of week)">
+                <ChartCard
+                    title="Peak Activity Hours"
+                    description="When your users are most active (hour x day of week)"
+                >
                     <PeakHoursHeatmap data={peakHours} />
                 </ChartCard>
             )}
 
             {/* User Activity Timeline */}
-            <ChartCard title="User Activity Over Time" description="Daily new users and active users">
+            <ChartCard
+                title="User Activity Over Time"
+                description="Daily new users and active users"
+            >
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <AreaChart data={data.timeSeries}>
@@ -890,23 +1533,68 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                            <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
+                            <XAxis
+                                dataKey="label"
+                                stroke="#666"
+                                tick={{ fill: "#999", fontSize: 11 }}
+                            />
                             <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
-                            <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "#18181b",
+                                    border: "1px solid #333",
+                                    borderRadius: "8px",
+                                }}
+                            />
                             <Legend />
-                            <Area type="monotone" dataKey="newUsers" name="New Users" stroke="#FF5500" fill="url(#colorNewUsers)" strokeWidth={2} />
-                            <Area type="monotone" dataKey="logins" name="Active Users" stroke="#3B82F6" fill="url(#colorLogins)" strokeWidth={2} />
+                            <Area
+                                type="monotone"
+                                dataKey="newUsers"
+                                name="New Users"
+                                stroke="#FF5500"
+                                fill="url(#colorNewUsers)"
+                                strokeWidth={2}
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="logins"
+                                name="Active Users"
+                                stroke="#3B82F6"
+                                fill="url(#colorLogins)"
+                                strokeWidth={2}
+                            />
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
             </ChartCard>
 
             {/* Top Users */}
-            <SectionHeader title="Top Users" description="Leaderboards across key engagement metrics" />
+            <SectionHeader
+                title="Top Users"
+                description="Leaderboards across key engagement metrics"
+            />
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <TopUsersList title="Top by Points" icon="⭐" users={data.topUsers.byPoints} getDisplayName={getDisplayName} color="text-yellow-400" />
-                <TopUsersList title="Top by Messages" icon="💬" users={data.topUsers.byMessages} getDisplayName={getDisplayName} color="text-purple-400" />
-                <TopUsersList title="Top by Friends" icon="🤝" users={data.topUsers.byFriends} getDisplayName={getDisplayName} color="text-pink-400" />
+                <TopUsersList
+                    title="Top by Points"
+                    icon="⭐"
+                    users={data.topUsers.byPoints}
+                    getDisplayName={getDisplayName}
+                    color="text-yellow-400"
+                />
+                <TopUsersList
+                    title="Top by Messages"
+                    icon="💬"
+                    users={data.topUsers.byMessages}
+                    getDisplayName={getDisplayName}
+                    color="text-purple-400"
+                />
+                <TopUsersList
+                    title="Top by Friends"
+                    icon="🤝"
+                    users={data.topUsers.byFriends}
+                    getDisplayName={getDisplayName}
+                    color="text-pink-400"
+                />
             </div>
 
             {/* Points Breakdown */}
@@ -914,12 +1602,24 @@ function UsersSection({ data, period, getDisplayName, v2, isLoadingV2 }: { data:
                 <ChartCard title="Points Distribution" description="Points earned by activity type">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {data.pointsBreakdown.slice(0, 8).map((item, index) => (
-                            <div key={item.reason} className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2">
+                            <div
+                                key={item.reason}
+                                className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2"
+                            >
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                                    <span className="text-xs text-zinc-400 truncate">{item.reason}</span>
+                                    <div
+                                        className="w-2 h-2 rounded-full"
+                                        style={{
+                                            backgroundColor: PIE_COLORS[index % PIE_COLORS.length],
+                                        }}
+                                    />
+                                    <span className="text-xs text-zinc-400 truncate">
+                                        {item.reason}
+                                    </span>
                                 </div>
-                                <span className="text-sm font-medium">{item.points.toLocaleString()}</span>
+                                <span className="text-sm font-medium">
+                                    {item.points.toLocaleString()}
+                                </span>
                             </div>
                         ))}
                     </div>
@@ -934,42 +1634,120 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
         <div className="space-y-6">
             {/* Wallet Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <KPICard label="Smart Wallets" value={data.summary.usersWithSmartWallet} icon="💳" subtext={`of ${data.summary.totalUsers} users`} />
-                <KPICard label="Deployed" value={data.summary.deployedSmartWallets} icon="✅" subtext="on-chain" />
-                <KPICard label="New Wallets" value={data.summary.walletsCreatedInPeriod} icon="✨" subtext={`in ${period}`} />
-                <KPICard label="Passkeys" value={data.summary.totalPasskeys} icon="🔑" subtext={`${data.summary.passkeysWithSafeSigners} with signers`} />
-                <KPICard label="New Passkeys" value={data.summary.passkeysInPeriod} icon="🆕" subtext={`in ${period}`} />
-                <KPICard label="Embedded" value={data.summary.embeddedWallets} icon="🔐" subtext="wallets" />
+                <KPICard
+                    label="Smart Wallets"
+                    value={data.summary.usersWithSmartWallet}
+                    icon="💳"
+                    subtext={`of ${data.summary.totalUsers} users`}
+                />
+                <KPICard
+                    label="Deployed"
+                    value={data.summary.deployedSmartWallets}
+                    icon="✅"
+                    subtext="on-chain"
+                />
+                <KPICard
+                    label="New Wallets"
+                    value={data.summary.walletsCreatedInPeriod}
+                    icon="✨"
+                    subtext={`in ${period}`}
+                />
+                <KPICard
+                    label="Passkeys"
+                    value={data.summary.totalPasskeys}
+                    icon="🔑"
+                    subtext={`${data.summary.passkeysWithSafeSigners} with signers`}
+                />
+                <KPICard
+                    label="New Passkeys"
+                    value={data.summary.passkeysInPeriod}
+                    icon="🆕"
+                    subtext={`in ${period}`}
+                />
+                <KPICard
+                    label="Embedded"
+                    value={data.summary.embeddedWallets}
+                    icon="🔐"
+                    subtext="wallets"
+                />
             </div>
 
             {/* Transaction Stats */}
             <SectionHeader title="Transactions" description="On-chain transaction activity" />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <KPICard label="Total Tx" value={data.summary.totalWalletTransactions} icon="📊" subtext={`${data.summary.confirmedTransactions} confirmed`} />
-                <KPICard label="Tx in Period" value={data.summary.walletTxInPeriod} icon="📈" subtext={`in ${period}`} />
-                <KPICard label="Total Volume" value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`} icon="💰" />
-                <KPICard label="Period Volume" value={`$${Math.round(data.summary.volumeInPeriod).toLocaleString()}`} icon="💵" subtext={`in ${period}`} />
+                <KPICard
+                    label="Total Tx"
+                    value={data.summary.totalWalletTransactions}
+                    icon="📊"
+                    subtext={`${data.summary.confirmedTransactions} confirmed`}
+                />
+                <KPICard
+                    label="Tx in Period"
+                    value={data.summary.walletTxInPeriod}
+                    icon="📈"
+                    subtext={`in ${period}`}
+                />
+                <KPICard
+                    label="Total Volume"
+                    value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`}
+                    icon="💰"
+                />
+                <KPICard
+                    label="Period Volume"
+                    value={`$${Math.round(data.summary.volumeInPeriod).toLocaleString()}`}
+                    icon="💵"
+                    subtext={`in ${period}`}
+                />
                 <KPICard label="Unique Tx Users" value={data.summary.uniqueTxUsers} icon="👥" />
-                <KPICard label="Active Wallets" value={data.summary.usersWithTxHistory} icon="🔥" subtext="with tx history" />
+                <KPICard
+                    label="Active Wallets"
+                    value={data.summary.usersWithTxHistory}
+                    icon="🔥"
+                    subtext="with tx history"
+                />
             </div>
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Auth Method Breakdown */}
-                <ChartCard title="Auth Method Breakdown" description="Distribution of wallet authentication types">
+                <ChartCard
+                    title="Auth Method Breakdown"
+                    description="Distribution of wallet authentication types"
+                >
                     <div className="h-56">
                         {data.walletTypeBreakdown && data.walletTypeBreakdown.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie data={data.walletTypeBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="count" nameKey="type" label={(props) => {
-                                        const { name, percent } = props as { name?: string; percent?: number };
-                                        return `${name} (${((percent || 0) * 100).toFixed(0)}%)`;
-                                    }}>
+                                    <Pie
+                                        data={data.walletTypeBreakdown}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={80}
+                                        dataKey="count"
+                                        nameKey="type"
+                                        label={(props) => {
+                                            const { name, percent } = props as {
+                                                name?: string;
+                                                percent?: number;
+                                            };
+                                            return `${name} (${((percent || 0) * 100).toFixed(0)}%)`;
+                                        }}
+                                    >
                                         {data.walletTypeBreakdown.map((_, index) => (
-                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={PIE_COLORS[index % PIE_COLORS.length]}
+                                            />
                                         ))}
                                     </Pie>
-                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#18181b",
+                                            border: "1px solid #333",
+                                            borderRadius: "8px",
+                                        }}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         ) : (
@@ -979,16 +1757,40 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                 </ChartCard>
 
                 {/* Network Usage */}
-                <ChartCard title="Network Usage" description="Transaction count by blockchain network">
+                <ChartCard
+                    title="Network Usage"
+                    description="Transaction count by blockchain network"
+                >
                     <div className="h-56">
                         {data.networkStats && data.networkStats.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={data.networkStats} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                                    <XAxis type="number" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
-                                    <YAxis type="category" dataKey="chainName" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} width={70} />
-                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
-                                    <Bar dataKey="transactions" fill="#3B82F6" radius={[0, 4, 4, 0]} name="Transactions" />
+                                    <XAxis
+                                        type="number"
+                                        stroke="#666"
+                                        tick={{ fill: "#999", fontSize: 10 }}
+                                    />
+                                    <YAxis
+                                        type="category"
+                                        dataKey="chainName"
+                                        stroke="#666"
+                                        tick={{ fill: "#999", fontSize: 10 }}
+                                        width={70}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#18181b",
+                                            border: "1px solid #333",
+                                            borderRadius: "8px",
+                                        }}
+                                    />
+                                    <Bar
+                                        dataKey="transactions"
+                                        fill="#3B82F6"
+                                        radius={[0, 4, 4, 0]}
+                                        name="Transactions"
+                                    />
                                 </BarChart>
                             </ResponsiveContainer>
                         ) : (
@@ -1004,15 +1806,21 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                 <ChartCard title="Wallet Beta Access">
                     <div className="grid grid-cols-3 gap-4">
                         <div className="text-center p-4 bg-zinc-800/50 rounded-lg">
-                            <p className="text-3xl font-bold text-amber-400">{data.summary.betaApplicantsCount}</p>
+                            <p className="text-3xl font-bold text-amber-400">
+                                {data.summary.betaApplicantsCount}
+                            </p>
                             <p className="text-xs text-zinc-500 mt-1">Applications</p>
                         </div>
                         <div className="text-center p-4 bg-zinc-800/50 rounded-lg">
-                            <p className="text-3xl font-bold text-green-400">{data.summary.betaApprovedCount}</p>
+                            <p className="text-3xl font-bold text-green-400">
+                                {data.summary.betaApprovedCount}
+                            </p>
                             <p className="text-xs text-zinc-500 mt-1">Approved</p>
                         </div>
                         <div className="text-center p-4 bg-zinc-800/50 rounded-lg">
-                            <p className="text-3xl font-bold text-orange-400">{data.summary.betaPendingCount}</p>
+                            <p className="text-3xl font-bold text-orange-400">
+                                {data.summary.betaPendingCount}
+                            </p>
                             <p className="text-xs text-zinc-500 mt-1">Pending</p>
                         </div>
                     </div>
@@ -1023,14 +1831,27 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                         {data.recentSmartWalletUsers?.length > 0 ? (
                             data.recentSmartWalletUsers.slice(0, 5).map((user) => (
-                                <div key={user.address} className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2">
+                                <div
+                                    key={user.address}
+                                    className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2"
+                                >
                                     <div className="flex items-center gap-2">
-                                        <span>{user.walletType === "passkey" ? "🔑" : user.walletType === "email" ? "📧" : "🔗"}</span>
+                                        <span>
+                                            {user.walletType === "passkey"
+                                                ? "🔑"
+                                                : user.walletType === "email"
+                                                  ? "📧"
+                                                  : "🔗"}
+                                        </span>
                                         <span className="text-sm truncate max-w-[150px]">
-                                            {user.username ? `@${user.username}` : `${user.address.slice(0, 8)}...`}
+                                            {user.username
+                                                ? `@${user.username}`
+                                                : `${user.address.slice(0, 8)}...`}
                                         </span>
                                     </div>
-                                    <span className="text-xs text-zinc-500">{new Date(user.createdAt).toLocaleDateString()}</span>
+                                    <span className="text-xs text-zinc-500">
+                                        {new Date(user.createdAt).toLocaleDateString()}
+                                    </span>
                                 </div>
                             ))
                         ) : (
@@ -1047,7 +1868,10 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
     return (
         <div className="space-y-6">
             {/* Calls Stats */}
-            <SectionHeader title="Video & Voice Calls" description="Real-time communication metrics" />
+            <SectionHeader
+                title="Video & Voice Calls"
+                description="Real-time communication metrics"
+            />
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <KPICard label="Total Calls" value={data.summary.totalCalls} icon="📞" />
                 <KPICard label="Voice Minutes" value={data.summary.totalVoiceMinutes} icon="🎤" />
@@ -1057,35 +1881,98 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
             {/* Streaming Stats */}
             <SectionHeader title="Live Streaming" description="Streaming activity and engagement" />
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-                <KPICard label="Streams Created" value={data.summary.streamsCreated} icon="📹" subtext={`(${data.summary.totalStreamsCreated} total)`} />
-                <KPICard label="Streams Started" value={data.summary.streamsStarted} icon="🔴" subtext={`(${data.summary.totalStreamsStarted} total)`} />
+                <KPICard
+                    label="Streams Created"
+                    value={data.summary.streamsCreated}
+                    icon="📹"
+                    subtext={`(${data.summary.totalStreamsCreated} total)`}
+                />
+                <KPICard
+                    label="Streams Started"
+                    value={data.summary.streamsStarted}
+                    icon="🔴"
+                    subtext={`(${data.summary.totalStreamsStarted} total)`}
+                />
                 <KPICard label="Streams Ended" value={data.summary.streamsEnded} icon="⏹️" />
-                <KPICard label="Streaming Min" value={data.summary.totalStreamingMinutes} icon="⏱️" />
+                <KPICard
+                    label="Streaming Min"
+                    value={data.summary.totalStreamingMinutes}
+                    icon="⏱️"
+                />
                 <KPICard label="Views" value={data.summary.totalStreamsViewed} icon="👁️" />
             </div>
 
             {/* Rooms & Scheduling */}
-            <SectionHeader title="Rooms & Scheduling" description="Instant rooms and scheduled calls" />
+            <SectionHeader
+                title="Rooms & Scheduling"
+                description="Instant rooms and scheduled calls"
+            />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KPICard label="Rooms Created" value={data.summary.roomsCreated} icon="🏠" subtext={`(${data.summary.totalRoomsCreated} total)`} />
+                <KPICard
+                    label="Rooms Created"
+                    value={data.summary.roomsCreated}
+                    icon="🏠"
+                    subtext={`(${data.summary.totalRoomsCreated} total)`}
+                />
                 <KPICard label="Rooms Joined" value={data.summary.totalRoomsJoined} icon="🚪" />
-                <KPICard label="Schedules Created" value={data.summary.schedulesCreated} icon="📅" subtext={`(${data.summary.totalSchedulesCreated} total)`} />
-                <KPICard label="Schedules Joined" value={data.summary.schedulesJoined} icon="✅" subtext={`(${data.summary.totalSchedulesJoined} total)`} />
+                <KPICard
+                    label="Schedules Created"
+                    value={data.summary.schedulesCreated}
+                    icon="📅"
+                    subtext={`(${data.summary.totalSchedulesCreated} total)`}
+                />
+                <KPICard
+                    label="Schedules Joined"
+                    value={data.summary.schedulesJoined}
+                    icon="✅"
+                    subtext={`(${data.summary.totalSchedulesJoined} total)`}
+                />
             </div>
 
             {/* Engagement Chart — stacked message types */}
-            <ChartCard title="Message Volume Over Time" description="Organic messages by type (DMs, channels, alpha) — excludes automated">
+            <ChartCard
+                title="Message Volume Over Time"
+                description="Organic messages by type (DMs, channels, alpha) — excludes automated"
+            >
                 <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={data.timeSeries}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                            <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
+                            <XAxis
+                                dataKey="label"
+                                stroke="#666"
+                                tick={{ fill: "#999", fontSize: 11 }}
+                            />
                             <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
-                            <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "#18181b",
+                                    border: "1px solid #333",
+                                    borderRadius: "8px",
+                                }}
+                            />
                             <Legend />
-                            <Bar dataKey="dms" name="DMs" fill="#3B82F6" stackId="msgs" radius={[0, 0, 0, 0]} />
-                            <Bar dataKey="channels" name="Channels" fill="#8B5CF6" stackId="msgs" radius={[0, 0, 0, 0]} />
-                            <Bar dataKey="alpha" name="Alpha" fill="#FF5500" stackId="msgs" radius={[4, 4, 0, 0]} />
+                            <Bar
+                                dataKey="dms"
+                                name="DMs"
+                                fill="#3B82F6"
+                                stackId="msgs"
+                                radius={[0, 0, 0, 0]}
+                            />
+                            <Bar
+                                dataKey="channels"
+                                name="Channels"
+                                fill="#8B5CF6"
+                                stackId="msgs"
+                                radius={[0, 0, 0, 0]}
+                            />
+                            <Bar
+                                dataKey="alpha"
+                                name="Alpha"
+                                fill="#FF5500"
+                                stackId="msgs"
+                                radius={[4, 4, 0, 0]}
+                            />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -1097,12 +1984,32 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={data.timeSeries}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                            <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
+                            <XAxis
+                                dataKey="label"
+                                stroke="#666"
+                                tick={{ fill: "#999", fontSize: 11 }}
+                            />
                             <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 11 }} />
-                            <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                            <Tooltip
+                                contentStyle={{
+                                    backgroundColor: "#18181b",
+                                    border: "1px solid #333",
+                                    borderRadius: "8px",
+                                }}
+                            />
                             <Legend />
-                            <Bar dataKey="friendRequests" name="Friend Requests" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="groups" name="Groups" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                            <Bar
+                                dataKey="friendRequests"
+                                name="Friend Requests"
+                                fill="#8B5CF6"
+                                radius={[4, 4, 0, 0]}
+                            />
+                            <Bar
+                                dataKey="groups"
+                                name="Groups"
+                                fill="#F59E0B"
+                                radius={[4, 4, 0, 0]}
+                            />
                         </BarChart>
                     </ResponsiveContainer>
                 </div>
@@ -1111,7 +2018,17 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
     );
 }
 
-function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData; period: Period; v2: V2AgentData | null; isLoadingV2: boolean }) {
+function AgentsSection({
+    data,
+    period,
+    v2,
+    isLoadingV2,
+}: {
+    data: AnalyticsData;
+    period: Period;
+    v2: V2AgentData | null;
+    isLoadingV2: boolean;
+}) {
     const bySource = data.summary.agentMessagesBySource;
     const failed = data.summary.agentFailedInPeriod ?? 0;
     const topChannels = data.topChannelsByAgentUsage ?? [];
@@ -1122,11 +2039,36 @@ function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData;
             {/* Agent Stats */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
                 <KPICard label="Total Agents" value={data.summary.totalAgents} icon="🤖" />
-                <KPICard label="New Agents" value={data.summary.newAgentsCount} icon="✨" subtext={`in ${period}`} />
-                <KPICard label="Agent Messages" value={data.summary.agentMessagesInPeriod} icon="💬" subtext={`(${data.summary.totalAgentMessages} total)`} />
-                <KPICard label="Unique Users" value={data.summary.uniqueAgentUsers} icon="👤" subtext="using agents" />
-                <KPICard label="Knowledge Items" value={data.summary.knowledgeItemsCount} icon="📚" subtext={`${data.summary.indexedKnowledgeItems} indexed`} />
-                <KPICard label="Official Agents" value={data.summary.officialAgents} icon="⭐" subtext="platform agents" />
+                <KPICard
+                    label="New Agents"
+                    value={data.summary.newAgentsCount}
+                    icon="✨"
+                    subtext={`in ${period}`}
+                />
+                <KPICard
+                    label="Agent Messages"
+                    value={data.summary.agentMessagesInPeriod}
+                    icon="💬"
+                    subtext={`(${data.summary.totalAgentMessages} total)`}
+                />
+                <KPICard
+                    label="Unique Users"
+                    value={data.summary.uniqueAgentUsers}
+                    icon="👤"
+                    subtext="using agents"
+                />
+                <KPICard
+                    label="Knowledge Items"
+                    value={data.summary.knowledgeItemsCount}
+                    icon="📚"
+                    subtext={`${data.summary.indexedKnowledgeItems} indexed`}
+                />
+                <KPICard
+                    label="Official Agents"
+                    value={data.summary.officialAgents}
+                    icon="⭐"
+                    subtext="platform agents"
+                />
             </div>
 
             {/* Usage by source + failed */}
@@ -1134,13 +2076,33 @@ function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData;
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {bySource && (
                         <>
-                            <MetricCard label="Direct (1:1)" value={bySource.direct} icon="💬" subtext="in-app chat" />
-                            <MetricCard label="Public Page" value={bySource.public} icon="🌐" subtext="official / embed" />
-                            <MetricCard label="Channel @mentions" value={bySource.channel} icon="📢" subtext="alpha & channels" />
+                            <MetricCard
+                                label="Direct (1:1)"
+                                value={bySource.direct}
+                                icon="💬"
+                                subtext="in-app chat"
+                            />
+                            <MetricCard
+                                label="Public Page"
+                                value={bySource.public}
+                                icon="🌐"
+                                subtext="official / embed"
+                            />
+                            <MetricCard
+                                label="Channel @mentions"
+                                value={bySource.channel}
+                                icon="📢"
+                                subtext="alpha & channels"
+                            />
                         </>
                     )}
                     {failed > 0 && (
-                        <MetricCard label="Failed responses" value={failed} icon="⚠️" subtext={`in ${period}`} />
+                        <MetricCard
+                            label="Failed responses"
+                            value={failed}
+                            icon="⚠️"
+                            subtext={`in ${period}`}
+                        />
                     )}
                 </div>
             )}
@@ -1158,35 +2120,110 @@ function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData;
                                         <stop offset="5%" stopColor="#8B5CF6" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#8B5CF6" stopOpacity={0} />
                                     </linearGradient>
-                                    <linearGradient id="colorAgentChats" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient
+                                        id="colorAgentChats"
+                                        x1="0"
+                                        y1="0"
+                                        x2="0"
+                                        y2="1"
+                                    >
                                         <stop offset="5%" stopColor="#06B6D4" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#06B6D4" stopOpacity={0} />
                                     </linearGradient>
-                                    <linearGradient id="colorAgentDirect" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient
+                                        id="colorAgentDirect"
+                                        x1="0"
+                                        y1="0"
+                                        x2="0"
+                                        y2="1"
+                                    >
                                         <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#3B82F6" stopOpacity={0} />
                                     </linearGradient>
-                                    <linearGradient id="colorAgentPublic" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient
+                                        id="colorAgentPublic"
+                                        x1="0"
+                                        y1="0"
+                                        x2="0"
+                                        y2="1"
+                                    >
                                         <stop offset="5%" stopColor="#10B981" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                                     </linearGradient>
-                                    <linearGradient id="colorAgentChannel" x1="0" y1="0" x2="0" y2="1">
+                                    <linearGradient
+                                        id="colorAgentChannel"
+                                        x1="0"
+                                        y1="0"
+                                        x2="0"
+                                        y2="1"
+                                    >
                                         <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />
                                         <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-                                <XAxis dataKey="label" stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
+                                <XAxis
+                                    dataKey="label"
+                                    stroke="#666"
+                                    tick={{ fill: "#999", fontSize: 10 }}
+                                />
                                 <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
-                                <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: "#18181b",
+                                        border: "1px solid #333",
+                                        borderRadius: "8px",
+                                    }}
+                                />
                                 <Legend />
-                                <Area type="monotone" dataKey="agents" name="New Agents" stroke="#8B5CF6" fill="url(#colorAgents)" strokeWidth={2} />
-                                <Area type="monotone" dataKey="agentChats" name="Agent Chats (total)" stroke="#06B6D4" fill="url(#colorAgentChats)" strokeWidth={2} />
-                                {data.timeSeries.some(d => (d.agentChatsDirect ?? 0) + (d.agentChatsPublic ?? 0) + (d.agentChatsChannel ?? 0) > 0) && (
+                                <Area
+                                    type="monotone"
+                                    dataKey="agents"
+                                    name="New Agents"
+                                    stroke="#8B5CF6"
+                                    fill="url(#colorAgents)"
+                                    strokeWidth={2}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="agentChats"
+                                    name="Agent Chats (total)"
+                                    stroke="#06B6D4"
+                                    fill="url(#colorAgentChats)"
+                                    strokeWidth={2}
+                                />
+                                {data.timeSeries.some(
+                                    (d) =>
+                                        (d.agentChatsDirect ?? 0) +
+                                            (d.agentChatsPublic ?? 0) +
+                                            (d.agentChatsChannel ?? 0) >
+                                        0
+                                ) && (
                                     <>
-                                        <Area type="monotone" dataKey="agentChatsDirect" name="Direct" stroke="#3B82F6" fill="url(#colorAgentDirect)" strokeWidth={1.5} />
-                                        <Area type="monotone" dataKey="agentChatsPublic" name="Public" stroke="#10B981" fill="url(#colorAgentPublic)" strokeWidth={1.5} />
-                                        <Area type="monotone" dataKey="agentChatsChannel" name="Channel @mentions" stroke="#F59E0B" fill="url(#colorAgentChannel)" strokeWidth={1.5} />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="agentChatsDirect"
+                                            name="Direct"
+                                            stroke="#3B82F6"
+                                            fill="url(#colorAgentDirect)"
+                                            strokeWidth={1.5}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="agentChatsPublic"
+                                            name="Public"
+                                            stroke="#10B981"
+                                            fill="url(#colorAgentPublic)"
+                                            strokeWidth={1.5}
+                                        />
+                                        <Area
+                                            type="monotone"
+                                            dataKey="agentChatsChannel"
+                                            name="Channel @mentions"
+                                            stroke="#F59E0B"
+                                            fill="url(#colorAgentChannel)"
+                                            strokeWidth={1.5}
+                                        />
                                     </>
                                 )}
                             </AreaChart>
@@ -1201,18 +2238,41 @@ function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData;
                         {data.agentVisibilityBreakdown?.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie data={data.agentVisibilityBreakdown} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="count" nameKey="visibility" label>
+                                    <Pie
+                                        data={data.agentVisibilityBreakdown}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={80}
+                                        dataKey="count"
+                                        nameKey="visibility"
+                                        label
+                                    >
                                         {data.agentVisibilityBreakdown.map((entry, index) => {
                                             const colors: Record<string, string> = {
-                                                "Private": "#6B7280",
-                                                "Friends": "#3B82F6", 
-                                                "Public": "#10B981",
-                                                "Official": "#F97316"
+                                                Private: "#6B7280",
+                                                Friends: "#3B82F6",
+                                                Public: "#10B981",
+                                                Official: "#F97316",
                                             };
-                                            return <Cell key={`cell-${index}`} fill={colors[entry.visibility] || PIE_COLORS[index % PIE_COLORS.length]} />;
+                                            return (
+                                                <Cell
+                                                    key={`cell-${index}`}
+                                                    fill={
+                                                        colors[entry.visibility] ||
+                                                        PIE_COLORS[index % PIE_COLORS.length]
+                                                    }
+                                                />
+                                            );
                                         })}
                                     </Pie>
-                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#18181b",
+                                            border: "1px solid #333",
+                                            borderRadius: "8px",
+                                        }}
+                                    />
                                     <Legend />
                                 </PieChart>
                             </ResponsiveContainer>
@@ -1226,16 +2286,25 @@ function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData;
             {/* Top channels by agent usage (@mentions) */}
             {topChannels.length > 0 && (
                 <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Top Channels by Agent @mentions</h3>
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">
+                        Top Channels by Agent @mentions
+                    </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {topChannels.map((ch, index) => (
-                            <div key={`${ch.channelType}-${ch.channelId ?? "global"}`} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                            <div
+                                key={`${ch.channelType}-${ch.channelId ?? "global"}`}
+                                className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2"
+                            >
                                 <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate">{ch.channelName}</p>
-                                    <p className="text-xs text-zinc-500">{ch.channelType === "global" ? "Global" : "Channel"}</p>
+                                    <p className="text-xs text-zinc-500">
+                                        {ch.channelType === "global" ? "Global" : "Channel"}
+                                    </p>
                                 </div>
-                                <span className="text-amber-400 text-sm font-medium">{ch.count}</span>
+                                <span className="text-amber-400 text-sm font-medium">
+                                    {ch.count}
+                                </span>
                             </div>
                         ))}
                     </div>
@@ -1248,58 +2317,105 @@ function AgentsSection({ data, period, v2, isLoadingV2 }: { data: AnalyticsData;
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     {data.topAgents.byMessages?.length > 0 ? (
                         data.topAgents.byMessages.slice(0, 9).map((agent, index) => (
-                            <div key={agent.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                            <div
+                                key={agent.id}
+                                className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2"
+                            >
                                 <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
                                 <span className="text-xl">{agent.emoji}</span>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate">{agent.name}</p>
                                     <p className="text-xs text-zinc-500">
-                                        {agent.visibility === "private" ? "🔒" : agent.visibility === "friends" ? "👥" : "🌍"}
+                                        {agent.visibility === "private"
+                                            ? "🔒"
+                                            : agent.visibility === "friends"
+                                              ? "👥"
+                                              : "🌍"}
                                     </p>
                                 </div>
-                                <span className="text-cyan-400 text-sm font-medium">{agent.value}</span>
+                                <span className="text-cyan-400 text-sm font-medium">
+                                    {agent.value}
+                                </span>
                             </div>
                         ))
                     ) : (
-                        <p className="text-zinc-500 text-center py-4 col-span-3">No agent activity yet</p>
+                        <p className="text-zinc-500 text-center py-4 col-span-3">
+                            No agent activity yet
+                        </p>
                     )}
                 </div>
             </div>
 
             {/* Agent Leaderboard (v2 — richer data) */}
             {leaderboard && leaderboard.length > 0 && (
-                <ChartCard title="Agent Leaderboard" description={`Ranked by usage in the last ${period}`}>
+                <ChartCard
+                    title="Agent Leaderboard"
+                    description={`Ranked by usage in the last ${period}`}
+                >
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-zinc-800">
-                                    <th className="text-left text-zinc-500 font-medium px-3 py-2">#</th>
-                                    <th className="text-left text-zinc-500 font-medium px-3 py-2">Agent</th>
-                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Prompts</th>
-                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Users</th>
-                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Total Msgs</th>
-                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">Errors</th>
+                                    <th className="text-left text-zinc-500 font-medium px-3 py-2">
+                                        #
+                                    </th>
+                                    <th className="text-left text-zinc-500 font-medium px-3 py-2">
+                                        Agent
+                                    </th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">
+                                        Prompts
+                                    </th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">
+                                        Users
+                                    </th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">
+                                        Total Msgs
+                                    </th>
+                                    <th className="text-right text-zinc-500 font-medium px-3 py-2">
+                                        Errors
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {leaderboard.map((agent, i) => (
-                                    <tr key={agent.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors">
+                                    <tr
+                                        key={agent.id}
+                                        className="border-b border-zinc-800/50 hover:bg-zinc-800/30 transition-colors"
+                                    >
                                         <td className="text-zinc-500 px-3 py-2">{i + 1}</td>
                                         <td className="px-3 py-2">
                                             <div className="flex items-center gap-2">
                                                 <span className="text-lg">{agent.emoji}</span>
                                                 <div>
-                                                    <p className="font-medium text-zinc-200">{agent.name}</p>
+                                                    <p className="font-medium text-zinc-200">
+                                                        {agent.name}
+                                                    </p>
                                                     <p className="text-xs text-zinc-500">
-                                                        {agent.visibility === "private" ? "🔒 Private" : agent.visibility === "friends" ? "👥 Friends" : agent.visibility === "official" ? "⭐ Official" : "🌍 Public"}
+                                                        {agent.visibility === "private"
+                                                            ? "🔒 Private"
+                                                            : agent.visibility === "friends"
+                                                              ? "👥 Friends"
+                                                              : agent.visibility === "official"
+                                                                ? "⭐ Official"
+                                                                : "🌍 Public"}
                                                     </p>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="text-right text-cyan-400 font-medium px-3 py-2">{agent.period_prompts.toLocaleString()}</td>
-                                        <td className="text-right text-blue-400 px-3 py-2">{agent.unique_users}</td>
-                                        <td className="text-right text-zinc-300 px-3 py-2">{agent.total_messages.toLocaleString()}</td>
-                                        <td className={`text-right px-3 py-2 ${agent.errors > 0 ? "text-red-400" : "text-zinc-600"}`}>{agent.errors}</td>
+                                        <td className="text-right text-cyan-400 font-medium px-3 py-2">
+                                            {agent.period_prompts.toLocaleString()}
+                                        </td>
+                                        <td className="text-right text-blue-400 px-3 py-2">
+                                            {agent.unique_users}
+                                        </td>
+                                        <td className="text-right text-zinc-300 px-3 py-2">
+                                            {agent.total_messages.toLocaleString()}
+                                        </td>
+                                        <td
+                                            className={`text-right px-3 py-2 ${agent.errors > 0 ? "text-red-400" : "text-zinc-600"}`}
+                                        >
+                                            {agent.errors}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -1332,11 +2448,33 @@ type ChatStats = {
     totalMessages: number;
     activeChannels: number;
     activeLocationChats: number;
-    topChannels: { id: string; name: string; emoji: string; type: string; member_count: number; message_count: number }[];
-    topLocationChats: { id: string; name: string; emoji: string; google_place_name: string; member_count: number; message_count: number }[];
+    topChannels: {
+        id: string;
+        name: string;
+        emoji: string;
+        type: string;
+        member_count: number;
+        message_count: number;
+    }[];
+    topLocationChats: {
+        id: string;
+        name: string;
+        emoji: string;
+        google_place_name: string;
+        member_count: number;
+        message_count: number;
+    }[];
 };
 
-function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatData | null; isLoadingV2: boolean }) {
+function ChatsSection({
+    period,
+    v2,
+    isLoadingV2,
+}: {
+    period: Period;
+    v2: V2ChatData | null;
+    isLoadingV2: boolean;
+}) {
     const { getAuthHeaders, isReady } = useAdmin();
     const [stats, setStats] = useState<ChatStats | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -1354,22 +2492,44 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
                     const data = await res.json();
                     setStats({
                         ...data.summary,
-                        topChannels: data.channels.slice(0, 10).map((c: { id: string; name: string; emoji: string; type: string; member_count: number; message_count: number }) => ({
-                            id: c.id,
-                            name: c.name,
-                            emoji: c.emoji,
-                            type: c.type,
-                            member_count: c.member_count,
-                            message_count: c.message_count,
-                        })),
-                        topLocationChats: data.locationChats.slice(0, 10).map((c: { id: string; name: string; emoji: string; google_place_name: string; member_count: number; message_count: number }) => ({
-                            id: c.id,
-                            name: c.name,
-                            emoji: c.emoji,
-                            google_place_name: c.google_place_name,
-                            member_count: c.member_count,
-                            message_count: c.message_count,
-                        })),
+                        topChannels: data.channels
+                            .slice(0, 10)
+                            .map(
+                                (c: {
+                                    id: string;
+                                    name: string;
+                                    emoji: string;
+                                    type: string;
+                                    member_count: number;
+                                    message_count: number;
+                                }) => ({
+                                    id: c.id,
+                                    name: c.name,
+                                    emoji: c.emoji,
+                                    type: c.type,
+                                    member_count: c.member_count,
+                                    message_count: c.message_count,
+                                })
+                            ),
+                        topLocationChats: data.locationChats
+                            .slice(0, 10)
+                            .map(
+                                (c: {
+                                    id: string;
+                                    name: string;
+                                    emoji: string;
+                                    google_place_name: string;
+                                    member_count: number;
+                                    message_count: number;
+                                }) => ({
+                                    id: c.id,
+                                    name: c.name,
+                                    emoji: c.emoji,
+                                    google_place_name: c.google_place_name,
+                                    member_count: c.member_count,
+                                    message_count: c.message_count,
+                                })
+                            ),
                     });
                 }
             } catch (err) {
@@ -1395,7 +2555,7 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
         { name: "POAP Event", value: stats.poapEventChannels, color: "#EC4899" },
         { name: "POAP Collection", value: stats.poapCollectionChannels, color: "#F59E0B" },
         { name: "Location", value: stats.totalLocationChats, color: "#EF4444" },
-    ].filter(d => d.value > 0);
+    ].filter((d) => d.value > 0);
 
     return (
         <div className="space-y-6">
@@ -1405,37 +2565,66 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
                 <MetricCard label="Location Chats" value={stats.totalLocationChats} icon="📍" />
                 <MetricCard label="Standard" value={stats.standardChannels} icon="☁️" />
                 <MetricCard label="Decentralized" value={stats.wakuChannels} icon="🌐" />
-                <MetricCard label="POAP Channels" value={stats.poapEventChannels + stats.poapCollectionChannels} icon="🎫" />
+                <MetricCard
+                    label="POAP Channels"
+                    value={stats.poapEventChannels + stats.poapCollectionChannels}
+                    icon="🎫"
+                />
                 <MetricCard label="Official" value={stats.officialChannels} icon="⭐" />
             </div>
 
             {/* Engagement Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MetricCard label="Total Members" value={stats.totalMembers} icon="👥" subtext="across all chats" />
-                <MetricCard label="Total Messages" value={stats.totalMessages} icon="📊" subtext="in public chats" />
-                <MetricCard label="Active Channels" value={stats.activeChannels} icon="✅" subtext={`of ${stats.totalChannels}`} />
-                <MetricCard label="Active Locations" value={stats.activeLocationChats} icon="📍" subtext={`of ${stats.totalLocationChats}`} />
+                <MetricCard
+                    label="Total Members"
+                    value={stats.totalMembers}
+                    icon="👥"
+                    subtext="across all chats"
+                />
+                <MetricCard
+                    label="Total Messages"
+                    value={stats.totalMessages}
+                    icon="📊"
+                    subtext="in public chats"
+                />
+                <MetricCard
+                    label="Active Channels"
+                    value={stats.activeChannels}
+                    icon="✅"
+                    subtext={`of ${stats.totalChannels}`}
+                />
+                <MetricCard
+                    label="Active Locations"
+                    value={stats.activeLocationChats}
+                    icon="📍"
+                    subtext={`of ${stats.totalLocationChats}`}
+                />
             </div>
 
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Channel Type Breakdown */}
                 <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Chat Type Distribution</h3>
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">
+                        Chat Type Distribution
+                    </h3>
                     <div className="h-56">
                         {channelTypeData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie 
-                                        data={channelTypeData} 
-                                        cx="50%" 
-                                        cy="50%" 
-                                        innerRadius={50} 
-                                        outerRadius={80} 
-                                        dataKey="value" 
+                                    <Pie
+                                        data={channelTypeData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={50}
+                                        outerRadius={80}
+                                        dataKey="value"
                                         nameKey="name"
                                         label={(props) => {
-                                            const { name, percent } = props as { name?: string; percent?: number };
+                                            const { name, percent } = props as {
+                                                name?: string;
+                                                percent?: number;
+                                            };
                                             return `${name} (${((percent || 0) * 100).toFixed(0)}%)`;
                                         }}
                                     >
@@ -1443,7 +2632,13 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Pie>
-                                    <Tooltip contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: "#18181b",
+                                            border: "1px solid #333",
+                                            borderRadius: "8px",
+                                        }}
+                                    />
                                 </PieChart>
                             </ResponsiveContainer>
                         ) : (
@@ -1454,10 +2649,15 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
 
                 {/* Activity Comparison */}
                 <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">Top Chats by Activity</h3>
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">
+                        Top Chats by Activity
+                    </h3>
                     <div className="space-y-2 max-h-56 overflow-y-auto">
                         {stats.topChannels.slice(0, 5).map((ch, index) => (
-                            <div key={ch.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                            <div
+                                key={ch.id}
+                                className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2"
+                            >
                                 <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
                                 <span className="text-xl">{ch.emoji}</span>
                                 <div className="flex-1 min-w-0">
@@ -1480,17 +2680,24 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
             {/* Top Location Chats */}
             {stats.topLocationChats.length > 0 && (
                 <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">📍 Top Location Chats</h3>
+                    <h3 className="text-sm font-semibold text-zinc-400 mb-3">
+                        📍 Top Location Chats
+                    </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {stats.topLocationChats.slice(0, 6).map((lc, index) => (
-                            <div key={lc.id} className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2">
+                            <div
+                                key={lc.id}
+                                className="flex items-center gap-3 bg-zinc-800/50 rounded-lg px-3 py-2"
+                            >
                                 <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
                                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-red-500/20 to-orange-500/20 flex items-center justify-center text-lg">
                                     {lc.emoji}
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <p className="font-medium truncate text-sm">{lc.name}</p>
-                                    <p className="text-xs text-zinc-500 truncate">{lc.google_place_name}</p>
+                                    <p className="text-xs text-zinc-500 truncate">
+                                        {lc.google_place_name}
+                                    </p>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm text-red-400">{lc.member_count} 👥</p>
@@ -1504,7 +2711,10 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
 
             {/* Message Volume Over Time (v2) */}
             {v2?.messageVolume && v2.messageVolume.length > 0 && (
-                <ChartCard title="Message Volume Over Time" description="Daily messages by type (DMs, Channels, Alpha, AI)">
+                <ChartCard
+                    title="Message Volume Over Time"
+                    description="Daily messages by type (DMs, Channels, Alpha, AI)"
+                >
                     <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={v2.messageVolume}>
@@ -1531,18 +2741,64 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
                                     dataKey="date"
                                     stroke="#666"
                                     tick={{ fill: "#999", fontSize: 10 }}
-                                    tickFormatter={(d) => new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                    tickFormatter={(d) =>
+                                        new Date(d).toLocaleDateString("en-US", {
+                                            month: "short",
+                                            day: "numeric",
+                                        })
+                                    }
                                 />
                                 <YAxis stroke="#666" tick={{ fill: "#999", fontSize: 10 }} />
                                 <Tooltip
-                                    contentStyle={{ backgroundColor: "#18181b", border: "1px solid #333", borderRadius: "8px" }}
-                                    labelFormatter={(d) => new Date(d as string).toLocaleDateString("en-US", { month: "long", day: "numeric" })}
+                                    contentStyle={{
+                                        backgroundColor: "#18181b",
+                                        border: "1px solid #333",
+                                        borderRadius: "8px",
+                                    }}
+                                    labelFormatter={(d) =>
+                                        new Date(d as string).toLocaleDateString("en-US", {
+                                            month: "long",
+                                            day: "numeric",
+                                        })
+                                    }
                                 />
                                 <Legend />
-                                <Area type="monotone" dataKey="dms" name="DMs" stroke="#3B82F6" fill="url(#colorDms)" strokeWidth={2} stackId="1" />
-                                <Area type="monotone" dataKey="channels" name="Channels" stroke="#8B5CF6" fill="url(#colorChannels)" strokeWidth={2} stackId="1" />
-                                <Area type="monotone" dataKey="alpha" name="Alpha" stroke="#FF5500" fill="url(#colorAlpha)" strokeWidth={2} stackId="1" />
-                                <Area type="monotone" dataKey="ai_prompts" name="AI Prompts" stroke="#10B981" fill="url(#colorAi)" strokeWidth={2} stackId="1" />
+                                <Area
+                                    type="monotone"
+                                    dataKey="dms"
+                                    name="DMs"
+                                    stroke="#3B82F6"
+                                    fill="url(#colorDms)"
+                                    strokeWidth={2}
+                                    stackId="1"
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="channels"
+                                    name="Channels"
+                                    stroke="#8B5CF6"
+                                    fill="url(#colorChannels)"
+                                    strokeWidth={2}
+                                    stackId="1"
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="alpha"
+                                    name="Alpha"
+                                    stroke="#FF5500"
+                                    fill="url(#colorAlpha)"
+                                    strokeWidth={2}
+                                    stackId="1"
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="ai_prompts"
+                                    name="AI Prompts"
+                                    stroke="#10B981"
+                                    fill="url(#colorAi)"
+                                    strokeWidth={2}
+                                    stackId="1"
+                                />
                             </AreaChart>
                         </ResponsiveContainer>
                     </div>
@@ -1551,7 +2807,10 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
 
             {/* Peak Hours Heatmap (v2) */}
             {v2?.peakHours && v2.peakHours.length > 0 && (
-                <ChartCard title="Peak Activity Hours" description="When messages are sent (UTC, hour x day of week)">
+                <ChartCard
+                    title="Peak Activity Hours"
+                    description="When messages are sent (UTC, hour x day of week)"
+                >
                     <PeakHoursHeatmap data={v2.peakHours} />
                 </ChartCard>
             )}
@@ -1560,7 +2819,9 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
             <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/50 flex items-center justify-between">
                 <div>
                     <h3 className="font-medium text-white">Manage Public Chats</h3>
-                    <p className="text-sm text-zinc-400">View all channels and location chats, toggle official status, or deactivate</p>
+                    <p className="text-sm text-zinc-400">
+                        View all channels and location chats, toggle official status, or deactivate
+                    </p>
                 </div>
                 <a
                     href="/admin/chats"
@@ -1579,7 +2840,9 @@ function ChatsSection({ period, v2, isLoadingV2 }: { period: Period; v2: V2ChatD
 
 function OfficialAgentsIntegration({ agents }: { agents: OfficialAgent[] }) {
     const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
-    const [embedTab, setEmbedTab] = useState<Record<string, "iframe" | "js" | "react" | "nextjs">>({});
+    const [embedTab, setEmbedTab] = useState<Record<string, "iframe" | "js" | "react" | "nextjs">>(
+        {}
+    );
     const [copiedField, setCopiedField] = useState<string | null>(null);
 
     const copyToClipboard = async (text: string, fieldId: string) => {
@@ -1592,12 +2855,12 @@ function OfficialAgentsIntegration({ agents }: { agents: OfficialAgent[] }) {
         }
     };
 
-    const getPublicUrl = (agentId: string) => 
+    const getPublicUrl = (agentId: string) =>
         `${typeof window !== "undefined" ? window.location.origin : "https://app.spritz.chat"}/agent/${agentId}`;
 
     const getEmbedCode = (agentId: string, type: "iframe" | "js" | "react" | "nextjs") => {
         const publicUrl = getPublicUrl(agentId);
-        
+
         switch (type) {
             case "iframe":
                 return `<iframe 
@@ -1669,15 +2932,15 @@ export function SpritzAgent() {
             <p className="text-xs text-zinc-400 mb-4">
                 Manage public URLs and embed codes for all official platform agents.
             </p>
-            
+
             <div className="space-y-3">
                 {agents.map((agent) => {
                     const isExpanded = expandedAgent === agent.id;
                     const publicUrl = getPublicUrl(agent.id);
                     const currentTab = embedTab[agent.id] || "iframe";
-                    
+
                     return (
-                        <div 
+                        <div
                             key={agent.id}
                             className="bg-zinc-800/50 border border-zinc-700/50 rounded-xl overflow-hidden"
                         >
@@ -1687,9 +2950,9 @@ export function SpritzAgent() {
                                 className="w-full flex items-center gap-3 p-4 hover:bg-zinc-800/80 transition-colors"
                             >
                                 {agent.avatar_url ? (
-                                    <img 
-                                        src={agent.avatar_url} 
-                                        alt={agent.name} 
+                                    <img
+                                        src={agent.avatar_url}
+                                        alt={agent.name}
                                         className="w-10 h-10 rounded-xl object-cover"
                                     />
                                 ) : (
@@ -1710,16 +2973,22 @@ export function SpritzAgent() {
                                         )}
                                     </div>
                                     <p className="text-xs text-zinc-500 truncate">
-                                        {agent.personality || "AI Assistant"} • {agent.message_count} messages
+                                        {agent.personality || "AI Assistant"} •{" "}
+                                        {agent.message_count} messages
                                     </p>
                                 </div>
-                                <svg 
+                                <svg
                                     className={`w-5 h-5 text-zinc-400 transition-transform ${isExpanded ? "rotate-180" : ""}`}
-                                    fill="none" 
-                                    viewBox="0 0 24 24" 
+                                    fill="none"
+                                    viewBox="0 0 24 24"
                                     stroke="currentColor"
                                 >
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 9l-7 7-7-7"
+                                    />
                                 </svg>
                             </button>
 
@@ -1739,10 +3008,14 @@ export function SpritzAgent() {
                                                 className="flex-1 px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-sm font-mono"
                                             />
                                             <button
-                                                onClick={() => copyToClipboard(publicUrl, `url-${agent.id}`)}
+                                                onClick={() =>
+                                                    copyToClipboard(publicUrl, `url-${agent.id}`)
+                                                }
                                                 className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-white text-sm rounded-lg transition-colors min-w-[70px]"
                                             >
-                                                {copiedField === `url-${agent.id}` ? "Copied!" : "Copy"}
+                                                {copiedField === `url-${agent.id}`
+                                                    ? "Copied!"
+                                                    : "Copy"}
                                             </button>
                                             <a
                                                 href={publicUrl}
@@ -1750,8 +3023,18 @@ export function SpritzAgent() {
                                                 rel="noopener noreferrer"
                                                 className="px-3 py-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-sm rounded-lg transition-colors flex items-center gap-1"
                                             >
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                                <svg
+                                                    className="w-4 h-4"
+                                                    fill="none"
+                                                    viewBox="0 0 24 24"
+                                                    stroke="currentColor"
+                                                >
+                                                    <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        strokeWidth={2}
+                                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                                    />
                                                 </svg>
                                                 Open
                                             </a>
@@ -1761,21 +3044,36 @@ export function SpritzAgent() {
                                     {/* Embed Code */}
                                     <div>
                                         <div className="flex items-center gap-2 mb-2">
-                                            <label className="text-xs text-zinc-400 font-medium">📦 Embed Code</label>
+                                            <label className="text-xs text-zinc-400 font-medium">
+                                                📦 Embed Code
+                                            </label>
                                             <div className="flex gap-1 bg-zinc-900 rounded-lg p-0.5">
-                                                {(["iframe", "js", "react", "nextjs"] as const).map((tab) => (
-                                                    <button
-                                                        key={tab}
-                                                        onClick={() => setEmbedTab(prev => ({ ...prev, [agent.id]: tab }))}
-                                                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                                                            currentTab === tab
-                                                                ? "bg-zinc-800 text-zinc-300"
-                                                                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
-                                                        }`}
-                                                    >
-                                                        {tab === "iframe" ? "iframe" : tab === "js" ? "JavaScript" : tab === "react" ? "React" : "Next.js"}
-                                                    </button>
-                                                ))}
+                                                {(["iframe", "js", "react", "nextjs"] as const).map(
+                                                    (tab) => (
+                                                        <button
+                                                            key={tab}
+                                                            onClick={() =>
+                                                                setEmbedTab((prev) => ({
+                                                                    ...prev,
+                                                                    [agent.id]: tab,
+                                                                }))
+                                                            }
+                                                            className={`px-2 py-1 text-xs rounded transition-colors ${
+                                                                currentTab === tab
+                                                                    ? "bg-zinc-800 text-zinc-300"
+                                                                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+                                                            }`}
+                                                        >
+                                                            {tab === "iframe"
+                                                                ? "iframe"
+                                                                : tab === "js"
+                                                                  ? "JavaScript"
+                                                                  : tab === "react"
+                                                                    ? "React"
+                                                                    : "Next.js"}
+                                                        </button>
+                                                    )
+                                                )}
                                             </div>
                                         </div>
                                         <div className="relative">
@@ -1786,25 +3084,46 @@ export function SpritzAgent() {
                                                 className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-white text-xs font-mono resize-none"
                                             />
                                             <button
-                                                onClick={() => copyToClipboard(getEmbedCode(agent.id, currentTab), `embed-${agent.id}-${currentTab}`)}
+                                                onClick={() =>
+                                                    copyToClipboard(
+                                                        getEmbedCode(agent.id, currentTab),
+                                                        `embed-${agent.id}-${currentTab}`
+                                                    )
+                                                }
                                                 className="absolute top-2 right-2 px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white text-xs rounded transition-colors"
                                             >
-                                                {copiedField === `embed-${agent.id}-${currentTab}` ? "Copied!" : "Copy"}
+                                                {copiedField === `embed-${agent.id}-${currentTab}`
+                                                    ? "Copied!"
+                                                    : "Copy"}
                                             </button>
                                         </div>
                                         <p className="text-xs text-zinc-500 mt-1.5">
-                                            {currentTab === "iframe" && "Paste this iframe code directly into your HTML"}
-                                            {currentTab === "js" && "Add this script to dynamically load the agent"}
-                                            {currentTab === "react" && "Use this React component in your app"}
-                                            {currentTab === "nextjs" && "Client component for Next.js App Router"}
+                                            {currentTab === "iframe" &&
+                                                "Paste this iframe code directly into your HTML"}
+                                            {currentTab === "js" &&
+                                                "Add this script to dynamically load the agent"}
+                                            {currentTab === "react" &&
+                                                "Use this React component in your app"}
+                                            {currentTab === "nextjs" &&
+                                                "Client component for Next.js App Router"}
                                         </p>
                                     </div>
 
                                     {/* Quick Stats */}
                                     <div className="flex items-center gap-4 pt-2 border-t border-zinc-700/50 text-xs text-zinc-500">
-                                        <span>ID: <code className="text-zinc-400">{agent.id}</code></span>
-                                        <span>Messages: <span className="text-cyan-400">{agent.message_count}</span></span>
-                                        <span>Created: {new Date(agent.created_at).toLocaleDateString()}</span>
+                                        <span>
+                                            ID: <code className="text-zinc-400">{agent.id}</code>
+                                        </span>
+                                        <span>
+                                            Messages:{" "}
+                                            <span className="text-cyan-400">
+                                                {agent.message_count}
+                                            </span>
+                                        </span>
+                                        <span>
+                                            Created:{" "}
+                                            {new Date(agent.created_at).toLocaleDateString()}
+                                        </span>
                                     </div>
                                 </div>
                             )}
@@ -1820,20 +3139,20 @@ export function SpritzAgent() {
 // REUSABLE COMPONENTS
 // ============================================
 
-function MetricCard({ 
-    label, 
-    value, 
-    icon, 
-    subtext, 
-    trend, 
+function MetricCard({
+    label,
+    value,
+    icon,
+    subtext,
+    trend,
     trendLabel,
-    isString = false 
-}: { 
-    label: string; 
-    value: number | string; 
-    icon: string; 
-    subtext?: string; 
-    trend?: number; 
+    isString = false,
+}: {
+    label: string;
+    value: number | string;
+    icon: string;
+    subtext?: string;
+    trend?: number;
     trendLabel?: string;
     isString?: boolean;
 }) {
@@ -1843,7 +3162,9 @@ function MetricCard({
                 <span className="text-lg">{icon}</span>
                 <span className="text-xs text-zinc-400 uppercase tracking-wider">{label}</span>
             </div>
-            <p className="text-2xl font-bold">{isString ? value : (value as number).toLocaleString()}</p>
+            <p className="text-2xl font-bold">
+                {isString ? value : (value as number).toLocaleString()}
+            </p>
             {(subtext || trend !== undefined) && (
                 <p className="text-xs text-zinc-500 mt-1">
                     {trend !== undefined && <span className="text-green-400">+{trend}</span>}
@@ -1865,30 +3186,39 @@ function SmallMetric({ label, value }: { label: string; value: number }) {
     );
 }
 
-function TopUsersList({ 
-    title, 
-    icon, 
-    users, 
-    getDisplayName, 
-    color 
-}: { 
-    title: string; 
-    icon: string; 
-    users: TopUser[]; 
-    getDisplayName: (user: TopUser) => string; 
+function TopUsersList({
+    title,
+    icon,
+    users,
+    getDisplayName,
+    color,
+}: {
+    title: string;
+    icon: string;
+    users: TopUser[];
+    getDisplayName: (user: TopUser) => string;
     color: string;
 }) {
     return (
         <div className="bg-zinc-900/50 rounded-xl p-4 border border-zinc-800">
-            <h4 className="text-sm font-semibold text-zinc-400 mb-3">{icon} {title}</h4>
+            <h4 className="text-sm font-semibold text-zinc-400 mb-3">
+                {icon} {title}
+            </h4>
             <div className="space-y-2">
                 {users.slice(0, 5).map((user, index) => (
-                    <div key={user.address} className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2">
+                    <div
+                        key={user.address}
+                        className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2"
+                    >
                         <div className="flex items-center gap-2">
                             <span className="text-zinc-500 text-sm w-4">{index + 1}.</span>
-                            <span className="text-sm truncate max-w-[120px]">{getDisplayName(user)}</span>
+                            <span className="text-sm truncate max-w-[120px]">
+                                {getDisplayName(user)}
+                            </span>
                         </div>
-                        <span className={`text-sm font-medium ${color}`}>{user.value.toLocaleString()}</span>
+                        <span className={`text-sm font-medium ${color}`}>
+                            {user.value.toLocaleString()}
+                        </span>
                     </div>
                 ))}
             </div>
