@@ -1024,7 +1024,7 @@ function OverviewSection({
                     current={curr?.new_users}
                     previous={prev?.new_users}
                     trendLabel="signups"
-                    subtext={`+${data.summary.newUsersCount} new`}
+                    subtext={`+${data.summary.newUsersCount} new · ${data.summary.activeUsers} active (${((data.summary.activeUsers / (data.summary.totalUsers || 1)) * 100).toFixed(0)}%)`}
                 />
                 <KPICard
                     label="User DMs"
@@ -1033,24 +1033,25 @@ function OverviewSection({
                     current={curr?.dm_messages}
                     previous={prev?.dm_messages}
                     trendLabel="vs prev"
-                    subtext={`${data.summary.totalChannelMessages.toLocaleString()} channel · ${data.summary.totalAlphaMessages.toLocaleString()} alpha`}
+                    subtext={`${(data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod).toLocaleString()} in ${period} · ${data.summary.totalChannelMessages.toLocaleString()} ch · ${data.summary.totalAlphaMessages.toLocaleString()} alpha`}
                 />
                 <KPICard
                     label="Smart Wallets"
                     value={data.summary.usersWithSmartWallet}
                     icon="💳"
-                    subtext={`+${data.summary.walletsCreatedInPeriod} new`}
+                    subtext={`+${data.summary.walletsCreatedInPeriod} new · ${((data.summary.usersWithSmartWallet / (data.summary.totalUsers || 1)) * 100).toFixed(0)}% of users`}
                 />
                 <KPICard
                     label="Transactions"
                     value={data.summary.totalWalletTransactions}
                     icon="📊"
-                    subtext={`${data.summary.walletTxInPeriod} in period`}
+                    subtext={`${data.summary.walletTxInPeriod} in ${period} · ${data.summary.uniqueTxUsers} unique senders`}
                 />
                 <KPICard
                     label="Volume"
                     value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`}
                     icon="💰"
+                    subtext={`$${Math.round(data.summary.volumeInPeriod).toLocaleString()} in ${period}`}
                 />
                 <KPICard
                     label="AI Agents"
@@ -1059,7 +1060,7 @@ function OverviewSection({
                     current={curr?.agents_created}
                     previous={prev?.agents_created}
                     trendLabel="created"
-                    subtext={`+${data.summary.newAgentsCount} new`}
+                    subtext={`+${data.summary.newAgentsCount} new · ${data.summary.totalAgentMessages.toLocaleString()} msgs · ${data.summary.uniqueAgentUsers} users`}
                 />
             </div>
 
@@ -1289,7 +1290,132 @@ function OverviewSection({
                 </ChartCard>
             </div>
 
-            {/* Secondary Metrics */}
+            {/* Detailed Numeric Breakdown */}
+            <div className="bg-gradient-to-br from-zinc-800/60 to-zinc-900/80 border border-zinc-700/50 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                    <span className="text-sm">📋</span>
+                    <h3 className="text-sm font-semibold text-white">Detailed Numbers</h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-medium">
+                        {period}
+                    </span>
+                </div>
+                {(() => {
+                    const s = data.summary;
+                    const total = s.totalUsers || 1;
+                    const msgsPerUser = s.totalOrganicMessages / total;
+                    const msgsPerActive =
+                        s.activeUsers > 0 ? s.organicMessagesInPeriod / s.activeUsers : 0;
+                    const friendsPerUser = s.acceptedFriendships / total;
+                    const daysInPeriod =
+                        period === "24h"
+                            ? 1
+                            : period === "7d"
+                              ? 7
+                              : period === "30d"
+                                ? 30
+                                : period === "90d"
+                                  ? 90
+                                  : 365;
+                    const dailySignups = s.newUsersCount / daysInPeriod;
+                    const dailyMessages = s.organicMessagesInPeriod / daysInPeriod;
+                    const dailyDms = (s.organicDmsInPeriod ?? s.dmMessagesInPeriod) / daysInPeriod;
+                    const retentionRate = (s.activeUsers / total) * 100;
+                    const walletTxRate = (s.usersWithTxHistory / total) * 100;
+                    const avgPointsPerUser = s.totalPoints / total;
+                    const agentMsgsPerUser =
+                        s.uniqueAgentUsers > 0 ? s.totalAgentMessages / s.uniqueAgentUsers : 0;
+                    const friendAcceptRate =
+                        s.friendRequestsCount > 0
+                            ? (s.acceptedFriendships / s.friendRequestsCount) * 100
+                            : 0;
+                    return (
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                            <NumberDetail
+                                label="Avg Msgs / User (all-time)"
+                                value={msgsPerUser.toFixed(1)}
+                            />
+                            <NumberDetail
+                                label={`Msgs / Active User (${period})`}
+                                value={msgsPerActive.toFixed(1)}
+                            />
+                            <NumberDetail
+                                label="Avg Friends / User"
+                                value={friendsPerUser.toFixed(2)}
+                            />
+                            <NumberDetail
+                                label="Avg Points / User"
+                                value={Math.round(avgPointsPerUser).toLocaleString()}
+                            />
+                            <NumberDetail
+                                label={`Daily Signups (${period} avg)`}
+                                value={dailySignups.toFixed(1)}
+                            />
+                            <NumberDetail
+                                label={`Daily Organic Msgs (${period} avg)`}
+                                value={Math.round(dailyMessages).toLocaleString()}
+                            />
+                            <NumberDetail
+                                label={`Daily DMs (${period} avg)`}
+                                value={Math.round(dailyDms).toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Retention (active/total)"
+                                value={`${retentionRate.toFixed(1)}%`}
+                            />
+                            <NumberDetail
+                                label="Users w/ Tx History"
+                                value={`${walletTxRate.toFixed(1)}%`}
+                            />
+                            <NumberDetail
+                                label="Friend Request Accept"
+                                value={`${friendAcceptRate.toFixed(0)}%`}
+                            />
+                            <NumberDetail
+                                label="Agent Msgs / Agent User"
+                                value={agentMsgsPerUser.toFixed(1)}
+                            />
+                            <NumberDetail
+                                label="Total Organic Msgs"
+                                value={s.totalOrganicMessages.toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="DMs (organic)"
+                                value={s.totalOrganicDms.toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Channel Msgs"
+                                value={s.totalChannelMessages.toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Alpha Msgs"
+                                value={s.totalAlphaMessages.toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Automated DMs"
+                                value={s.totalAutomatedDms.toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Welcome DMs"
+                                value={(s.totalWelcomeDms ?? 0).toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Broadcasts"
+                                value={(s.totalBroadcastDms ?? 0).toLocaleString()}
+                            />
+                            <NumberDetail
+                                label="Total Points Earned"
+                                value={s.totalPoints.toLocaleString()}
+                            />
+                            <NumberDetail
+                                label={`Points in ${period}`}
+                                value={s.pointsInPeriod.toLocaleString()}
+                            />
+                        </div>
+                    );
+                })()}
+            </div>
+
+            {/* Platform Totals */}
             <SectionHeader title="Platform Totals" description="All-time cumulative metrics" />
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
                 <SmallMetric label="Passkeys" value={data.summary.totalPasskeys} />
@@ -1301,6 +1427,16 @@ function OverviewSection({
                 <SmallMetric label="Friendships" value={data.summary.acceptedFriendships} />
                 <SmallMetric label="Public Profiles" value={data.summary.publicProfilesCount} />
             </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                <SmallMetric label="AI Agents" value={data.summary.totalAgents} />
+                <SmallMetric label="Agent Msgs" value={data.summary.totalAgentMessages} />
+                <SmallMetric label="Smart Wallets" value={data.summary.usersWithSmartWallet} />
+                <SmallMetric label="Transactions" value={data.summary.totalWalletTransactions} />
+                <SmallMetric label="Knowledge Items" value={data.summary.knowledgeItemsCount} />
+                <SmallMetric label="Groups Created" value={data.summary.groupsCreated} />
+                <SmallMetric label="Invites Used" value={data.summary.invitesUsed} />
+                <SmallMetric label="Beta Approved" value={data.summary.betaApprovedCount} />
+            </div>
 
             {/* Beta Access */}
             <ChartCard title="Wallet Beta Access">
@@ -1310,6 +1446,11 @@ function OverviewSection({
                             {data.summary.betaApplicantsCount}
                         </p>
                         <p className="text-xs text-zinc-500">Applications</p>
+                        <p className="text-[10px] text-zinc-600 mt-0.5">
+                            {data.summary.betaApplicantsCount > 0
+                                ? `${((data.summary.betaApprovedCount / data.summary.betaApplicantsCount) * 100).toFixed(0)}% approval rate`
+                                : ""}
+                        </p>
                     </div>
                     <div className="text-center">
                         <p className="text-2xl font-bold text-green-400">
@@ -1352,32 +1493,89 @@ function UsersSection({
         <div className="space-y-6">
             {/* User Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <KPICard label="Total Users" value={data.summary.totalUsers} icon="👥" />
+                <KPICard
+                    label="Total Users"
+                    value={data.summary.totalUsers}
+                    icon="👥"
+                    subtext={`${data.summary.publicProfilesCount} public profiles`}
+                />
                 <KPICard
                     label="New Users"
                     value={data.summary.newUsersCount}
                     icon="✨"
-                    subtext={`in ${period}`}
+                    subtext={`in ${period} (${(data.summary.newUsersCount / (period === "24h" ? 1 : period === "7d" ? 7 : period === "30d" ? 30 : period === "90d" ? 90 : 365)).toFixed(1)}/day avg)`}
                 />
                 <KPICard
                     label="Active Users"
                     value={data.summary.activeUsers}
                     icon="🔥"
-                    subtext={`in ${period}`}
+                    subtext={`${((data.summary.activeUsers / (data.summary.totalUsers || 1)) * 100).toFixed(1)}% of total`}
                 />
                 <KPICard
                     label="User DMs"
                     value={data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod}
                     icon="💬"
-                    subtext={`in ${period} (excl. automated)`}
+                    subtext={`${((data.summary.organicDmsInPeriod ?? data.summary.dmMessagesInPeriod) / (period === "24h" ? 1 : period === "7d" ? 7 : period === "30d" ? 30 : period === "90d" ? 90 : 365)).toFixed(0)}/day · ${data.summary.totalOrganicDms.toLocaleString()} total`}
                 />
                 <KPICard
                     label="Friend Requests"
                     value={data.summary.friendRequestsCount}
                     icon="🤝"
+                    subtext={`${data.summary.acceptedFriendships} accepted (${data.summary.friendRequestsCount > 0 ? ((data.summary.acceptedFriendships / data.summary.friendRequestsCount) * 100).toFixed(0) : 0}%)`}
                 />
-                <KPICard label="Invites Used" value={data.summary.invitesUsed} icon="🎟️" />
+                <KPICard
+                    label="Invites Used"
+                    value={data.summary.invitesUsed}
+                    icon="🎟️"
+                    subtext={`${data.summary.groupsCreated} groups created`}
+                />
             </div>
+
+            {/* Auth method breakdown numbers */}
+            {data.summary.walletTypeBreakdown && (
+                <div className="bg-zinc-800/40 rounded-xl p-3 border border-zinc-700/30">
+                    <p className="text-xs text-zinc-400 uppercase tracking-wider mb-2">
+                        Registration Method Breakdown
+                    </p>
+                    <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                        <NumberDetail
+                            label="Wallet (EOA)"
+                            value={data.summary.walletTypeBreakdown.wallet?.toLocaleString() ?? "0"}
+                        />
+                        <NumberDetail
+                            label="Passkey"
+                            value={
+                                data.summary.walletTypeBreakdown.passkey?.toLocaleString() ?? "0"
+                            }
+                        />
+                        <NumberDetail
+                            label="Email"
+                            value={data.summary.walletTypeBreakdown.email?.toLocaleString() ?? "0"}
+                        />
+                        <NumberDetail
+                            label="Solana"
+                            value={data.summary.walletTypeBreakdown.solana?.toLocaleString() ?? "0"}
+                        />
+                        <NumberDetail
+                            label="World ID"
+                            value={
+                                data.summary.walletTypeBreakdown.worldId?.toLocaleString() ?? "0"
+                            }
+                        />
+                        <NumberDetail
+                            label="Unset/Other"
+                            value={(
+                                (data.summary.totalUsers || 0) -
+                                (data.summary.walletTypeBreakdown.wallet ?? 0) -
+                                (data.summary.walletTypeBreakdown.passkey ?? 0) -
+                                (data.summary.walletTypeBreakdown.email ?? 0) -
+                                (data.summary.walletTypeBreakdown.solana ?? 0) -
+                                (data.summary.walletTypeBreakdown.worldId ?? 0)
+                            ).toLocaleString()}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* User Segments */}
             {segments && (
@@ -1679,18 +1877,19 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
                     label="Total Tx"
                     value={data.summary.totalWalletTransactions}
                     icon="📊"
-                    subtext={`${data.summary.confirmedTransactions} confirmed`}
+                    subtext={`${data.summary.confirmedTransactions} confirmed (${data.summary.totalWalletTransactions > 0 ? ((data.summary.confirmedTransactions / data.summary.totalWalletTransactions) * 100).toFixed(0) : 0}%)`}
                 />
                 <KPICard
                     label="Tx in Period"
                     value={data.summary.walletTxInPeriod}
                     icon="📈"
-                    subtext={`in ${period}`}
+                    subtext={`${(data.summary.walletTxInPeriod / (period === "24h" ? 1 : period === "7d" ? 7 : period === "30d" ? 30 : period === "90d" ? 90 : 365)).toFixed(1)}/day avg`}
                 />
                 <KPICard
                     label="Total Volume"
                     value={`$${Math.round(data.summary.totalVolumeUsd).toLocaleString()}`}
                     icon="💰"
+                    subtext={`$${data.summary.uniqueTxUsers > 0 ? Math.round(data.summary.totalVolumeUsd / data.summary.uniqueTxUsers).toLocaleString() : "0"} avg/user`}
                 />
                 <KPICard
                     label="Period Volume"
@@ -1865,6 +2064,9 @@ function WalletsSection({ data, period }: { data: AnalyticsData; period: Period 
 }
 
 function CommunicationSection({ data, period }: { data: AnalyticsData; period: Period }) {
+    const totalCallMinutes = data.summary.totalVoiceMinutes + data.summary.totalVideoMinutes;
+    const avgCallDuration =
+        data.summary.totalCalls > 0 ? totalCallMinutes / data.summary.totalCalls : 0;
     return (
         <div className="space-y-6">
             {/* Calls Stats */}
@@ -1872,10 +2074,31 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
                 title="Video & Voice Calls"
                 description="Real-time communication metrics"
             />
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <KPICard label="Total Calls" value={data.summary.totalCalls} icon="📞" />
-                <KPICard label="Voice Minutes" value={data.summary.totalVoiceMinutes} icon="🎤" />
-                <KPICard label="Video Minutes" value={data.summary.totalVideoMinutes} icon="🎥" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KPICard
+                    label="Total Calls"
+                    value={data.summary.totalCalls}
+                    icon="📞"
+                    subtext={`${totalCallMinutes.toLocaleString()} total minutes`}
+                />
+                <KPICard
+                    label="Voice Minutes"
+                    value={data.summary.totalVoiceMinutes}
+                    icon="🎤"
+                    subtext={`${data.summary.totalVoiceMinutes > 0 ? (data.summary.totalVoiceMinutes / 60).toFixed(1) : "0"} hours`}
+                />
+                <KPICard
+                    label="Video Minutes"
+                    value={data.summary.totalVideoMinutes}
+                    icon="🎥"
+                    subtext={`${data.summary.totalVideoMinutes > 0 ? (data.summary.totalVideoMinutes / 60).toFixed(1) : "0"} hours`}
+                />
+                <KPICard
+                    label="Avg Call Duration"
+                    value={`${avgCallDuration.toFixed(1)} min`}
+                    icon="⏱️"
+                    subtext={`${data.summary.totalCalls} calls total`}
+                />
             </div>
 
             {/* Streaming Stats */}
@@ -1885,21 +2108,32 @@ function CommunicationSection({ data, period }: { data: AnalyticsData; period: P
                     label="Streams Created"
                     value={data.summary.streamsCreated}
                     icon="📹"
-                    subtext={`(${data.summary.totalStreamsCreated} total)`}
+                    subtext={`${data.summary.totalStreamsCreated} total · ${data.summary.totalStreamsCreated > 0 ? ((data.summary.totalStreamsStarted / data.summary.totalStreamsCreated) * 100).toFixed(0) : 0}% started`}
                 />
                 <KPICard
                     label="Streams Started"
                     value={data.summary.streamsStarted}
                     icon="🔴"
-                    subtext={`(${data.summary.totalStreamsStarted} total)`}
+                    subtext={`${data.summary.totalStreamsStarted} total all-time`}
                 />
-                <KPICard label="Streams Ended" value={data.summary.streamsEnded} icon="⏹️" />
+                <KPICard
+                    label="Streams Ended"
+                    value={data.summary.streamsEnded}
+                    icon="⏹️"
+                    subtext={`${data.summary.totalStreamsEnded} total all-time`}
+                />
                 <KPICard
                     label="Streaming Min"
                     value={data.summary.totalStreamingMinutes}
                     icon="⏱️"
+                    subtext={`${(data.summary.totalStreamingMinutes / 60).toFixed(1)} hours total`}
                 />
-                <KPICard label="Views" value={data.summary.totalStreamsViewed} icon="👁️" />
+                <KPICard
+                    label="Views"
+                    value={data.summary.totalStreamsViewed}
+                    icon="👁️"
+                    subtext={`${data.summary.totalStreamsStarted > 0 ? (data.summary.totalStreamsViewed / data.summary.totalStreamsStarted).toFixed(1) : "0"} views/stream`}
+                />
             </div>
 
             {/* Rooms & Scheduling */}
@@ -2038,36 +2272,41 @@ function AgentsSection({
         <div className="space-y-6">
             {/* Agent Stats */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-                <KPICard label="Total Agents" value={data.summary.totalAgents} icon="🤖" />
+                <KPICard
+                    label="Total Agents"
+                    value={data.summary.totalAgents}
+                    icon="🤖"
+                    subtext={`${data.summary.publicAgents} public · ${data.summary.friendsAgents} friends · ${data.summary.privateAgents} private`}
+                />
                 <KPICard
                     label="New Agents"
                     value={data.summary.newAgentsCount}
                     icon="✨"
-                    subtext={`in ${period}`}
+                    subtext={`in ${period} (${(data.summary.newAgentsCount / (period === "24h" ? 1 : period === "7d" ? 7 : period === "30d" ? 30 : period === "90d" ? 90 : 365)).toFixed(1)}/day)`}
                 />
                 <KPICard
                     label="Agent Messages"
                     value={data.summary.agentMessagesInPeriod}
                     icon="💬"
-                    subtext={`(${data.summary.totalAgentMessages} total)`}
+                    subtext={`${data.summary.totalAgentMessages.toLocaleString()} total · ${data.summary.uniqueAgentUsers > 0 ? (data.summary.agentMessagesInPeriod / data.summary.uniqueAgentUsers).toFixed(1) : "0"} msgs/user`}
                 />
                 <KPICard
                     label="Unique Users"
                     value={data.summary.uniqueAgentUsers}
                     icon="👤"
-                    subtext="using agents"
+                    subtext={`${((data.summary.uniqueAgentUsers / (data.summary.totalUsers || 1)) * 100).toFixed(1)}% adoption rate`}
                 />
                 <KPICard
                     label="Knowledge Items"
                     value={data.summary.knowledgeItemsCount}
                     icon="📚"
-                    subtext={`${data.summary.indexedKnowledgeItems} indexed`}
+                    subtext={`${data.summary.indexedKnowledgeItems} indexed (${data.summary.knowledgeItemsCount > 0 ? ((data.summary.indexedKnowledgeItems / data.summary.knowledgeItemsCount) * 100).toFixed(0) : 0}%)`}
                 />
                 <KPICard
                     label="Official Agents"
                     value={data.summary.officialAgents}
                     icon="⭐"
-                    subtext="platform agents"
+                    subtext={`${failed > 0 ? `${failed} errors in ${period}` : "0 errors"}`}
                 />
             </div>
 
@@ -2579,25 +2818,25 @@ function ChatsSection({
                     label="Total Members"
                     value={stats.totalMembers}
                     icon="👥"
-                    subtext="across all chats"
+                    subtext={`${stats.totalChannels > 0 ? (stats.totalMembers / stats.totalChannels).toFixed(1) : "0"} avg per channel`}
                 />
                 <MetricCard
                     label="Total Messages"
                     value={stats.totalMessages}
                     icon="📊"
-                    subtext="in public chats"
+                    subtext={`${stats.activeChannels > 0 ? Math.round(stats.totalMessages / stats.activeChannels).toLocaleString() : "0"} avg per active channel`}
                 />
                 <MetricCard
                     label="Active Channels"
                     value={stats.activeChannels}
                     icon="✅"
-                    subtext={`of ${stats.totalChannels}`}
+                    subtext={`${stats.totalChannels > 0 ? ((stats.activeChannels / stats.totalChannels) * 100).toFixed(0) : "0"}% of ${stats.totalChannels} total`}
                 />
                 <MetricCard
                     label="Active Locations"
                     value={stats.activeLocationChats}
                     icon="📍"
-                    subtext={`of ${stats.totalLocationChats}`}
+                    subtext={`${stats.totalLocationChats > 0 ? ((stats.activeLocationChats / stats.totalLocationChats) * 100).toFixed(0) : "0"}% of ${stats.totalLocationChats} total`}
                 />
             </div>
 
@@ -3182,6 +3421,15 @@ function SmallMetric({ label, value }: { label: string; value: number }) {
         <div className="bg-zinc-800/50 rounded-lg px-3 py-2 text-center">
             <p className="text-lg font-bold">{value.toLocaleString()}</p>
             <p className="text-xs text-zinc-500">{label}</p>
+        </div>
+    );
+}
+
+function NumberDetail({ label, value }: { label: string; value: string }) {
+    return (
+        <div className="bg-zinc-900/50 rounded-lg px-3 py-2 border border-zinc-800/50">
+            <p className="text-sm font-semibold text-white">{value}</p>
+            <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">{label}</p>
         </div>
     );
 }
