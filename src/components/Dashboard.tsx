@@ -13,17 +13,23 @@ import { useENS } from "@/hooks/useENS";
 import { FriendsList } from "./FriendsList";
 import { FriendRequests } from "./FriendRequests";
 import { AddFriendModal } from "./AddFriendModal";
-import { VoiceCallUI } from "./VoiceCallUI";
-import { IncomingCallModal } from "./IncomingCallModal";
+const VoiceCallUI = dynamic(() => import("./VoiceCallUI").then((m) => m.VoiceCallUI));
+const IncomingCallModal = dynamic(() =>
+    import("./IncomingCallModal").then((m) => m.IncomingCallModal)
+);
 import { ChatModal } from "./ChatModal";
-import { CallHistory } from "./CallHistory";
-import { ScheduledCalls } from "./ScheduledCalls";
-import { NewScheduledCallModal } from "./NewScheduledCallModal";
+const CallHistory = dynamic(() => import("./CallHistory").then((m) => m.CallHistory));
+const ScheduledCalls = dynamic(() => import("./ScheduledCalls").then((m) => m.ScheduledCalls));
+const NewScheduledCallModal = dynamic(() =>
+    import("./NewScheduledCallModal").then((m) => m.NewScheduledCallModal)
+);
 import { useCallHistory } from "@/hooks/useCallHistory";
 const BrowseChannelsModal = dynamic(() =>
     import("./BrowseChannelsModal").then((m) => m.BrowseChannelsModal)
 );
-import { ChannelChatModal } from "./ChannelChatModal";
+const ChannelChatModal = dynamic(() =>
+    import("./ChannelChatModal").then((m) => m.ChannelChatModal)
+);
 import { useChannels } from "@/hooks/useChannels";
 import { useSmartWallet } from "@/hooks/useSmartWallet";
 import type { PublicChannel } from "@/app/api/channels/route";
@@ -48,21 +54,26 @@ import { RegistrationPreferencesModal } from "./RegistrationPreferencesModal";
 const GlobalSearchModal = dynamic(() =>
     import("./GlobalSearchModal").then((m) => m.GlobalSearchModal)
 );
-import { QRCodeModal } from "./QRCodeModal";
+const QRCodeModal = dynamic(() => import("./QRCodeModal").then((m) => m.QRCodeModal));
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { SocialsModal } from "./SocialsModal";
+const SocialsModal = dynamic(() => import("./SocialsModal").then((m) => m.SocialsModal));
 import { useSocials } from "@/hooks/useSocials";
 import { toast as sonnerToast } from "sonner";
 import { reportError } from "@/lib/reportError";
-import { CreateGroupModal } from "./CreateGroupModal";
-import { GroupChatModal } from "./GroupChatModal";
-// GroupsList functionality absorbed into UnifiedChatList
-import { GroupCallUI } from "./GroupCallUI";
-import { IncomingGroupCallModal } from "./IncomingGroupCallModal";
+const CreateGroupModal = dynamic(() =>
+    import("./CreateGroupModal").then((m) => m.CreateGroupModal)
+);
+const GroupChatModal = dynamic(() => import("./GroupChatModal").then((m) => m.GroupChatModal));
+const GroupCallUI = dynamic(() => import("./GroupCallUI").then((m) => m.GroupCallUI));
+const IncomingGroupCallModal = dynamic(() =>
+    import("./IncomingGroupCallModal").then((m) => m.IncomingGroupCallModal)
+);
 import { type XMTPGroup } from "@/context/WakuProvider";
 import { useGroupCallSignaling } from "@/hooks/useGroupCallSignaling";
 import { useGroupInvitations } from "@/hooks/useGroupInvitations";
-import { GroupInvitations } from "./GroupInvitations";
+const GroupInvitations = dynamic(() =>
+    import("./GroupInvitations").then((m) => m.GroupInvitations)
+);
 import { verifyGroupPassword, deriveKeyFromPassword } from "@/lib/groupPassword";
 import { usePresence } from "@/hooks/usePresence";
 import { PushNotificationPrompt } from "./PushNotificationPrompt";
@@ -73,12 +84,14 @@ import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { useEmailVerification } from "@/hooks/useEmailVerification";
 import { usePoints } from "@/hooks/usePoints";
 import { useUserInvites } from "@/hooks/useUserInvites";
-import { EmailVerificationModal } from "./EmailVerificationModal";
-import { InvitesModal } from "./InvitesModal";
+const EmailVerificationModal = dynamic(() =>
+    import("./EmailVerificationModal").then((m) => m.EmailVerificationModal)
+);
+const InvitesModal = dynamic(() => import("./InvitesModal").then((m) => m.InvitesModal));
 // WelcomeModal removed - now using real DM message from Kevin instead
-import { AlphaChatModal } from "./AlphaChatModal";
+const AlphaChatModal = dynamic(() => import("./AlphaChatModal").then((m) => m.AlphaChatModal));
 import { useAlphaChat } from "@/hooks/useAlphaChat";
-import { Leaderboard } from "./Leaderboard";
+const Leaderboard = dynamic(() => import("./Leaderboard").then((m) => m.Leaderboard));
 import { SpritzLogo } from "./SpritzLogo";
 import { LoggingErrorBoundary } from "./LoggingErrorBoundary";
 import { DailyBonusModal } from "./DailyBonusModal";
@@ -100,10 +113,12 @@ import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
 import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
 import { useWakeLock } from "@/hooks/useWakeLock";
 import { useModeration } from "@/hooks/useModeration";
-import { UserCardModal } from "./UserCardModal";
+const UserCardModal = dynamic(() => import("./UserCardModal").then((m) => m.UserCardModal));
 import { useBlockedUsers } from "@/hooks/useMuteBlockReport";
 import { BlockUserModal, ReportUserModal } from "./MuteBlockReportModals";
-import { LocationChatPicker } from "./LocationChatPicker";
+const LocationChatPicker = dynamic(() =>
+    import("./LocationChatPicker").then((m) => m.LocationChatPicker)
+);
 const LocationChatModal = dynamic(() =>
     import("./LocationChatModal").then((m) => m.LocationChatModal)
 );
@@ -1981,9 +1996,11 @@ function DashboardContent({
         toValidLastMessageAt,
     ]);
 
-    // Format a message content string into a short preview for the chat list.
-    // Handles special message types (voice, pixel art, images, locations, etc.)
-    // isOwn: true adds "You: " prefix so you can tell who sent the last message at a glance.
+    const hasUnreadMessages = useMemo(
+        () => unifiedChats.some((c) => c.unreadCount > 0),
+        [unifiedChats]
+    );
+
     const formatMessagePreview = useCallback((content: string, isOwn: boolean): string => {
         const prefix = isOwn ? "You: " : "";
         let text = content;
@@ -4544,6 +4561,7 @@ function DashboardContent({
                                                                 <img
                                                                     src={streamerInfo.avatar}
                                                                     alt=""
+                                                                    loading="lazy"
                                                                     className="w-14 h-14 rounded-full object-cover ring-2 ring-red-500 group-hover:ring-4 transition-all"
                                                                 />
                                                             ) : (
@@ -4592,8 +4610,7 @@ function DashboardContent({
                                         </div>
                                         <div className="flex items-center gap-1 sm:gap-2">
                                             {/* Mark all as read - show when any unread */}
-                                            {(alphaUnreadCount > 0 ||
-                                                unifiedChats.some((c) => c.unreadCount > 0)) && (
+                                            {(alphaUnreadCount > 0 || hasUnreadMessages) && (
                                                 <button
                                                     onClick={async () => {
                                                         if (alphaChat.isMember)
@@ -5786,6 +5803,7 @@ function DashboardContent({
                                                         <img
                                                             src={friend.avatar}
                                                             alt=""
+                                                            loading="lazy"
                                                             className="w-10 h-10 rounded-full"
                                                         />
                                                     ) : (

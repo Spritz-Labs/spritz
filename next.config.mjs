@@ -116,6 +116,12 @@ const nextConfig = {
     // Skip it during the Next.js build to avoid OOM on Vercel's 8GB machines.
     typescript: { ignoreBuildErrors: true },
 
+    // Strip console.log in production (keeps warn/error for debugging)
+    compiler: {
+        removeConsole:
+            process.env.NODE_ENV === "production" ? { exclude: ["error", "warn"] } : false,
+    },
+
     // Disable the development indicator in the corner
     devIndicators: false,
 
