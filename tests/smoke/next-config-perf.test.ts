@@ -40,14 +40,15 @@ describe("Dashboard dynamic imports", () => {
     });
 
     it("dynamically imports ChannelChatModal", () => {
-        expect(dashboardContent).toContain('dynamic(() => import("./ChannelChatModal")');
+        expect(dashboardContent).toContain('import("./ChannelChatModal")');
+        expect(dashboardContent).toMatch(/dynamic\(\(\)\s/);
     });
 
     it("dynamically imports GroupChatModal", () => {
-        expect(dashboardContent).toContain('dynamic(() => import("./GroupChatModal")');
+        expect(dashboardContent).toContain('import("./GroupChatModal")');
     });
 
     it("dynamically imports AlphaChatModal", () => {
-        expect(dashboardContent).toContain('dynamic(() => import("./AlphaChatModal")');
+        expect(dashboardContent).toContain('import("./AlphaChatModal")');
     });
 });

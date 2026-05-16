@@ -12,15 +12,8 @@ type Props = {
 };
 
 export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) {
-    const {
-        invites,
-        used,
-        available,
-        isLoading,
-        copyInvite,
-        shareInvite,
-        getInviteLink,
-    } = useUserInvites(walletAddress);
+    const { invites, used, available, isLoading, copyInvite, shareInvite, getInviteLink } =
+        useUserInvites(walletAddress);
 
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
@@ -61,8 +54,18 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
                                     onClick={onBack}
                                     className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
                                 >
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    <svg
+                                        className="w-4 h-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M15 19l-7-7 7-7"
+                                        />
                                     </svg>
                                 </button>
                             )}
@@ -77,8 +80,18 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
                             onClick={onClose}
                             className="text-zinc-500 hover:text-white transition-colors"
                         >
-                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            <svg
+                                className="w-6 h-6"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
                             </svg>
                         </button>
                     </div>
@@ -100,8 +113,27 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
                             <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#FF5500] mx-auto"></div>
                         </div>
                     ) : invites.length === 0 ? (
-                        <div className="py-8 text-center text-zinc-500">
-                            No invite codes available
+                        <div className="py-10 text-center px-4">
+                            <div className="w-14 h-14 rounded-2xl bg-zinc-800/50 flex items-center justify-center mx-auto mb-4 border border-zinc-700/30">
+                                <svg
+                                    className="w-7 h-7 text-zinc-500"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={1.5}
+                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                    />
+                                </svg>
+                            </div>
+                            <p className="text-zinc-200 font-semibold text-base">No invites yet</p>
+                            <p className="text-zinc-500 text-sm mt-1.5 max-w-[260px] mx-auto">
+                                Invite codes let you bring friends to Spritz. Earn more invites by
+                                being active and climbing the leaderboard.
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-3">
@@ -116,14 +148,19 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="flex-1 min-w-0">
-                                            <code className={`font-mono text-lg ${
-                                                invite.used_by ? "text-zinc-500" : "text-[#FF5500]"
-                                            }`}>
+                                            <code
+                                                className={`font-mono text-lg ${
+                                                    invite.used_by
+                                                        ? "text-zinc-500"
+                                                        : "text-[#FF5500]"
+                                                }`}
+                                            >
                                                 {invite.code}
                                             </code>
                                             {invite.used_by && (
                                                 <p className="text-xs text-zinc-600 mt-1">
-                                                    Used by {invite.used_by.slice(0, 6)}...{invite.used_by.slice(-4)}
+                                                    Used by {invite.used_by.slice(0, 6)}...
+                                                    {invite.used_by.slice(-4)}
                                                 </p>
                                             )}
                                         </div>
@@ -138,7 +175,9 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
                                                             : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
                                                     }`}
                                                 >
-                                                    {copiedCode === invite.code ? "Copied!" : "Copy"}
+                                                    {copiedCode === invite.code
+                                                        ? "Copied!"
+                                                        : "Copy"}
                                                 </button>
                                                 <button
                                                     onClick={() => handleShare(invite.code)}
@@ -157,13 +196,26 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
                     {/* Info */}
                     <div className="mt-6 p-4 bg-[#FF5500]/10 border border-[#FF5500]/20 rounded-xl">
                         <div className="flex items-start gap-3">
-                            <svg className="w-5 h-5 text-[#FF5500] flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <svg
+                                className="w-5 h-5 text-[#FF5500] flex-shrink-0 mt-0.5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
                             </svg>
                             <div>
-                                <p className="text-[#FFBBA7] text-sm font-medium">Earn 100 points per invite!</p>
+                                <p className="text-[#FFBBA7] text-sm font-medium">
+                                    Earn 100 points per invite!
+                                </p>
                                 <p className="text-zinc-400 text-xs mt-1">
-                                    When someone joins Spritz using your invite code, you&apos;ll earn 100 points.
+                                    When someone joins Spritz using your invite code, you&apos;ll
+                                    earn 100 points.
                                 </p>
                             </div>
                         </div>
@@ -173,4 +225,3 @@ export function InvitesModal({ isOpen, onClose, walletAddress, onBack }: Props) 
         </AnimatePresence>
     );
 }
-

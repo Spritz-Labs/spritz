@@ -22,10 +22,15 @@ export function useLoginTracking({
     username,
 }: LoginTrackingParams) {
     const hasTracked = useRef(false);
-    const hasFetchedBonus = useRef(false); // Prevent double fetching
+    const hasFetchedBonus = useRef(false);
     const [dailyBonusAvailable, setDailyBonusAvailable] = useState(false);
     const [isClaimingBonus, setIsClaimingBonus] = useState(false);
     const [showWelcome, setShowWelcome] = useState(false);
+    const [reEntryData, setReEntryData] = useState<{
+        daysSinceLastLogin: number | null;
+        previousLoginAt: string | null;
+        friendsCount: number;
+    } | null>(null);
 
     // Check if daily bonus was already dismissed today
     const wasDismissedToday = useCallback((): boolean => {
@@ -33,7 +38,7 @@ export function useLoginTracking({
             const dismissed = localStorage.getItem(DAILY_BONUS_DISMISSED_KEY);
             if (!dismissed) return false;
             const data = JSON.parse(dismissed);
-            const today = new Date().toISOString().split('T')[0];
+            const today = new Date().toISOString().split("T")[0];
             return data.date === today && data.address === walletAddress?.toLowerCase();
         } catch {
             return false;
@@ -43,11 +48,14 @@ export function useLoginTracking({
     // Mark daily bonus as dismissed for today
     const dismissDailyBonus = useCallback(() => {
         if (!walletAddress) return;
-        const today = new Date().toISOString().split('T')[0];
-        localStorage.setItem(DAILY_BONUS_DISMISSED_KEY, JSON.stringify({
-            date: today,
-            address: walletAddress.toLowerCase(),
-        }));
+        const today = new Date().toISOString().split("T")[0];
+        localStorage.setItem(
+            DAILY_BONUS_DISMISSED_KEY,
+            JSON.stringify({
+                date: today,
+                address: walletAddress.toLowerCase(),
+            })
+        );
     }, [walletAddress]);
 
     // Check if welcome message was already seen
@@ -65,14 +73,17 @@ export function useLoginTracking({
     // Mark welcome as seen (both locally and in database)
     const dismissWelcome = useCallback(async () => {
         if (!walletAddress) return;
-        
+
         // Update local storage immediately for instant UI feedback
-        localStorage.setItem(WELCOME_SEEN_KEY, JSON.stringify({
-            address: walletAddress.toLowerCase(),
-            timestamp: Date.now(),
-        }));
+        localStorage.setItem(
+            WELCOME_SEEN_KEY,
+            JSON.stringify({
+                address: walletAddress.toLowerCase(),
+                timestamp: Date.now(),
+            })
+        );
         setShowWelcome(false);
-        
+
         // Also persist in database so welcome won't show even after localStorage clear
         try {
             await fetch("/api/admin/welcome-shown", {
@@ -89,20 +100,25 @@ export function useLoginTracking({
     }, [walletAddress]);
 
     const trackLogin = useCallback(async () => {
-        console.log("[Login] trackLogin called, walletAddress:", walletAddress, "hasTracked:", hasTracked.current);
+        console.log(
+            "[Login] trackLogin called, walletAddress:",
+            walletAddress,
+            "hasTracked:",
+            hasTracked.current
+        );
         if (!walletAddress || hasTracked.current) return;
 
         // Check if we've tracked this session already
         const lastTracked = localStorage.getItem(TRACKING_KEY);
         const trackingData = lastTracked ? JSON.parse(lastTracked) : null;
-        
+
         console.log("[Login] trackingData:", trackingData);
         console.log("[Login] wasWelcomeSeen:", wasWelcomeSeen());
-        
+
         // Only track once per session (every 30 minutes)
         const thirtyMinutes = 30 * 60 * 1000;
         if (
-            trackingData && 
+            trackingData &&
             trackingData.address === walletAddress.toLowerCase() &&
             Date.now() - trackingData.timestamp < thirtyMinutes
         ) {
@@ -144,22 +160,24 @@ export function useLoginTracking({
             });
 
             const data = await response.json();
-            console.log("[Login] API response:", data);
-            
-            // Check if daily bonus is available (only if not dismissed today)
+
             if (data.dailyBonusAvailable && !wasDismissedToday()) {
                 setDailyBonusAvailable(true);
             }
 
-            // Show welcome message for new users (only if not seen before)
             const welcomeAlreadySeen = wasWelcomeSeen();
-            console.log("[Login] isNewUser:", data.isNewUser, "welcomeAlreadySeen:", welcomeAlreadySeen);
             if (data.isNewUser && !welcomeAlreadySeen) {
-                console.log("[Login] Setting showWelcome to TRUE");
                 setShowWelcome(true);
             }
 
-            // Save tracking timestamp (and isNewUser flag for subsequent checks)
+            if (data.daysSinceLastLogin != null && data.daysSinceLastLogin >= 3) {
+                setReEntryData({
+                    daysSinceLastLogin: data.daysSinceLastLogin,
+                    previousLoginAt: data.previousLoginAt || null,
+                    friendsCount: data.friendsCount || 0,
+                });
+            }
+
             localStorage.setItem(
                 TRACKING_KEY,
                 JSON.stringify({
@@ -168,8 +186,6 @@ export function useLoginTracking({
                     isNewUser: data.isNewUser || false,
                 })
             );
-
-            console.log("[Login] Tracked user login:", walletAddress, "isNewUser:", data.isNewUser, "dailyBonus:", data.dailyBonusAvailable);
         } catch (error) {
             console.error("[Login] Failed to track login:", error);
         }
@@ -178,15 +194,15 @@ export function useLoginTracking({
     // Check daily bonus availability
     const checkDailyBonus = useCallback(async () => {
         if (!walletAddress || hasFetchedBonus.current) return;
-        
+
         hasFetchedBonus.current = true; // Prevent double fetching
-        
+
         try {
             const response = await fetch(`/api/points/daily?address=${walletAddress}`, {
                 credentials: "include", // Important for session cookie
             });
             const data = await response.json();
-            
+
             // Only set available if not dismissed today
             if (data.available && !wasDismissedToday()) {
                 setDailyBonusAvailable(true);
@@ -201,7 +217,7 @@ export function useLoginTracking({
     // Claim daily bonus
     const claimDailyBonus = useCallback(async (): Promise<boolean> => {
         if (!walletAddress || !dailyBonusAvailable || isClaimingBonus) return false;
-        
+
         setIsClaimingBonus(true);
         try {
             const response = await fetch("/api/points/daily", {
@@ -210,9 +226,9 @@ export function useLoginTracking({
                 body: JSON.stringify({ walletAddress }),
                 credentials: "include", // Important for session cookie
             });
-            
+
             const data = await response.json();
-            
+
             if (data.success) {
                 setDailyBonusAvailable(false);
                 dismissDailyBonus(); // Mark as dismissed so it won't show again
@@ -241,15 +257,18 @@ export function useLoginTracking({
         hasFetchedBonus.current = false;
     }, [walletAddress]);
 
-    return { 
-        trackLogin, 
-        dailyBonusAvailable, 
-        claimDailyBonus, 
+    const dismissReEntry = useCallback(() => setReEntryData(null), []);
+
+    return {
+        trackLogin,
+        dailyBonusAvailable,
+        claimDailyBonus,
         isClaimingBonus,
         checkDailyBonus,
-        dismissDailyBonus, // Export so Dashboard can call it when user dismisses modal
+        dismissDailyBonus,
         showWelcome,
         dismissWelcome,
+        reEntryData,
+        dismissReEntry,
     };
 }
-

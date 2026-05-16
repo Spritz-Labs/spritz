@@ -3,11 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey 
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 // POST: Track user login
 export async function POST(request: NextRequest) {
@@ -22,14 +21,8 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
-        const { 
-            walletAddress, 
-            walletType, 
-            chain, 
-            ensName, 
-            username,
-            inviteCode 
-        } = await request.json();
+        const { walletAddress, walletType, chain, ensName, username, inviteCode } =
+            await request.json();
 
         if (!walletAddress) {
             return NextResponse.json({ error: "Wallet address required" }, { status: 400 });
@@ -43,15 +36,22 @@ export async function POST(request: NextRequest) {
                 sessionAddress: session.userAddress,
                 requestedAddress: normalizedAddress,
             });
-            return NextResponse.json({ error: "Cannot track login for other users" }, { status: 403 });
+            return NextResponse.json(
+                { error: "Cannot track login for other users" },
+                { status: 403 }
+            );
         }
 
         // Detect Alien ID users by address pattern (00000001...) regardless of what walletType the client sends
         // This ensures Alien users are always properly tagged even if the client doesn't know it's an Alien session
-        const isAlienAddress = normalizedAddress.startsWith("00000001") && !normalizedAddress.startsWith("0x");
+        const isAlienAddress =
+            normalizedAddress.startsWith("00000001") && !normalizedAddress.startsWith("0x");
         const effectiveWalletType = isAlienAddress ? "alien_id" : walletType;
         if (isAlienAddress && walletType !== "alien_id") {
-            console.log("[Login] Detected Alien address pattern, overriding walletType to alien_id:", normalizedAddress.slice(0, 20));
+            console.log(
+                "[Login] Detected Alien address pattern, overriding walletType to alien_id:",
+                normalizedAddress.slice(0, 20)
+            );
         }
 
         // Check if user exists
@@ -62,27 +62,43 @@ export async function POST(request: NextRequest) {
             .single();
 
         if (existingUser) {
-            // Check if welcome modal has been shown using the dedicated welcome_shown_at field
-            // This is more reliable than login_count which can be incremented by auth flows
             const welcomeNotYetShown = existingUser.welcome_shown_at === null;
-            console.log("[Login] Existing user found:", normalizedAddress, "login_count:", existingUser.login_count, "welcome_shown_at:", existingUser.welcome_shown_at, "welcomeNotYetShown:", welcomeNotYetShown);
-            
-            // Update existing user
+            const previousLoginAt = existingUser.last_login;
+            const daysSinceLastLogin = previousLoginAt
+                ? Math.floor(
+                      (Date.now() - new Date(previousLoginAt).getTime()) / (1000 * 60 * 60 * 24)
+                  )
+                : null;
+
+            // Reset re-engagement dismissal counter on login
+            const reengagementReset: Record<string, unknown> = {};
+            if (existingUser.reengagement_push_dismissals > 0) {
+                reengagementReset.reengagement_push_dismissals = 0;
+            }
+
             const updates: Record<string, unknown> = {
                 last_login: new Date().toISOString(),
+                last_active_at: new Date().toISOString(),
                 login_count: (existingUser.login_count || 0) + 1,
                 updated_at: new Date().toISOString(),
+                ...reengagementReset,
             };
 
             // Update fields if provided
             // IMPORTANT: Don't overwrite wallet_type if it's already set to a non-wallet auth method
             // (passkey, email, world_id, alien_id) - those are set during their auth flows
-            const protectedWalletTypes = ['passkey', 'email', 'world_id', 'alien_id'];
-            if (isAlienAddress && existingUser.wallet_type !== 'alien_id') {
+            const protectedWalletTypes = ["passkey", "email", "world_id", "alien_id"];
+            if (isAlienAddress && existingUser.wallet_type !== "alien_id") {
                 // Always fix Alien users who are incorrectly tagged
-                updates.wallet_type = 'alien_id';
-                console.log("[Login] Fixing wallet_type to alien_id for Alien user:", normalizedAddress.slice(0, 20));
-            } else if (effectiveWalletType && !protectedWalletTypes.includes(existingUser.wallet_type)) {
+                updates.wallet_type = "alien_id";
+                console.log(
+                    "[Login] Fixing wallet_type to alien_id for Alien user:",
+                    normalizedAddress.slice(0, 20)
+                );
+            } else if (
+                effectiveWalletType &&
+                !protectedWalletTypes.includes(existingUser.wallet_type)
+            ) {
                 updates.wallet_type = effectiveWalletType;
             }
             if (chain) updates.chain = chain;
@@ -108,7 +124,11 @@ export async function POST(request: NextRequest) {
             }
 
             // Auto-join Alien ID users to the official Alien channel
-            if (isAlienAddress || effectiveWalletType === "alien_id" || existingUser.wallet_type === "alien_id") {
+            if (
+                isAlienAddress ||
+                effectiveWalletType === "alien_id" ||
+                existingUser.wallet_type === "alien_id"
+            ) {
                 try {
                     const { data: alienChannel } = await supabase
                         .from("shout_public_channels")
@@ -131,7 +151,10 @@ export async function POST(request: NextRequest) {
                                 user_address: normalizedAddress,
                             });
                             // member_count updated by DB trigger on shout_channel_members INSERT
-                            console.log("[Login] Auto-joined Alien ID user to Alien channel:", normalizedAddress);
+                            console.log(
+                                "[Login] Auto-joined Alien ID user to Alien channel:",
+                                normalizedAddress
+                            );
                         }
                     }
                 } catch (err) {
@@ -142,14 +165,17 @@ export async function POST(request: NextRequest) {
             // Send welcome message if not sent yet
             if (welcomeNotYetShown) {
                 try {
-                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL 
-                        ? `https://${process.env.VERCEL_URL}` 
-                        : "http://localhost:3000");
-                    const internalKey = process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-                    
+                    const baseUrl =
+                        process.env.NEXT_PUBLIC_APP_URL ||
+                        (process.env.VERCEL_URL
+                            ? `https://${process.env.VERCEL_URL}`
+                            : "http://localhost:3000");
+                    const internalKey =
+                        process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
                     const welcomeResponse = await fetch(`${baseUrl}/api/dm/welcome`, {
                         method: "POST",
-                        headers: { 
+                        headers: {
                             "Content-Type": "application/json",
                             "x-internal-key": internalKey || "",
                         },
@@ -157,7 +183,7 @@ export async function POST(request: NextRequest) {
                     });
                     const welcomeResult = await welcomeResponse.json();
                     console.log("[Login] Welcome message result:", welcomeResult);
-                    
+
                     // Mark welcome as shown
                     if (welcomeResult.success && !welcomeResult.skipped) {
                         await supabase
@@ -173,19 +199,23 @@ export async function POST(request: NextRequest) {
             // Check if daily bonus is available (don't auto-claim)
             let dailyBonusAvailable = false;
             try {
-                const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD in UTC
+                const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD in UTC
                 const lastClaimed = existingUser.daily_points_claimed_at;
                 dailyBonusAvailable = !lastClaimed || lastClaimed !== today;
             } catch (err) {
                 console.error("[Login] Failed to check daily bonus:", err);
             }
 
-            return NextResponse.json({ 
-                success: true, 
-                isNewUser: welcomeNotYetShown, // Show welcome if welcome_shown_at is null
+            return NextResponse.json({
+                success: true,
+                isNewUser: welcomeNotYetShown,
                 isBanned: existingUser.is_banned,
                 banReason: existingUser.ban_reason,
                 dailyBonusAvailable,
+                previousLoginAt,
+                daysSinceLastLogin,
+                messagesReceived: existingUser.messages_sent || 0,
+                friendsCount: existingUser.friends_count || 0,
             });
         } else {
             // Create new user
@@ -196,7 +226,7 @@ export async function POST(request: NextRequest) {
             // Validate and track invite code usage
             if (inviteCode) {
                 const upperCode = inviteCode.toUpperCase();
-                
+
                 // First, try to redeem as a user invite code
                 const { data: userInviteResult } = await supabase.rpc("redeem_user_invite", {
                     p_code: upperCode,
@@ -207,7 +237,12 @@ export async function POST(request: NextRequest) {
                     // User invite code was redeemed successfully
                     referredBy = userInviteResult.inviter;
                     inviteCodeRedeemed = true;
-                    console.log("[Login] Redeemed user invite code:", upperCode, "from:", referredBy);
+                    console.log(
+                        "[Login] Redeemed user invite code:",
+                        upperCode,
+                        "from:",
+                        referredBy
+                    );
                 } else {
                     // Try admin invite codes as fallback
                     const { data: code } = await supabase
@@ -244,14 +279,14 @@ export async function POST(request: NextRequest) {
                             if (code.created_by) {
                                 const inviterClaimKey = `invite_admin_${code.id}_${normalizedAddress}`;
                                 const inviterAddress = code.created_by.toLowerCase();
-                                
+
                                 // Check if not already claimed
                                 const { data: existingClaim } = await supabase
                                     .from("shout_points_history")
                                     .select("id")
                                     .eq("claim_key", inviterClaimKey)
                                     .single();
-                                
+
                                 if (!existingClaim) {
                                     await supabase.from("shout_points_history").insert({
                                         wallet_address: inviterAddress,
@@ -267,7 +302,7 @@ export async function POST(request: NextRequest) {
                                         .select("points")
                                         .eq("wallet_address", inviterAddress)
                                         .single();
-                                    
+
                                     if (inviterUser) {
                                         await supabase
                                             .from("shout_users")
@@ -275,7 +310,10 @@ export async function POST(request: NextRequest) {
                                             .eq("wallet_address", inviterAddress);
                                     }
 
-                                    console.log("[Login] Awarded 100 pts to admin code creator:", inviterAddress);
+                                    console.log(
+                                        "[Login] Awarded 100 pts to admin code creator:",
+                                        inviterAddress
+                                    );
                                 }
                             }
                         }
@@ -323,7 +361,10 @@ export async function POST(request: NextRequest) {
                             user_address: normalizedAddress,
                         });
                         // member_count updated by DB trigger on shout_channel_members INSERT
-                        console.log("[Login] Auto-joined new Alien ID user to Alien channel:", normalizedAddress);
+                        console.log(
+                            "[Login] Auto-joined new Alien ID user to Alien channel:",
+                            normalizedAddress
+                        );
                     }
                 } catch (err) {
                     console.error("[Login] Failed to auto-join new user to Alien channel:", err);
@@ -332,14 +373,16 @@ export async function POST(request: NextRequest) {
 
             // Send welcome message from Kevin
             try {
-                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL 
-                    ? `https://${process.env.VERCEL_URL}` 
-                    : "http://localhost:3000";
-                const internalKey = process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-                
+                const baseUrl =
+                    process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+                        ? `https://${process.env.VERCEL_URL}`
+                        : "http://localhost:3000";
+                const internalKey =
+                    process.env.INTERNAL_API_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+
                 await fetch(`${baseUrl}/api/dm/welcome`, {
                     method: "POST",
-                    headers: { 
+                    headers: {
                         "Content-Type": "application/json",
                         "x-internal-key": internalKey || "",
                     },
@@ -354,17 +397,17 @@ export async function POST(request: NextRequest) {
             // Award points to new user if they used a valid invite code
             if (inviteCodeRedeemed && referredBy) {
                 try {
-                    const newUserClaimKey = inviteCodeId 
+                    const newUserClaimKey = inviteCodeId
                         ? `invite_admin_${inviteCodeId}_redeemer`
                         : `invite_user_${normalizedAddress}_welcome`;
-                    
+
                     // Check if not already claimed
                     const { data: existingClaim } = await supabase
                         .from("shout_points_history")
                         .select("id")
                         .eq("claim_key", newUserClaimKey)
                         .single();
-                    
+
                     if (!existingClaim) {
                         // Award 100 points to the new user for using an invite code
                         await supabase.from("shout_points_history").insert({
@@ -380,7 +423,10 @@ export async function POST(request: NextRequest) {
                             .update({ points: 100 })
                             .eq("wallet_address", normalizedAddress);
 
-                        console.log("[Login] Awarded 100 pts welcome bonus to new user:", normalizedAddress);
+                        console.log(
+                            "[Login] Awarded 100 pts welcome bonus to new user:",
+                            normalizedAddress
+                        );
                     }
                 } catch (err) {
                     console.error("[Login] Failed to award invite code points to new user:", err);
@@ -388,8 +434,8 @@ export async function POST(request: NextRequest) {
             }
 
             // New users always have daily bonus available
-            return NextResponse.json({ 
-                success: true, 
+            return NextResponse.json({
+                success: true,
                 isNewUser: true,
                 isBanned: false,
                 dailyBonusAvailable: true,
@@ -400,5 +446,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to track login" }, { status: 500 });
     }
 }
-
-

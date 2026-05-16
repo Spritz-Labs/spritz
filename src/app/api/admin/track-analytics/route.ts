@@ -3,13 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser } from "@/lib/session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const supabaseKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-const supabase = supabaseUrl && supabaseKey 
-    ? createClient(supabaseUrl, supabaseKey)
-    : null;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
-type AnalyticsEvent = 
+type AnalyticsEvent =
     | { type: "message_sent" }
     | { type: "friend_added" }
     | { type: "friend_removed" }
@@ -88,7 +87,7 @@ export async function POST(request: NextRequest) {
 
         // Update based on event type
         let updateQuery;
-        
+
         switch (event.type) {
             case "message_sent":
                 updateQuery = supabase.rpc("increment_user_stat", {
@@ -97,7 +96,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "friend_added":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -105,7 +104,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "friend_removed":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -113,7 +112,7 @@ export async function POST(request: NextRequest) {
                     p_amount: -1,
                 });
                 break;
-                
+
             case "voice_call":
                 // Update both total calls and voice minutes
                 await supabase.rpc("increment_user_stat", {
@@ -127,7 +126,7 @@ export async function POST(request: NextRequest) {
                     p_amount: Math.round(event.durationMinutes),
                 });
                 break;
-                
+
             case "video_call":
                 // Update both total calls and video minutes
                 await supabase.rpc("increment_user_stat", {
@@ -141,7 +140,7 @@ export async function POST(request: NextRequest) {
                     p_amount: Math.round(event.durationMinutes),
                 });
                 break;
-                
+
             case "group_joined":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -149,7 +148,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "group_left":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -157,7 +156,7 @@ export async function POST(request: NextRequest) {
                     p_amount: -1,
                 });
                 break;
-                
+
             case "sync_friends":
                 // Directly set the friends count (for syncing)
                 updateQuery = supabase
@@ -165,7 +164,7 @@ export async function POST(request: NextRequest) {
                     .update({ friends_count: event.count, updated_at: new Date().toISOString() })
                     .eq("wallet_address", normalizedAddress);
                 break;
-                
+
             case "sync_groups":
                 // Directly set the groups count (for syncing)
                 updateQuery = supabase
@@ -173,7 +172,7 @@ export async function POST(request: NextRequest) {
                     .update({ groups_count: event.count, updated_at: new Date().toISOString() })
                     .eq("wallet_address", normalizedAddress);
                 break;
-                
+
             case "stream_created":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -181,7 +180,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "stream_started":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -189,7 +188,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "stream_ended":
                 // Update both stream count and total streaming minutes
                 await supabase.rpc("increment_user_stat", {
@@ -203,7 +202,7 @@ export async function POST(request: NextRequest) {
                     p_amount: Math.round(event.durationMinutes),
                 });
                 break;
-                
+
             case "stream_viewed":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -219,7 +218,7 @@ export async function POST(request: NextRequest) {
                     });
                 }
                 break;
-                
+
             case "room_created":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -227,7 +226,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "room_joined":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -235,7 +234,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "schedule_created":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -243,7 +242,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "schedule_joined":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -251,7 +250,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "channel_joined":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -259,7 +258,7 @@ export async function POST(request: NextRequest) {
                     p_amount: 1,
                 });
                 break;
-                
+
             case "channel_left":
                 updateQuery = supabase.rpc("increment_user_stat", {
                     p_address: normalizedAddress,
@@ -267,7 +266,7 @@ export async function POST(request: NextRequest) {
                     p_amount: -1,
                 });
                 break;
-                
+
             default:
                 return NextResponse.json({ error: "Unknown event type" }, { status: 400 });
         }
@@ -276,9 +275,13 @@ export async function POST(request: NextRequest) {
             const { error } = await updateQuery;
             if (error) {
                 console.error("[Analytics] Error updating:", error);
-                // Don't fail the request, just log the error
             }
         }
+
+        await supabase
+            .from("shout_users")
+            .update({ last_active_at: new Date().toISOString() })
+            .eq("wallet_address", normalizedAddress);
 
         return NextResponse.json({ success: true });
     } catch (error) {
@@ -286,5 +289,3 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to track analytics" }, { status: 500 });
     }
 }
-
-

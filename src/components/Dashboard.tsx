@@ -108,6 +108,7 @@ import { useStreams } from "@/hooks/useStreams";
 const WalletModal = dynamic(() => import("./WalletModal").then((m) => m.WalletModal));
 import { walletCacheKey, normalizeAddress } from "@/utils/address";
 import { UnifiedChatList, type UnifiedChatItem } from "./UnifiedChatList";
+const ReEntrySummary = dynamic(() => import("./ReEntrySummary").then((m) => m.ReEntrySummary));
 import { useChatPinned } from "@/hooks/useChatPinned";
 import { MessagingKeyUpgradeBanner } from "./MessagingKeyUpgradeBanner";
 import { MessagingKeyRestoreBanner } from "./MessagingKeyRestoreBanner";
@@ -413,7 +414,8 @@ function DashboardContent({
         claimDailyBonus,
         isClaimingBonus,
         dismissDailyBonus,
-        // showWelcome, dismissWelcome removed - now using real DM instead
+        reEntryData,
+        dismissReEntry,
     } = useLoginTracking({
         walletAddress: userAddress,
         walletType: actualAuthMethod,
@@ -3168,8 +3170,33 @@ function DashboardContent({
 
     // Onboarding flow orchestration:
     // 1. Encryption upgrade modal shows first (if needed)
-    // 2. Username claim modal shows after encryption modal is dismissed (or not needed)
+    // 2. After encryption: auto-open Kevin's welcome DM for new users
+    // 3. Username claim modal shows after encryption modal is dismissed (or not needed)
     const [canShowUsernamePrompt, setCanShowUsernamePrompt] = useState(false);
+    const hasAutoOpenedWelcomeDM = useRef(false);
+
+    useEffect(() => {
+        if (
+            !canShowUsernamePrompt ||
+            hasAutoOpenedWelcomeDM.current ||
+            chatFriend ||
+            friendsListData.length === 0
+        )
+            return;
+
+        const kevinAddress = "0x3f22f740d41518f5017b76eed3a63eb14d2e1b07";
+        const kevinFriend = friendsListData.find((f) => f.address.toLowerCase() === kevinAddress);
+
+        if (kevinFriend) {
+            const isFirstSession =
+                typeof window !== "undefined" && !localStorage.getItem("spritz_welcome_dm_opened");
+            if (isFirstSession) {
+                hasAutoOpenedWelcomeDM.current = true;
+                localStorage.setItem("spritz_welcome_dm_opened", "1");
+                setTimeout(() => setChatFriend(kevinFriend), 500);
+            }
+        }
+    }, [canShowUsernamePrompt, friendsListData, chatFriend]);
 
     return (
         <>
@@ -4955,6 +4982,17 @@ function DashboardContent({
                                         </div>
                                     </div>
                                 </div>
+                                {reEntryData && reEntryData.daysSinceLastLogin != null && (
+                                    <ReEntrySummary
+                                        daysSinceLastLogin={reEntryData.daysSinceLastLogin}
+                                        unifiedChats={unifiedChats}
+                                        onOpenChat={(id) => {
+                                            const chat = unifiedChats.find((c) => c.id === id);
+                                            if (chat) handleUnifiedChatClick(chat);
+                                        }}
+                                        onDismiss={dismissReEntry}
+                                    />
+                                )}
                                 <div className="px-1.5 py-2 sm:px-4 sm:py-4">
                                     <UnifiedChatList
                                         chats={unifiedChats}

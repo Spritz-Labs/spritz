@@ -1,20 +1,24 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "next build --webpack",
-  "framework": "nextjs",
-  "installCommand": "npm install",
-  "crons": [
-    {
-      "path": "/api/cron/refresh-calendar-tokens",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/sync-knowledge",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/sync-events",
-      "schedule": "0 */6 * * *"
-    }
-  ]
+    "$schema": "https://openapi.vercel.sh/vercel.json",
+    "buildCommand": "next build --webpack",
+    "framework": "nextjs",
+    "installCommand": "npm install",
+    "crons": [
+        {
+            "path": "/api/cron/refresh-calendar-tokens",
+            "schedule": "0 * * * *"
+        },
+        {
+            "path": "/api/cron/sync-knowledge",
+            "schedule": "0 */6 * * *"
+        },
+        {
+            "path": "/api/cron/sync-events",
+            "schedule": "0 */6 * * *"
+        },
+        {
+            "path": "/api/cron/dormancy-check",
+            "schedule": "0 9 * * *"
+        }
+    ]
 }
