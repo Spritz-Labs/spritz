@@ -8,10 +8,7 @@ import {
     type ChannelMessageReaction,
 } from "@/hooks/useChannels";
 import type { PublicChannel } from "@/app/api/channels/route";
-import type {
-    ChannelMessage,
-    ChannelReaction,
-} from "@/app/api/channels/[id]/messages/route";
+import type { ChannelMessage, ChannelReaction } from "@/app/api/channels/[id]/messages/route";
 import { QuickReactionPicker, ReactionDisplay } from "./EmojiPicker";
 import { MessageActionsSheet, ActionIcons } from "./MessageActionsSheet";
 import { MentionInput, type MentionUser } from "./MentionInput";
@@ -24,6 +21,7 @@ import { ChatRulesPanel, ChatRulesBanner } from "./ChatRulesPanel";
 import { useChatRules, useRoomBans } from "@/hooks/useChatRules";
 import { validateMessageClientSide, checkBlockedWordsClient } from "@/lib/clientChatRules";
 import { toast } from "sonner";
+import { reportError } from "@/lib/reportError";
 import { useModeration } from "@/hooks/useModeration";
 import { useRoleBadges, RoleBadgeTag } from "@/hooks/useRoleBadges";
 import { QuickMuteDialog } from "./ModerationPanel";
@@ -32,17 +30,10 @@ import { PollDisplay, type DisplayPoll } from "./PollDisplay";
 import { PollEditModal } from "./PollEditModal";
 import { usePolls } from "@/hooks/usePolls";
 import { ChatMarkdown, hasMarkdown } from "./ChatMarkdown";
-import {
-    AgentMarkdown,
-    AgentMessageWrapper,
-    AgentThinkingIndicator,
-} from "./AgentMarkdown";
+import { AgentMarkdown, AgentMessageWrapper, AgentThinkingIndicator } from "./AgentMarkdown";
 import { ChannelIcon } from "./ChannelIcon";
 import { ImageViewerModal } from "./ImageViewerModal";
-import {
-    useWakuChannel,
-    type WakuChannelMessage,
-} from "@/hooks/useWakuChannel";
+import { useWakuChannel, type WakuChannelMessage } from "@/hooks/useWakuChannel";
 import { TypingIndicator } from "./TypingIndicator";
 import { AvatarWithStatus } from "./OnlineStatus";
 import { UnreadDivider, DateDivider } from "./UnreadDivider";
@@ -83,7 +74,7 @@ const isEmojiOnly = (text: string): boolean => {
     if (!trimmed) return false;
     if (!EMOJI_REGEX.test(trimmed)) return false;
     const emojiCount = [...trimmed].filter(
-        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char),
+        (char) => /\p{Emoji}/u.test(char) && !/\d/u.test(char)
     ).length;
     return emojiCount >= 1 && emojiCount <= 3;
 };
@@ -156,34 +147,33 @@ export function ChannelChatModal({
     });
 
     // Normalize message interface based on channel type (memoize for Waku to avoid re-render flash)
-    const allMessages = isWakuChannel
-        ? useMemo(
-              () =>
-                  wakuMessages.messages.map((m) => ({
-                      id: m.id,
-                      channel_id: channel.id,
-                      content: m.content,
-                      sender_address: m.senderAddress,
-                      created_at: m.timestamp.toISOString(),
-                      message_type: m.messageType,
-                      is_edited: false,
-                      edited_at: null,
-                      is_deleted: false,
-                      is_pinned: false,
-                      pinned_by: null,
-                      pinned_at: null,
-                      reply_to_id: null,
-                      reply_to: null,
-                  })),
-              [wakuMessages.messages, channel.id],
-          )
-        : standardMessages.messages;
+    const normalizedWakuMessages = useMemo(
+        () =>
+            wakuMessages.messages.map((m) => ({
+                id: m.id,
+                channel_id: channel.id,
+                content: m.content,
+                sender_address: m.senderAddress,
+                created_at: m.timestamp.toISOString(),
+                message_type: m.messageType,
+                is_edited: false,
+                edited_at: null,
+                is_deleted: false,
+                is_pinned: false,
+                pinned_by: null,
+                pinned_at: null,
+                reply_to_id: null,
+                reply_to: null,
+            })),
+        [wakuMessages.messages, channel.id]
+    );
+    const allMessages = isWakuChannel ? normalizedWakuMessages : standardMessages.messages;
 
     // Filter out messages from blocked users
     const { isBlocked: isUserBlocked } = useBlockedUsers(userAddress);
     const messages = useMemo(
         () => allMessages.filter((msg) => !isUserBlocked(msg.sender_address)),
-        [allMessages, isUserBlocked],
+        [allMessages, isUserBlocked]
     );
 
     const messageSenderAddressesForSns = useMemo(() => {
@@ -207,55 +197,41 @@ export function ChannelChatModal({
         return map;
     }, [messages]);
 
-    const solanaSnsForSenders = useSolanaDisplayLabelMap(
-        messageSenderAddressesForSns,
-    );
+    const solanaSnsForSenders = useSolanaDisplayLabelMap(messageSenderAddressesForSns);
 
     const pinnedMessages = isWakuChannel ? [] : standardMessages.pinnedMessages;
 
     // Waku channels: fetch and hold reactions by message id (same API, different message source)
-    const [wakuReactions, setWakuReactions] = useState<
-        Record<string, ChannelMessageReaction[]>
-    >({});
+    const [wakuReactions, setWakuReactions] = useState<Record<string, ChannelMessageReaction[]>>(
+        {}
+    );
     const processWakuReactions = useCallback(
         (raw: ChannelReaction[]) => {
             const map: Record<string, ChannelMessageReaction[]> = {};
             raw.forEach((r) => {
                 if (!map[r.message_id]) {
-                    map[r.message_id] = CHANNEL_REACTION_EMOJIS.map(
-                        (emoji) => ({
-                            emoji,
-                            count: 0,
-                            hasReacted: false,
-                            users: [],
-                        }),
-                    );
+                    map[r.message_id] = CHANNEL_REACTION_EMOJIS.map((emoji) => ({
+                        emoji,
+                        count: 0,
+                        hasReacted: false,
+                        users: [],
+                    }));
                 }
-                const idx = map[r.message_id].findIndex(
-                    (x) => x.emoji === r.emoji,
-                );
+                const idx = map[r.message_id].findIndex((x) => x.emoji === r.emoji);
                 if (idx >= 0) {
                     map[r.message_id][idx].count++;
                     map[r.message_id][idx].users.push(r.user_address);
-                    if (
-                        userAddress &&
-                        r.user_address.toLowerCase() ===
-                            userAddress.toLowerCase()
-                    ) {
+                    if (userAddress && r.user_address.toLowerCase() === userAddress.toLowerCase()) {
                         map[r.message_id][idx].hasReacted = true;
                     }
                 }
             });
             return map;
         },
-        [userAddress],
+        [userAddress]
     );
     useEffect(() => {
-        if (
-            !isWakuChannel ||
-            !channel.id ||
-            wakuMessages.messages.length === 0
-        ) {
+        if (!isWakuChannel || !channel.id || wakuMessages.messages.length === 0) {
             if (isWakuChannel && wakuMessages.messages.length === 0) {
                 setWakuReactions({});
             }
@@ -263,11 +239,7 @@ export function ChannelChatModal({
         }
         const messageIds = wakuMessages.messages.map((m) => m.id);
         const idsParam = messageIds.join(",");
-        fetch(
-            `/api/channels/${
-                channel.id
-            }/reactions?messageIds=${encodeURIComponent(idsParam)}`,
-        )
+        fetch(`/api/channels/${channel.id}/reactions?messageIds=${encodeURIComponent(idsParam)}`)
             .then((res) => res.json())
             .then((data) => {
                 if (data.reactions) {
@@ -275,43 +247,21 @@ export function ChannelChatModal({
                 }
             })
             .catch((e) => {
-                console.error(
-                    "[ChannelChatModal] Waku reactions fetch error:",
-                    e,
-                );
+                console.error("[ChannelChatModal] Waku reactions fetch error:", e);
             });
-    }, [
-        isWakuChannel,
-        channel.id,
-        wakuMessages.messages,
-        processWakuReactions,
-    ]);
+    }, [isWakuChannel, channel.id, wakuMessages.messages, processWakuReactions]);
 
-    const reactions = isWakuChannel
-        ? wakuReactions
-        : standardMessages.reactions;
-    const isLoading = isWakuChannel
-        ? wakuMessages.isLoading
-        : standardMessages.isLoading;
-    const isLoadingMore = isWakuChannel
-        ? false
-        : standardMessages.isLoadingMore;
+    const reactions = isWakuChannel ? wakuReactions : standardMessages.reactions;
+    const isLoading = isWakuChannel ? wakuMessages.isLoading : standardMessages.isLoading;
+    const isLoadingMore = isWakuChannel ? false : standardMessages.isLoadingMore;
     const hasMore = isWakuChannel ? false : standardMessages.hasMore;
 
     const sendMessage = isWakuChannel
         ? async (
               content: string,
-              messageType:
-                  | "text"
-                  | "image"
-                  | "pixel_art"
-                  | "gif"
-                  | "location" = "text",
+              messageType: "text" | "image" | "pixel_art" | "gif" | "location" = "text"
           ) => {
-              const success = await wakuMessages.sendMessage(
-                  content,
-                  messageType,
-              );
+              const success = await wakuMessages.sendMessage(content, messageType);
               return success ? { id: crypto.randomUUID() } : null;
           }
         : standardMessages.sendMessage;
@@ -328,18 +278,15 @@ export function ChannelChatModal({
         async (messageId: string, emoji: string) => {
             if (!channel.id || !userAddress) return false;
             try {
-                const res = await fetch(
-                    `/api/channels/${channel.id}/messages`,
-                    {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            messageId,
-                            userAddress,
-                            emoji,
-                        }),
-                    },
-                );
+                const res = await fetch(`/api/channels/${channel.id}/messages`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        messageId,
+                        userAddress,
+                        emoji,
+                    }),
+                });
                 const data = await res.json();
                 if (!res.ok) {
                     throw new Error(data.error || "Failed to toggle reaction");
@@ -347,18 +294,14 @@ export function ChannelChatModal({
                 setWakuReactions((prev) => {
                     const updated = { ...prev };
                     if (!updated[messageId]) {
-                        updated[messageId] = CHANNEL_REACTION_EMOJIS.map(
-                            (e) => ({
-                                emoji: e,
-                                count: 0,
-                                hasReacted: false,
-                                users: [],
-                            }),
-                        );
+                        updated[messageId] = CHANNEL_REACTION_EMOJIS.map((e) => ({
+                            emoji: e,
+                            count: 0,
+                            hasReacted: false,
+                            users: [],
+                        }));
                     }
-                    const idx = updated[messageId].findIndex(
-                        (r) => r.emoji === emoji,
-                    );
+                    const idx = updated[messageId].findIndex((r) => r.emoji === emoji);
                     if (idx >= 0) {
                         const wasReacted = updated[messageId][idx].hasReacted;
                         updated[messageId][idx] = {
@@ -369,14 +312,9 @@ export function ChannelChatModal({
                             hasReacted: !wasReacted,
                             users: wasReacted
                                 ? updated[messageId][idx].users.filter(
-                                      (u) =>
-                                          u.toLowerCase() !==
-                                          userAddress.toLowerCase(),
+                                      (u) => u.toLowerCase() !== userAddress.toLowerCase()
                                   )
-                                : [
-                                      ...updated[messageId][idx].users,
-                                      userAddress.toLowerCase(),
-                                  ],
+                                : [...updated[messageId][idx].users, userAddress.toLowerCase()],
                         };
                     }
                     return updated;
@@ -387,12 +325,10 @@ export function ChannelChatModal({
                 return false;
             }
         },
-        [channel.id, userAddress],
+        [channel.id, userAddress]
     );
 
-    const toggleReaction = isWakuChannel
-        ? toggleReactionWaku
-        : standardMessages.toggleReaction;
+    const toggleReaction = isWakuChannel ? toggleReactionWaku : standardMessages.toggleReaction;
 
     const togglePinMessage = isWakuChannel
         ? async () => {} // Not supported yet for Waku
@@ -403,21 +339,14 @@ export function ChannelChatModal({
         : standardMessages.loadMoreMessages;
 
     const replyingTo = isWakuChannel ? null : standardMessages.replyingTo;
-    const setReplyingTo = isWakuChannel
-        ? () => {}
-        : standardMessages.setReplyingTo;
+    const setReplyingTo = isWakuChannel ? () => {} : standardMessages.setReplyingTo;
     const thinkingAgents = isWakuChannel ? [] : standardMessages.thinkingAgents;
 
     // Polls
-    const {
-        polls,
-        canCreatePoll,
-        fetchPolls,
-        createPoll,
-        vote,
-        updatePoll,
-        deletePoll,
-    } = usePolls(channel.id, userAddress);
+    const { polls, canCreatePoll, fetchPolls, createPoll, vote, updatePoll, deletePoll } = usePolls(
+        channel.id,
+        userAddress
+    );
     const channelHiddenPollsKey = `spritz_hidden_polls_channel_${channel.id}`;
     const [hiddenPollIds, setHiddenPollIds] = useState<string[]>([]);
     useEffect(() => {
@@ -426,9 +355,7 @@ export function ChannelChatModal({
             return;
         }
         try {
-            const stored = JSON.parse(
-                window.localStorage.getItem(channelHiddenPollsKey) ?? "[]",
-            );
+            const stored = JSON.parse(window.localStorage.getItem(channelHiddenPollsKey) ?? "[]");
             setHiddenPollIds(Array.isArray(stored) ? stored : []);
         } catch {
             setHiddenPollIds([]);
@@ -447,13 +374,11 @@ export function ChannelChatModal({
         channel.id,
         "channel",
         userAddress,
-        getUserInfo?.(userAddress)?.name || undefined,
+        getUserInfo?.(userAddress)?.name || undefined
     );
 
     // Online statuses for channel members
-    const [onlineStatuses, setOnlineStatuses] = useState<
-        Record<string, boolean>
-    >({});
+    const [onlineStatuses, setOnlineStatuses] = useState<Record<string, boolean>>({});
 
     // Members list panel
     const [showMembersList, setShowMembersList] = useState(false);
@@ -461,7 +386,7 @@ export function ChannelChatModal({
     // Channel icon management
     const [canEditIcon, setCanEditIcon] = useState(false);
     const [channelIcon, setChannelIcon] = useState<string | null>(
-        channel.poap_image_url ?? channel.icon_url ?? null,
+        channel.poap_image_url ?? channel.icon_url ?? null
     );
     const [isUploadingIcon, setIsUploadingIcon] = useState(false);
     const iconFileInputRef = useRef<HTMLInputElement>(null);
@@ -511,22 +436,14 @@ export function ChannelChatModal({
         }
 
         // Check if channel owner
-        if (
-            channel.creator_address?.toLowerCase() === userAddress.toLowerCase()
-        ) {
+        if (channel.creator_address?.toLowerCase() === userAddress.toLowerCase()) {
             setCanEditIcon(true);
             return;
         }
 
         // Check if moderator (would need API call, simplify by using canCreatePoll which has same permissions)
         setCanEditIcon(canCreatePoll);
-    }, [
-        userAddress,
-        isAdmin,
-        channel.creator_address,
-        canCreatePoll,
-        isPoapOrCollectionChannel,
-    ]);
+    }, [userAddress, isAdmin, channel.creator_address, canCreatePoll, isPoapOrCollectionChannel]);
 
     const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -568,8 +485,7 @@ export function ChannelChatModal({
             const toast = document.createElement("div");
             toast.className =
                 "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
-            toast.textContent =
-                err instanceof Error ? err.message : "Failed to upload icon";
+            toast.textContent = err instanceof Error ? err.message : "Failed to upload icon";
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
         } finally {
@@ -582,12 +498,9 @@ export function ChannelChatModal({
     const handleRemoveIcon = async () => {
         setIsUploadingIcon(true);
         try {
-            const res = await fetch(
-                `/api/channels/${channel.id}/icon?userAddress=${userAddress}`,
-                {
-                    method: "DELETE",
-                },
-            );
+            const res = await fetch(`/api/channels/${channel.id}/icon?userAddress=${userAddress}`, {
+                method: "DELETE",
+            });
 
             if (!res.ok) {
                 const data = await res.json();
@@ -622,12 +535,11 @@ export function ChannelChatModal({
         y: number;
     } | null>(null);
     const [addingFriend, setAddingFriend] = useState<string | null>(null);
-    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(
-        null,
-    );
+    const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
     const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
-    const [selectedMessageConfig, setSelectedMessageConfig] =
-        useState<MessageActionConfig | null>(null);
+    const [selectedMessageConfig, setSelectedMessageConfig] = useState<MessageActionConfig | null>(
+        null
+    );
     const [editingMessage, setEditingMessage] = useState<string | null>(null);
     const [editContent, setEditContent] = useState("");
     const [isDeleting, setIsDeleting] = useState<string | null>(null);
@@ -635,8 +547,7 @@ export function ChannelChatModal({
     const [showPinnedMessages, setShowPinnedMessages] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
-    const [threadRootMessage, setThreadRootMessage] =
-        useState<ChannelMessage | null>(null);
+    const [threadRootMessage, setThreadRootMessage] = useState<ChannelMessage | null>(null);
     const [threadInputValue, setThreadInputValue] = useState("");
     const threadInputRef = useRef<HTMLInputElement>(null);
     const [showSettings, setShowSettings] = useState(false);
@@ -651,21 +562,15 @@ export function ChannelChatModal({
     } | null>(null);
     const [banningUser, setBanningUser] = useState<string | null>(null);
     const [pinningMessage, setPinningMessage] = useState<string | null>(null);
-    const [forwardingMessage, setForwardingMessage] =
-        useState<ChannelMessage | null>(null);
+    const [forwardingMessage, setForwardingMessage] = useState<ChannelMessage | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // Starred messages hook
-    const { isStarred, toggleStar, unstarMessage } =
-        useStarredMessages(userAddress);
+    const { isStarred, toggleStar, unstarMessage } = useStarredMessages(userAddress);
     const messagesContainerRef = useRef<HTMLDivElement>(null);
 
     // Draft messages persistence
-    const { draft, saveDraft, clearDraft } = useDraftMessages(
-        "channel",
-        channel.id,
-        userAddress,
-    );
+    const { draft, saveDraft, clearDraft } = useDraftMessages("channel", channel.id, userAddress);
 
     // Apply draft when modal opens
     useEffect(() => {
@@ -756,7 +661,7 @@ export function ChannelChatModal({
             // Check local cache
             return localUserInfoCache.get(address.toLowerCase()) || null;
         },
-        [getUserInfo, localUserInfoCache],
+        [getUserInfo, localUserInfoCache]
     );
 
     // Fetch AI agents in this channel
@@ -767,22 +672,17 @@ export function ChannelChatModal({
                 const res = await fetch(`/api/channels/${channel.id}/agents`);
                 if (res.ok) {
                     const data = await res.json();
-                    const agents: MentionUser[] = (data.agents || []).map(
-                        (agent: any) => ({
-                            address: agent.id, // Use agent ID as "address" for mentions
-                            name: agent.name,
-                            avatar: agent.avatar_url || null,
-                            avatarEmoji: agent.avatar_emoji,
-                            isAgent: true,
-                        }),
-                    );
+                    const agents: MentionUser[] = (data.agents || []).map((agent: any) => ({
+                        address: agent.id, // Use agent ID as "address" for mentions
+                        name: agent.name,
+                        avatar: agent.avatar_url || null,
+                        avatarEmoji: agent.avatar_emoji,
+                        isAgent: true,
+                    }));
                     setChannelAgents(agents);
                 }
             } catch (err) {
-                console.error(
-                    "[ChannelChat] Error fetching channel agents:",
-                    err,
-                );
+                console.error("[ChannelChat] Error fetching channel agents:", err);
             }
         }
         if (isOpen && channel.id) {
@@ -811,10 +711,7 @@ export function ChannelChatModal({
 
         messages.forEach((msg) => {
             const address = msg.sender_address.toLowerCase();
-            if (
-                !userMap.has(address) &&
-                address !== userAddress.toLowerCase()
-            ) {
+            if (!userMap.has(address) && address !== userAddress.toLowerCase()) {
                 const info = getEffectiveUserInfo(msg.sender_address);
                 userMap.set(address, {
                     address: msg.sender_address,
@@ -828,18 +725,13 @@ export function ChannelChatModal({
     }, [messages, userAddress, getEffectiveUserInfo, channelAgents]);
 
     // Handle mention click
-    const handleMentionClick = useCallback(
-        (address: string, event?: React.MouseEvent) => {
-            if (event) {
-                const rect = (
-                    event.target as HTMLElement
-                ).getBoundingClientRect();
-                setUserPopupPosition({ x: rect.left, y: rect.bottom + 8 });
-            }
-            setSelectedUser(address);
-        },
-        [],
-    );
+    const handleMentionClick = useCallback((address: string, event?: React.MouseEvent) => {
+        if (event) {
+            const rect = (event.target as HTMLElement).getBoundingClientRect();
+            setUserPopupPosition({ x: rect.left, y: rect.bottom + 8 });
+        }
+        setSelectedUser(address);
+    }, []);
 
     // Handle user click: open full user card if handler provided, else show popover
     const handleUserClick = useCallback(
@@ -848,30 +740,23 @@ export function ChannelChatModal({
                 onOpenUserCard(address);
                 return;
             }
-            const rect = (
-                event.currentTarget as HTMLElement
-            ).getBoundingClientRect();
+            const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
             const viewportHeight = window.innerHeight;
             const popupHeight = 250;
             const y = rect.bottom + 8;
-            const adjustedY =
-                y + popupHeight > viewportHeight
-                    ? rect.top - popupHeight - 8
-                    : y;
+            const adjustedY = y + popupHeight > viewportHeight ? rect.top - popupHeight - 8 : y;
             setUserPopupPosition({
                 x: Math.max(8, rect.left),
                 y: Math.max(8, adjustedY),
             });
             setSelectedUser(address);
         },
-        [onOpenUserCard],
+        [onOpenUserCard]
     );
 
     // Fetch online statuses for message senders
     useEffect(() => {
-        const uniqueSenders = [
-            ...new Set(messages.map((m) => m.sender_address.toLowerCase())),
-        ];
+        const uniqueSenders = [...new Set(messages.map((m) => m.sender_address.toLowerCase()))];
         if (uniqueSenders.length === 0) return;
 
         fetchOnlineStatuses(uniqueSenders).then((statuses) => {
@@ -898,8 +783,7 @@ export function ChannelChatModal({
                 }
 
                 // Always scroll for agent responses so the user sees the reply
-                const isAgentReply =
-                    lastMessage.sender_address?.startsWith("agent:");
+                const isAgentReply = lastMessage.sender_address?.startsWith("agent:");
                 if (isAgentReply && container) {
                     userScrolledUpRef.current = false;
                     container.scrollTop = 0;
@@ -908,11 +792,7 @@ export function ChannelChatModal({
 
                 // Auto-scroll if user hasn't scrolled up to read history
                 // With column-reverse, "near bottom" = scrollTop near 0
-                if (
-                    container &&
-                    !userScrolledUpRef.current &&
-                    container.scrollTop < 300
-                ) {
+                if (container && !userScrolledUpRef.current && container.scrollTop < 300) {
                     container.scrollTop = 0;
                 }
             }
@@ -927,8 +807,7 @@ export function ChannelChatModal({
         if (container && previousScrollHeightRef.current > 0) {
             // With column-reverse, new content adds at top, so we need to add the diff to scrollTop
             const newScrollHeight = container.scrollHeight;
-            const scrollDiff =
-                newScrollHeight - previousScrollHeightRef.current;
+            const scrollDiff = newScrollHeight - previousScrollHeightRef.current;
             if (scrollDiff > 0) {
                 container.scrollTop += scrollDiff;
             }
@@ -947,11 +826,7 @@ export function ChannelChatModal({
 
         // Load more when scrolled near the TOP (older messages) - scrollTop approaches max
         const scrollMax = container.scrollHeight - container.clientHeight;
-        if (
-            !isLoadingMore &&
-            hasMore &&
-            scrollMax - container.scrollTop < 100
-        ) {
+        if (!isLoadingMore && hasMore && scrollMax - container.scrollTop < 100) {
             previousScrollHeightRef.current = container.scrollHeight;
             loadMoreMessages();
         }
@@ -1010,9 +885,7 @@ export function ChannelChatModal({
                     if (data.user) {
                         const name = data.user.username
                             ? `@${data.user.username}`
-                            : data.user.display_name ||
-                              data.user.ens_name ||
-                              null;
+                            : data.user.display_name || data.user.ens_name || null;
                         const userInfo = {
                             name,
                             avatar: data.user.avatar_url || null,
@@ -1021,26 +894,19 @@ export function ChannelChatModal({
                             if (prev.has(address.toLowerCase())) {
                                 return prev;
                             }
-                            return new Map(prev).set(
-                                address.toLowerCase(),
-                                userInfo,
-                            );
+                            return new Map(prev).set(address.toLowerCase(), userInfo);
                         });
                     }
                 })
                 .catch((err) => {
                     // Allow a retry on failure
                     inFlightUserFetchesRef.current.delete(address);
-                    console.error(
-                        "[ChannelChat] Error fetching user info for",
-                        address,
-                        err,
-                    );
+                    console.error("[ChannelChat] Error fetching user info for", address, err);
                 });
         });
         // Deliberately NOT depending on localUserInfoCache to avoid re-running
         // this effect (and dedup logic above) every time a fetch resolves.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [messages, userAddress, getUserInfo]);
 
     // Focus input when opened
@@ -1067,8 +933,7 @@ export function ChannelChatModal({
         const handleClickOutside = () => setSelectedUser(null);
         if (selectedUser) {
             document.addEventListener("click", handleClickOutside);
-            return () =>
-                document.removeEventListener("click", handleClickOutside);
+            return () => document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedUser]);
 
@@ -1085,14 +950,23 @@ export function ChannelChatModal({
         if (!inputValue.trim() || isSending) return;
 
         // Validate against chat rules before sending
-        const ruleViolation = validateMessageClientSide(chatRules, inputValue.trim(), "text", isModerator);
+        const ruleViolation = validateMessageClientSide(
+            chatRules,
+            inputValue.trim(),
+            "text",
+            isModerator
+        );
         if (ruleViolation) {
             toast.error(ruleViolation);
             return;
         }
 
         // Check blocked words (global + room-specific)
-        const blockedViolation = await checkBlockedWordsClient(inputValue.trim(), "channel", channel.id);
+        const blockedViolation = await checkBlockedWordsClient(
+            inputValue.trim(),
+            "channel",
+            channel.id
+        );
         if (blockedViolation) {
             toast.error(blockedViolation);
             return;
@@ -1133,7 +1007,7 @@ export function ChannelChatModal({
             await sendMessage(`[GIF]${gifUrl}`, "text");
             onMessageSent?.();
         } catch (error) {
-            console.error("Failed to send GIF:", error);
+            reportError(error, { context: "channelChatSendGIF", silent: true });
         } finally {
             setIsSending(false);
         }
@@ -1170,8 +1044,8 @@ export function ChannelChatModal({
             setShowPixelArt(false);
             onMessageSent?.();
         } catch (error) {
-            console.error("Failed to send pixel art:", error);
-            alert("Failed to send pixel art. Please try again.");
+            reportError(error, { context: "channelChatPixelArt", silent: true });
+            toast.error("Failed to send pixel art. Please try again.");
         } finally {
             setIsUploadingPixelArt(false);
         }
@@ -1181,7 +1055,7 @@ export function ChannelChatModal({
         try {
             await toggleReaction(messageId, emoji);
         } catch (error) {
-            console.error("[ChannelChatModal] Reaction error:", error);
+            reportError(error, { context: "channelChatReaction", silent: true });
         } finally {
             setShowReactionPicker(null);
             setSelectedMessage(null);
@@ -1211,10 +1085,7 @@ export function ChannelChatModal({
         if (success) setSelectedUser(null);
     };
 
-    const handlePinMessage = async (
-        messageId: string,
-        currentlyPinned: boolean,
-    ) => {
+    const handlePinMessage = async (messageId: string, currentlyPinned: boolean) => {
         if (!isAdmin || pinningMessage) return;
 
         setPinningMessage(messageId);
@@ -1251,8 +1122,7 @@ export function ChannelChatModal({
         };
         if (selectedMessage) {
             document.addEventListener("click", handleClickOutside);
-            return () =>
-                document.removeEventListener("click", handleClickOutside);
+            return () => document.removeEventListener("click", handleClickOutside);
         }
     }, [selectedMessage]);
 
@@ -1271,7 +1141,7 @@ export function ChannelChatModal({
         const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
 
         if (diffMinutes > 15) {
-            alert("Messages can only be edited within 15 minutes");
+            toast.error("Messages can only be edited within 15 minutes");
             return;
         }
 
@@ -1323,18 +1193,14 @@ export function ChannelChatModal({
         }
 
         // Validate file type
-        if (
-            !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(
-                file.type,
-            )
-        ) {
-            alert("Only JPEG, PNG, GIF, and WebP images are allowed");
+        if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(file.type)) {
+            toast.error("Only JPEG, PNG, GIF, and WebP images are allowed");
             return;
         }
 
         // Validate file size (5MB)
         if (file.size > 5 * 1024 * 1024) {
-            alert("Image must be less than 5MB");
+            toast.error("Image must be less than 5MB");
             return;
         }
 
@@ -1362,16 +1228,14 @@ export function ChannelChatModal({
             // Notify parent that message was sent (for updating chat order)
             onMessageSent?.();
         } catch (error) {
-            console.error("Failed to upload image:", error);
-            alert("Failed to upload image. Please try again.");
+            reportError(error, { context: "channelChatImageUpload", silent: true });
+            toast.error("Failed to upload image. Please try again.");
         } finally {
             setIsUploading(false);
         }
     };
 
-    const handleImageSelect = async (
-        e: React.ChangeEvent<HTMLInputElement>,
-    ) => {
+    const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         await handleImageFile(file);
@@ -1435,7 +1299,7 @@ export function ChannelChatModal({
                             name: agent.name,
                             avatar_url: agent.avatar_url,
                             avatar_emoji: agent.avatar_emoji || "🤖",
-                        }),
+                        })
                     );
                 }
             } catch (err) {
@@ -1443,7 +1307,7 @@ export function ChannelChatModal({
                 console.error("[ChannelChat] Error fetching agent info:", err);
             }
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [messages]);
 
     // Check if sender is an agent
@@ -1461,7 +1325,7 @@ export function ChannelChatModal({
         if (userInfo?.name) return userInfo.name;
         const sns = solanaSnsFromResolvedLabel(
             address,
-            solanaSnsForSenders[walletCacheKey(address)],
+            solanaSnsForSenders[walletCacheKey(address)]
         );
         if (sns) return sns;
         return formatAddress(address);
@@ -1501,7 +1365,7 @@ export function ChannelChatModal({
                 senderAddress: m.sender_address,
                 sentAt: new Date(m.created_at),
             })),
-        [messages],
+        [messages]
     );
 
     const handleSelectSearchMessage = useCallback((messageId: string) => {
@@ -1528,8 +1392,7 @@ export function ChannelChatModal({
                     isFullscreen
                         ? {}
                         : {
-                              paddingBottom:
-                                  "max(env(safe-area-inset-bottom, 0px) + 100px, 120px)",
+                              paddingBottom: "max(env(safe-area-inset-bottom, 0px) + 100px, 120px)",
                           }
                 }
                 onClick={(e) => {
@@ -1615,9 +1478,7 @@ export function ChannelChatModal({
                                         {/* Root message */}
                                         <div className="p-3 bg-zinc-800/50 rounded-xl border-l-2 border-orange-500">
                                             <p className="text-xs text-zinc-500 mb-1">
-                                                {formatSender(
-                                                    threadRootMessage.sender_address,
-                                                )}
+                                                {formatSender(threadRootMessage.sender_address)}
                                             </p>
                                             <p className="text-sm text-white break-words whitespace-pre-wrap">
                                                 {threadRootMessage.content}
@@ -1625,11 +1486,7 @@ export function ChannelChatModal({
                                         </div>
                                         {/* Replies */}
                                         {messages
-                                            .filter(
-                                                (m) =>
-                                                    m.reply_to_id ===
-                                                    threadRootMessage.id,
-                                            )
+                                            .filter((m) => m.reply_to_id === threadRootMessage.id)
                                             .map((reply) => {
                                                 const isOwnReply =
                                                     reply.sender_address.toLowerCase() ===
@@ -1644,9 +1501,7 @@ export function ChannelChatModal({
                                                         }`}
                                                     >
                                                         <p className="text-xs text-zinc-500 mb-1">
-                                                            {formatSender(
-                                                                reply.sender_address,
-                                                            )}
+                                                            {formatSender(reply.sender_address)}
                                                         </p>
                                                         <p className="text-sm text-white break-words whitespace-pre-wrap">
                                                             {reply.content}
@@ -1660,25 +1515,15 @@ export function ChannelChatModal({
                                             ref={threadInputRef}
                                             type="text"
                                             value={threadInputValue}
-                                            onChange={(e) =>
-                                                setThreadInputValue(
-                                                    e.target.value,
-                                                )
-                                            }
+                                            onChange={(e) => setThreadInputValue(e.target.value)}
                                             onKeyDown={(e) => {
-                                                if (
-                                                    e.key === "Enter" &&
-                                                    !e.shiftKey
-                                                ) {
+                                                if (e.key === "Enter" && !e.shiftKey) {
                                                     e.preventDefault();
-                                                    if (
-                                                        threadInputValue.trim() &&
-                                                        !isSending
-                                                    ) {
+                                                    if (threadInputValue.trim() && !isSending) {
                                                         sendMessage(
                                                             threadInputValue.trim(),
                                                             "text",
-                                                            threadRootMessage.id,
+                                                            threadRootMessage.id
                                                         );
                                                         setThreadInputValue("");
                                                         onMessageSent?.();
@@ -1690,23 +1535,16 @@ export function ChannelChatModal({
                                         />
                                         <button
                                             onClick={async () => {
-                                                if (
-                                                    !threadInputValue.trim() ||
-                                                    isSending
-                                                )
-                                                    return;
+                                                if (!threadInputValue.trim() || isSending) return;
                                                 await sendMessage(
                                                     threadInputValue.trim(),
                                                     "text",
-                                                    threadRootMessage.id,
+                                                    threadRootMessage.id
                                                 );
                                                 setThreadInputValue("");
                                                 onMessageSent?.();
                                             }}
-                                            disabled={
-                                                !threadInputValue.trim() ||
-                                                isSending
-                                            }
+                                            disabled={!threadInputValue.trim() || isSending}
                                             className="p-3 bg-[#FF5500] text-white rounded-xl hover:bg-[#E04D00] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                             aria-label="Send"
                                         >
@@ -1739,9 +1577,7 @@ export function ChannelChatModal({
                             size="sm"
                             className="shrink-0 ml-1"
                             onImageClick={
-                                channelIcon
-                                    ? () => setViewerImage(channelIcon)
-                                    : undefined
+                                channelIcon ? () => setViewerImage(channelIcon) : undefined
                             }
                         />
 
@@ -1784,9 +1620,7 @@ export function ChannelChatModal({
                                     <>
                                         {" "}
                                         · {channel.member_count}{" "}
-                                        {channel.member_count === 1
-                                            ? "member"
-                                            : "members"}
+                                        {channel.member_count === 1 ? "member" : "members"}
                                     </>
                                 )}
                                 {isWakuChannel && " · Decentralized"}
@@ -1818,11 +1652,7 @@ export function ChannelChatModal({
                             {/* Pinned Messages - icon only */}
                             {pinnedMessages.length > 0 && (
                                 <button
-                                    onClick={() =>
-                                        setShowPinnedMessages(
-                                            !showPinnedMessages,
-                                        )
-                                    }
+                                    onClick={() => setShowPinnedMessages(!showPinnedMessages)}
                                     className={`p-2.5 rounded-xl flex items-center gap-1 transition-colors ${
                                         showPinnedMessages
                                             ? "bg-amber-500/20 text-amber-400"
@@ -1886,9 +1716,7 @@ export function ChannelChatModal({
                             {/* Settings Menu (... icon) */}
                             <div className="relative">
                                 <button
-                                    onClick={() =>
-                                        setShowSettings(!showSettings)
-                                    }
+                                    onClick={() => setShowSettings(!showSettings)}
                                     className="p-2.5 hover:bg-zinc-800 rounded-xl transition-colors text-zinc-400 hover:text-white"
                                     aria-label="More options"
                                 >
@@ -1930,26 +1758,15 @@ export function ChannelChatModal({
                                             <button
                                                 onClick={() => {
                                                     const inviteUrl = `${window.location.origin}/channel/${channel.id}`;
-                                                    navigator.clipboard.writeText(
-                                                        inviteUrl,
-                                                    );
+                                                    navigator.clipboard.writeText(inviteUrl);
                                                     setShowSettings(false);
                                                     // Show toast notification
-                                                    const toast =
-                                                        document.createElement(
-                                                            "div",
-                                                        );
+                                                    const toast = document.createElement("div");
                                                     toast.className =
                                                         "fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-emerald-500 text-white text-sm font-medium rounded-xl shadow-lg z-[100] animate-in fade-in slide-in-from-bottom-2";
-                                                    toast.textContent =
-                                                        "✓ Invite link copied!";
-                                                    document.body.appendChild(
-                                                        toast,
-                                                    );
-                                                    setTimeout(
-                                                        () => toast.remove(),
-                                                        2000,
-                                                    );
+                                                    toast.textContent = "✓ Invite link copied!";
+                                                    document.body.appendChild(toast);
+                                                    setTimeout(() => toast.remove(), 2000);
                                                 }}
                                                 className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3"
                                             >
@@ -1969,86 +1786,70 @@ export function ChannelChatModal({
                                                 Copy Invite Link
                                             </button>
                                             {/* Change Channel Icon - for admins, owners, moderators; not for POAP/Collection channels */}
-                                            {canEditIcon &&
-                                                !isPoapOrCollectionChannel && (
-                                                    <>
-                                                        <button
-                                                            onClick={() =>
-                                                                iconFileInputRef.current?.click()
-                                                            }
-                                                            disabled={
-                                                                isUploadingIcon
-                                                            }
-                                                            className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
-                                                        >
-                                                            {isUploadingIcon ? (
-                                                                <div className="w-5 h-5 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
-                                                            ) : (
-                                                                <svg
-                                                                    className="w-5 h-5 text-zinc-400"
-                                                                    fill="none"
-                                                                    viewBox="0 0 24 24"
-                                                                    stroke="currentColor"
-                                                                >
-                                                                    <path
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                        strokeWidth={
-                                                                            2
-                                                                        }
-                                                                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                                                    />
-                                                                </svg>
-                                                            )}
-                                                            {channelIcon
-                                                                ? "Change Channel Icon"
-                                                                : "Upload Channel Icon"}
-                                                        </button>
-                                                        {channelIcon && (
-                                                            <button
-                                                                onClick={() => {
-                                                                    handleRemoveIcon();
-                                                                    setShowSettings(
-                                                                        false,
-                                                                    );
-                                                                }}
-                                                                disabled={
-                                                                    isUploadingIcon
-                                                                }
-                                                                className="w-full px-4 py-3 text-left text-sm text-zinc-400 hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                            {canEditIcon && !isPoapOrCollectionChannel && (
+                                                <>
+                                                    <button
+                                                        onClick={() =>
+                                                            iconFileInputRef.current?.click()
+                                                        }
+                                                        disabled={isUploadingIcon}
+                                                        className="w-full px-4 py-3 text-left text-sm text-white hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                                    >
+                                                        {isUploadingIcon ? (
+                                                            <div className="w-5 h-5 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
+                                                        ) : (
+                                                            <svg
+                                                                className="w-5 h-5 text-zinc-400"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
                                                             >
-                                                                <svg
-                                                                    className="w-5 h-5"
-                                                                    fill="none"
-                                                                    viewBox="0 0 24 24"
-                                                                    stroke="currentColor"
-                                                                >
-                                                                    <path
-                                                                        strokeLinecap="round"
-                                                                        strokeLinejoin="round"
-                                                                        strokeWidth={
-                                                                            2
-                                                                        }
-                                                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                                                    />
-                                                                </svg>
-                                                                Remove Custom
-                                                                Icon
-                                                            </button>
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={2}
+                                                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                                                />
+                                                            </svg>
                                                         )}
-                                                        <input
-                                                            ref={
-                                                                iconFileInputRef
-                                                            }
-                                                            type="file"
-                                                            accept="image/jpeg,image/png,image/gif,image/webp"
-                                                            onChange={
-                                                                handleIconUpload
-                                                            }
-                                                            className="hidden"
-                                                        />
-                                                    </>
-                                                )}
+                                                        {channelIcon
+                                                            ? "Change Channel Icon"
+                                                            : "Upload Channel Icon"}
+                                                    </button>
+                                                    {channelIcon && (
+                                                        <button
+                                                            onClick={() => {
+                                                                handleRemoveIcon();
+                                                                setShowSettings(false);
+                                                            }}
+                                                            disabled={isUploadingIcon}
+                                                            className="w-full px-4 py-3 text-left text-sm text-zinc-400 hover:bg-zinc-700 transition-colors flex items-center gap-3 disabled:opacity-50"
+                                                        >
+                                                            <svg
+                                                                className="w-5 h-5"
+                                                                fill="none"
+                                                                viewBox="0 0 24 24"
+                                                                stroke="currentColor"
+                                                            >
+                                                                <path
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                    strokeWidth={2}
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                                />
+                                                            </svg>
+                                                            Remove Custom Icon
+                                                        </button>
+                                                    )}
+                                                    <input
+                                                        ref={iconFileInputRef}
+                                                        type="file"
+                                                        accept="image/jpeg,image/png,image/gif,image/webp"
+                                                        onChange={handleIconUpload}
+                                                        className="hidden"
+                                                    />
+                                                </>
+                                            )}
                                             {/* Notification toggle - visible on mobile */}
                                             {onToggleNotifications && (
                                                 <button
@@ -2087,10 +1888,8 @@ export function ChannelChatModal({
                                             )}
                                             {/* Room Rules - admin/moderator only */}
                                             {(isAdmin ||
-                                                moderation.permissions
-                                                    .canMute ||
-                                                moderation.permissions
-                                                    .isAdmin) && (
+                                                moderation.permissions.canMute ||
+                                                moderation.permissions.isAdmin) && (
                                                 <button
                                                     onClick={() => {
                                                         setShowSettings(false);
@@ -2143,7 +1942,13 @@ export function ChannelChatModal({
 
                             {/* Open in new tab */}
                             <button
-                                onClick={() => window.open(`/channel/${channel.id}`, "_blank", "noopener,noreferrer")}
+                                onClick={() =>
+                                    window.open(
+                                        `/channel/${channel.id}`,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                    )
+                                }
                                 className="p-2.5 rounded-xl text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
                                 aria-label="Open chat in new tab"
                                 title="Open in new tab"
@@ -2203,9 +2008,7 @@ export function ChannelChatModal({
                                         >
                                             <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
                                         </svg>
-                                        <span className="text-sm font-medium">
-                                            Pinned Messages
-                                        </span>
+                                        <span className="text-sm font-medium">Pinned Messages</span>
                                     </div>
                                     <div className="space-y-2">
                                         {pinnedMessages.map((msg) => (
@@ -2215,9 +2018,7 @@ export function ChannelChatModal({
                                             >
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-xs text-zinc-400 mb-0.5">
-                                                        {formatSender(
-                                                            msg.sender_address,
-                                                        )}
+                                                        {formatSender(msg.sender_address)}
                                                     </p>
                                                     <p className="text-sm text-white truncate">
                                                         {msg.content}
@@ -2226,20 +2027,13 @@ export function ChannelChatModal({
                                                 {isAdmin && (
                                                     <button
                                                         onClick={() =>
-                                                            handlePinMessage(
-                                                                msg.id,
-                                                                true,
-                                                            )
+                                                            handlePinMessage(msg.id, true)
                                                         }
-                                                        disabled={
-                                                            pinningMessage ===
-                                                            msg.id
-                                                        }
+                                                        disabled={pinningMessage === msg.id}
                                                         className="p-1 text-zinc-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                                                         title="Unpin message"
                                                     >
-                                                        {pinningMessage ===
-                                                        msg.id ? (
+                                                        {pinningMessage === msg.id ? (
                                                             <div className="w-4 h-4 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
                                                         ) : (
                                                             <svg
@@ -2251,9 +2045,7 @@ export function ChannelChatModal({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M6 18L18 6M6 6l12 12"
                                                                 />
                                                             </svg>
@@ -2284,9 +2076,7 @@ export function ChannelChatModal({
                                 <PollDisplay
                                     key={poll.id}
                                     poll={poll}
-                                    onVote={(optionIndex) =>
-                                        vote(poll.id, optionIndex)
-                                    }
+                                    onVote={(optionIndex) => vote(poll.id, optionIndex)}
                                     compact
                                     canManage={canCreatePoll}
                                     onEdit={(p) => setEditingPoll(p)}
@@ -2300,7 +2090,7 @@ export function ChannelChatModal({
                                             try {
                                                 window.localStorage.setItem(
                                                     channelHiddenPollsKey,
-                                                    JSON.stringify(next),
+                                                    JSON.stringify(next)
                                                 );
                                             } catch {}
                                             return next;
@@ -2354,18 +2144,13 @@ export function ChannelChatModal({
                                         const isOwn =
                                             msg.sender_address.toLowerCase() ===
                                             userAddress.toLowerCase();
-                                        const isAgent = isAgentMessage(
-                                            msg.sender_address,
-                                        );
+                                        const isAgent = isAgentMessage(msg.sender_address);
                                         const showSender =
                                             index === 0 ||
-                                            messages[index - 1]
-                                                .sender_address !==
+                                            messages[index - 1].sender_address !==
                                                 msg.sender_address;
-                                        const isPixelArt =
-                                            msg.message_type === "pixel_art";
-                                        const isGif =
-                                            msg.content.startsWith("[GIF]");
+                                        const isPixelArt = msg.message_type === "pixel_art";
+                                        const isGif = msg.content.startsWith("[GIF]");
                                         const isImage =
                                             !isPixelArt &&
                                             !isGif &&
@@ -2377,50 +2162,33 @@ export function ChannelChatModal({
                                         const locationData = isLocation
                                             ? parseLocationMessage(msg.content)
                                             : null;
-                                        const senderAvatar = getSenderAvatar(
-                                            msg.sender_address,
+                                        const senderAvatar = getSenderAvatar(msg.sender_address);
+                                        const senderAvatarEmoji = getSenderAvatarEmoji(
+                                            msg.sender_address
                                         );
-                                        const senderAvatarEmoji =
-                                            getSenderAvatarEmoji(
-                                                msg.sender_address,
-                                            );
                                         const isAlreadyFriend =
-                                            !isAgent &&
-                                            (isFriend?.(msg.sender_address) ??
-                                                false);
+                                            !isAgent && (isFriend?.(msg.sender_address) ?? false);
                                         // Only show user popup on the FIRST message from this sender to avoid duplicates
                                         const isFirstMessageFromSender =
                                             firstIndexBySender.get(
-                                                msg.sender_address.toLowerCase(),
+                                                msg.sender_address.toLowerCase()
                                             ) === index;
 
                                         // Check if we need a date divider (comparing to previous message)
-                                        const msgDate = new Date(
-                                            msg.created_at,
-                                        );
-                                        const prevMsg =
-                                            index > 0
-                                                ? messages[index - 1]
-                                                : null;
+                                        const msgDate = new Date(msg.created_at);
+                                        const prevMsg = index > 0 ? messages[index - 1] : null;
                                         const prevMsgDate = prevMsg
                                             ? new Date(prevMsg.created_at)
                                             : null;
                                         const showDateDivider =
                                             !prevMsgDate ||
-                                            msgDate.toDateString() !==
-                                                prevMsgDate.toDateString();
+                                            msgDate.toDateString() !== prevMsgDate.toDateString();
 
                                         return (
-                                            <div
-                                                key={msg.id}
-                                                data-message-id={msg.id}
-                                            >
+                                            <div key={msg.id} data-message-id={msg.id}>
                                                 {/* Date divider when day changes */}
                                                 {showDateDivider && (
-                                                    <DateDivider
-                                                        date={msgDate}
-                                                        className="mb-2"
-                                                    />
+                                                    <DateDivider date={msgDate} className="mb-2" />
                                                 )}
                                                 <motion.div
                                                     initial={{
@@ -2432,9 +2200,7 @@ export function ChannelChatModal({
                                                         y: 0,
                                                     }}
                                                     className={`flex gap-2 ${
-                                                        isOwn
-                                                            ? "flex-row-reverse"
-                                                            : ""
+                                                        isOwn ? "flex-row-reverse" : ""
                                                     }`}
                                                 >
                                                     {/* Avatar - clickable for non-own, non-agent messages */}
@@ -2445,17 +2211,13 @@ export function ChannelChatModal({
                                                                 <div className="relative">
                                                                     {senderAvatar ? (
                                                                         <img
-                                                                            src={
-                                                                                senderAvatar
-                                                                            }
+                                                                            src={senderAvatar}
                                                                             alt=""
                                                                             className="w-8 h-8 rounded-lg object-cover ring-1 ring-purple-500/50"
                                                                         />
                                                                     ) : senderAvatarEmoji ? (
                                                                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-lg ring-1 ring-purple-500/50">
-                                                                            {
-                                                                                senderAvatarEmoji
-                                                                            }
+                                                                            {senderAvatarEmoji}
                                                                         </div>
                                                                     ) : (
                                                                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-xs ring-1 ring-purple-500/50">
@@ -2467,21 +2229,19 @@ export function ChannelChatModal({
                                                                 // User avatar (clickable) with online status
                                                                 <div className="relative">
                                                                     <button
-                                                                        onClick={(
-                                                                            e,
-                                                                        ) => {
+                                                                        onClick={(e) => {
                                                                             e.stopPropagation();
                                                                             if (
                                                                                 selectedUser ===
                                                                                 msg.sender_address
                                                                             ) {
                                                                                 setSelectedUser(
-                                                                                    null,
+                                                                                    null
                                                                                 );
                                                                             } else {
                                                                                 handleUserClick(
                                                                                     msg.sender_address,
-                                                                                    e,
+                                                                                    e
                                                                                 );
                                                                             }
                                                                         }}
@@ -2489,21 +2249,16 @@ export function ChannelChatModal({
                                                                     >
                                                                         {senderAvatar ? (
                                                                             <img
-                                                                                src={
-                                                                                    senderAvatar
-                                                                                }
+                                                                                src={senderAvatar}
                                                                                 alt=""
                                                                                 className="w-8 h-8 rounded-full object-cover hover:ring-2 hover:ring-orange-500/50 transition-all"
                                                                             />
                                                                         ) : (
                                                                             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white text-xs font-bold hover:ring-2 hover:ring-orange-500/50 transition-all">
                                                                                 {formatAddress(
-                                                                                    msg.sender_address,
+                                                                                    msg.sender_address
                                                                                 )
-                                                                                    .slice(
-                                                                                        0,
-                                                                                        2,
-                                                                                    )
+                                                                                    .slice(0, 2)
                                                                                     .toUpperCase()}
                                                                             </div>
                                                                         )}
@@ -2524,51 +2279,49 @@ export function ChannelChatModal({
                                                     {/* Message content */}
                                                     <div
                                                         className={`flex flex-col ${
-                                                            isOwn
-                                                                ? "items-end"
-                                                                : "items-start"
+                                                            isOwn ? "items-end" : "items-start"
                                                         } max-w-[80%]`}
                                                     >
-                                                        {showSender &&
-                                                            !isOwn && (
-                                                                <p
-                                                                    className={`text-xs mb-1 ml-1 font-medium flex items-center gap-1 ${
-                                                                        isAgent
-                                                                            ? "text-purple-400"
-                                                                            : "text-zinc-500"
-                                                                    }`}
-                                                                >
-                                                                    {formatSender(
-                                                                        msg.sender_address,
-                                                                    )}
-                                                                    {isAgent && (
-                                                                        <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
-                                                                            AI
-                                                                        </span>
-                                                                    )}
-                                                                    {!isAgent && (
-                                                                        <RoleBadgeTag role={getRoleBadge(msg.sender_address)} />
-                                                                    )}
-                                                                    {msg.is_pinned && (
-                                                                        <span
-                                                                            className="text-amber-400"
-                                                                            title="Pinned message"
+                                                        {showSender && !isOwn && (
+                                                            <p
+                                                                className={`text-xs mb-1 ml-1 font-medium flex items-center gap-1 ${
+                                                                    isAgent
+                                                                        ? "text-purple-400"
+                                                                        : "text-zinc-500"
+                                                                }`}
+                                                            >
+                                                                {formatSender(msg.sender_address)}
+                                                                {isAgent && (
+                                                                    <span className="text-[9px] px-1 py-0.5 bg-purple-500/30 text-purple-300 rounded font-medium">
+                                                                        AI
+                                                                    </span>
+                                                                )}
+                                                                {!isAgent && (
+                                                                    <RoleBadgeTag
+                                                                        role={getRoleBadge(
+                                                                            msg.sender_address
+                                                                        )}
+                                                                    />
+                                                                )}
+                                                                {msg.is_pinned && (
+                                                                    <span
+                                                                        className="text-amber-400"
+                                                                        title="Pinned message"
+                                                                    >
+                                                                        <svg
+                                                                            className="w-3 h-3"
+                                                                            fill="currentColor"
+                                                                            viewBox="0 0 20 20"
                                                                         >
-                                                                            <svg
-                                                                                className="w-3 h-3"
-                                                                                fill="currentColor"
-                                                                                viewBox="0 0 20 20"
-                                                                            >
-                                                                                <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
-                                                                            </svg>
-                                                                        </span>
-                                                                    )}
-                                                                </p>
-                                                            )}
+                                                                            <path d="M5 5a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 19V5z" />
+                                                                        </svg>
+                                                                    </span>
+                                                                )}
+                                                            </p>
+                                                        )}
                                                         {/* Pinned indicator for own messages or when sender not shown */}
                                                         {msg.is_pinned &&
-                                                            (showSender ||
-                                                                isOwn) &&
+                                                            (showSender || isOwn) &&
                                                             isOwn && (
                                                                 <p className="text-xs text-amber-400 mb-1 mr-1 font-medium flex items-center gap-1 justify-end">
                                                                     <svg
@@ -2585,18 +2338,15 @@ export function ChannelChatModal({
                                                             <div
                                                                 onClick={() => {
                                                                     setSelectedMessage(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
-                                                                            : msg.id,
+                                                                            : msg.id
                                                                     );
                                                                     setSelectedMessageConfig(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
                                                                             : {
-                                                                                  messageId:
-                                                                                      msg.id,
+                                                                                  messageId: msg.id,
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
@@ -2607,14 +2357,14 @@ export function ChannelChatModal({
                                                                                       msg.is_pinned,
                                                                                   isStarred:
                                                                                       isStarred(
-                                                                                          msg.id,
+                                                                                          msg.id
                                                                                       ),
                                                                                   canEdit: false,
                                                                                   hasMedia: true,
                                                                                   isPixelArt: true,
                                                                                   mediaUrl:
                                                                                       msg.content,
-                                                                              },
+                                                                              }
                                                                     );
                                                                 }}
                                                                 className={`rounded-2xl overflow-hidden relative group cursor-pointer ${
@@ -2622,17 +2372,14 @@ export function ChannelChatModal({
                                                                         ? "rounded-br-md"
                                                                         : "rounded-bl-md"
                                                                 } ${
-                                                                    selectedMessage ===
-                                                                    msg.id
+                                                                    selectedMessage === msg.id
                                                                         ? "ring-2 ring-orange-400/50"
                                                                         : ""
                                                                 }`}
                                                             >
                                                                 <div>
                                                                     <PixelArtImage
-                                                                        src={
-                                                                            msg.content
-                                                                        }
+                                                                        src={msg.content}
                                                                         size="lg"
                                                                         className="cursor-pointer hover:opacity-90 transition-opacity"
                                                                     />
@@ -2642,18 +2389,15 @@ export function ChannelChatModal({
                                                             <div
                                                                 onClick={() => {
                                                                     setSelectedMessage(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
-                                                                            : msg.id,
+                                                                            : msg.id
                                                                     );
                                                                     setSelectedMessageConfig(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
                                                                             : {
-                                                                                  messageId:
-                                                                                      msg.id,
+                                                                                  messageId: msg.id,
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
@@ -2664,14 +2408,14 @@ export function ChannelChatModal({
                                                                                       msg.is_pinned,
                                                                                   isStarred:
                                                                                       isStarred(
-                                                                                          msg.id,
+                                                                                          msg.id
                                                                                       ),
                                                                                   canEdit: false,
                                                                                   hasMedia: true,
                                                                                   isPixelArt: false,
                                                                                   mediaUrl:
                                                                                       msg.content,
-                                                                              },
+                                                                              }
                                                                     );
                                                                 }}
                                                                 className={`rounded-2xl overflow-hidden relative group cursor-pointer ${
@@ -2679,52 +2423,42 @@ export function ChannelChatModal({
                                                                         ? "rounded-br-md"
                                                                         : "rounded-bl-md"
                                                                 } ${
-                                                                    selectedMessage ===
-                                                                    msg.id
+                                                                    selectedMessage === msg.id
                                                                         ? "ring-2 ring-orange-400/50"
                                                                         : ""
                                                                 }`}
                                                             >
                                                                 <img
-                                                                    src={
-                                                                        msg.content
-                                                                    }
+                                                                    src={msg.content}
                                                                     alt="Shared image"
                                                                     loading="lazy"
                                                                     className="max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
-                                                                    onError={(
-                                                                        e,
-                                                                    ) => {
+                                                                    onError={(e) => {
                                                                         const el =
                                                                             e.target as HTMLImageElement;
-                                                                        el.style.display =
-                                                                            "none";
+                                                                        el.style.display = "none";
                                                                         const fallback =
                                                                             document.createElement(
-                                                                                "div",
+                                                                                "div"
                                                                             );
                                                                         fallback.className =
                                                                             "py-8 px-4 text-center text-zinc-500 text-sm";
                                                                         fallback.textContent =
                                                                             "Image failed to load";
                                                                         el.parentNode?.appendChild(
-                                                                            fallback,
+                                                                            fallback
                                                                         );
                                                                     }}
                                                                 />
                                                                 {/* Download Button */}
                                                                 <a
-                                                                    href={
-                                                                        msg.content
-                                                                    }
+                                                                    href={msg.content}
                                                                     download="image.png"
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-black/80 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                                                                     title="Download"
-                                                                    onClick={(
-                                                                        e,
-                                                                    ) =>
+                                                                    onClick={(e) =>
                                                                         e.stopPropagation()
                                                                     }
                                                                 >
@@ -2737,9 +2471,7 @@ export function ChannelChatModal({
                                                                         <path
                                                                             strokeLinecap="round"
                                                                             strokeLinejoin="round"
-                                                                            strokeWidth={
-                                                                                2
-                                                                            }
+                                                                            strokeWidth={2}
                                                                             d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
                                                                         />
                                                                     </svg>
@@ -2749,18 +2481,15 @@ export function ChannelChatModal({
                                                             <div
                                                                 onClick={() => {
                                                                     setSelectedMessage(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
-                                                                            : msg.id,
+                                                                            : msg.id
                                                                     );
                                                                     setSelectedMessageConfig(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
                                                                             : {
-                                                                                  messageId:
-                                                                                      msg.id,
+                                                                                  messageId: msg.id,
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
@@ -2771,7 +2500,7 @@ export function ChannelChatModal({
                                                                                       msg.is_pinned,
                                                                                   isStarred:
                                                                                       isStarred(
-                                                                                          msg.id,
+                                                                                          msg.id
                                                                                       ),
                                                                                   canEdit: false,
                                                                                   hasMedia: true,
@@ -2779,9 +2508,9 @@ export function ChannelChatModal({
                                                                                   mediaUrl:
                                                                                       msg.content.replace(
                                                                                           "[GIF]",
-                                                                                          "",
+                                                                                          ""
                                                                                       ),
-                                                                              },
+                                                                              }
                                                                     );
                                                                 }}
                                                                 className={`rounded-2xl overflow-hidden relative cursor-pointer ${
@@ -2789,8 +2518,7 @@ export function ChannelChatModal({
                                                                         ? "rounded-br-md"
                                                                         : "rounded-bl-md"
                                                                 } ${
-                                                                    selectedMessage ===
-                                                                    msg.id
+                                                                    selectedMessage === msg.id
                                                                         ? "ring-2 ring-orange-400/50"
                                                                         : ""
                                                                 }`}
@@ -2798,30 +2526,26 @@ export function ChannelChatModal({
                                                                 <img
                                                                     src={msg.content.replace(
                                                                         "[GIF]",
-                                                                        "",
+                                                                        ""
                                                                     )}
                                                                     alt="GIF"
                                                                     className="max-w-[280px] h-auto rounded-xl"
                                                                     loading="lazy"
                                                                 />
                                                             </div>
-                                                        ) : isLocation &&
-                                                          locationData ? (
+                                                        ) : isLocation && locationData ? (
                                                             <div
                                                                 onClick={() => {
                                                                     setSelectedMessage(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
-                                                                            : msg.id,
+                                                                            : msg.id
                                                                     );
                                                                     setSelectedMessageConfig(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
                                                                             : {
-                                                                                  messageId:
-                                                                                      msg.id,
+                                                                                  messageId: msg.id,
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
@@ -2832,28 +2556,23 @@ export function ChannelChatModal({
                                                                                       msg.is_pinned,
                                                                                   isStarred:
                                                                                       isStarred(
-                                                                                          msg.id,
+                                                                                          msg.id
                                                                                       ),
                                                                                   canEdit: false,
                                                                                   hasMedia: false,
                                                                                   isPixelArt: false,
-                                                                              },
+                                                                              }
                                                                     );
                                                                 }}
                                                                 className={`cursor-pointer ${
-                                                                    selectedMessage ===
-                                                                    msg.id
+                                                                    selectedMessage === msg.id
                                                                         ? "ring-2 ring-orange-400/50 rounded-2xl"
                                                                         : ""
                                                                 }`}
                                                             >
                                                                 <LocationMessage
-                                                                    location={
-                                                                        locationData
-                                                                    }
-                                                                    isOwn={
-                                                                        isOwn
-                                                                    }
+                                                                    location={locationData}
+                                                                    isOwn={isOwn}
                                                                     className="max-w-[280px]"
                                                                 />
                                                             </div>
@@ -2861,18 +2580,15 @@ export function ChannelChatModal({
                                                             <div
                                                                 onClick={() => {
                                                                     setSelectedMessage(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
-                                                                            : msg.id,
+                                                                            : msg.id
                                                                     );
                                                                     setSelectedMessageConfig(
-                                                                        selectedMessage ===
-                                                                            msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? null
                                                                             : {
-                                                                                  messageId:
-                                                                                      msg.id,
+                                                                                  messageId: msg.id,
                                                                                   messageContent:
                                                                                       msg.content,
                                                                                   isOwn,
@@ -2883,13 +2599,13 @@ export function ChannelChatModal({
                                                                                       msg.is_pinned,
                                                                                   isStarred:
                                                                                       isStarred(
-                                                                                          msg.id,
+                                                                                          msg.id
                                                                                       ),
                                                                                   canEdit:
                                                                                       isOwn &&
                                                                                       !msg.is_deleted &&
                                                                                       isWithinEditWindow(
-                                                                                          msg.created_at,
+                                                                                          msg.created_at
                                                                                       ) &&
                                                                                       msg.message_type ===
                                                                                           "text",
@@ -2910,10 +2626,10 @@ export function ChannelChatModal({
                                                                                           : isGif
                                                                                             ? msg.content.replace(
                                                                                                   "[GIF]",
-                                                                                                  "",
+                                                                                                  ""
                                                                                               )
                                                                                             : undefined,
-                                                                              },
+                                                                              }
                                                                     );
                                                                 }}
                                                             >
@@ -2926,8 +2642,7 @@ export function ChannelChatModal({
                                                                               ? "bg-gradient-to-br from-purple-900/80 to-indigo-900/80 border border-purple-500/30 text-white rounded-bl-md"
                                                                               : "bg-zinc-800 text-white rounded-bl-md"
                                                                     } ${
-                                                                        selectedMessage ===
-                                                                        msg.id
+                                                                        selectedMessage === msg.id
                                                                             ? "ring-2 ring-orange-400/50"
                                                                             : ""
                                                                     }`}
@@ -2965,9 +2680,8 @@ export function ChannelChatModal({
                                                                                     }
                                                                                 >
                                                                                     {formatSender(
-                                                                                        msg
-                                                                                            .reply_to
-                                                                                            .sender_address,
+                                                                                        msg.reply_to
+                                                                                            .sender_address
                                                                                     )}
                                                                                 </span>
                                                                             </div>
@@ -2979,8 +2693,7 @@ export function ChannelChatModal({
                                                                                 }`}
                                                                             >
                                                                                 {
-                                                                                    msg
-                                                                                        .reply_to
+                                                                                    msg.reply_to
                                                                                         .content
                                                                                 }
                                                                             </p>
@@ -2988,30 +2701,20 @@ export function ChannelChatModal({
                                                                     )}
 
                                                                     {/* Inline Edit Form */}
-                                                                    {editingMessage ===
-                                                                    msg.id ? (
+                                                                    {editingMessage === msg.id ? (
                                                                         <div className="flex flex-col gap-2">
                                                                             <textarea
-                                                                                value={
-                                                                                    editContent
-                                                                                }
-                                                                                onChange={(
-                                                                                    e,
-                                                                                ) =>
+                                                                                value={editContent}
+                                                                                onChange={(e) =>
                                                                                     setEditContent(
-                                                                                        e
-                                                                                            .target
-                                                                                            .value,
+                                                                                        e.target
+                                                                                            .value
                                                                                     )
                                                                                 }
                                                                                 className="w-full min-w-[200px] px-3 py-2 bg-zinc-700 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
-                                                                                rows={
-                                                                                    3
-                                                                                }
+                                                                                rows={3}
                                                                                 autoFocus
-                                                                                onKeyDown={(
-                                                                                    e,
-                                                                                ) => {
+                                                                                onKeyDown={(e) => {
                                                                                     if (
                                                                                         e.key ===
                                                                                             "Enter" &&
@@ -3049,21 +2752,15 @@ export function ChannelChatModal({
                                                                                     Cancel
                                                                                 </button>
                                                                                 <span className="text-zinc-500">
-                                                                                    Enter
-                                                                                    to
-                                                                                    save,
-                                                                                    Esc
-                                                                                    to
-                                                                                    cancel
+                                                                                    Enter to save,
+                                                                                    Esc to cancel
                                                                                 </span>
                                                                             </div>
                                                                         </div>
                                                                     ) : isAgent ? (
                                                                         // Agent messages - rich markdown with copy button
                                                                         <AgentMessageWrapper
-                                                                            content={
-                                                                                msg.content
-                                                                            }
+                                                                            content={msg.content}
                                                                             theme="channel"
                                                                         >
                                                                             <AgentMarkdown
@@ -3073,23 +2770,17 @@ export function ChannelChatModal({
                                                                                 theme="channel"
                                                                             />
                                                                         </AgentMessageWrapper>
-                                                                    ) : hasMarkdown(
-                                                                          msg.content,
-                                                                      ) ? (
+                                                                    ) : hasMarkdown(msg.content) ? (
                                                                         <ChatMarkdown
-                                                                            content={
-                                                                                msg.content
-                                                                            }
-                                                                            isOwnMessage={
-                                                                                isOwn
-                                                                            }
+                                                                            content={msg.content}
+                                                                            isOwnMessage={isOwn}
                                                                         />
                                                                     ) : (
                                                                         <>
                                                                             <p
                                                                                 className={`break-words whitespace-pre-wrap ${
                                                                                     isEmojiOnly(
-                                                                                        msg.content,
+                                                                                        msg.content
                                                                                     )
                                                                                         ? "text-4xl leading-tight"
                                                                                         : ""
@@ -3107,60 +2798,37 @@ export function ChannelChatModal({
                                                                                     }
                                                                                 />
                                                                             </p>
-                                                                            {detectUrls(
-                                                                                msg.content,
-                                                                            )
-                                                                                .slice(
-                                                                                    0,
-                                                                                    1,
-                                                                                )
-                                                                                .map(
-                                                                                    (
-                                                                                        url,
-                                                                                    ) => (
-                                                                                        <LinkPreview
-                                                                                            key={
-                                                                                                url
-                                                                                            }
-                                                                                            url={
-                                                                                                url
-                                                                                            }
-                                                                                        />
-                                                                                    ),
-                                                                                )}
+                                                                            {detectUrls(msg.content)
+                                                                                .slice(0, 1)
+                                                                                .map((url) => (
+                                                                                    <LinkPreview
+                                                                                        key={url}
+                                                                                        url={url}
+                                                                                    />
+                                                                                ))}
                                                                         </>
                                                                     )}
 
                                                                     {/* Reactions Display - Mobile Friendly */}
                                                                     <ReactionDisplay
                                                                         reactions={
-                                                                            reactions[
-                                                                                msg
-                                                                                    .id
-                                                                            ] ||
-                                                                            []
+                                                                            reactions[msg.id] || []
                                                                         }
-                                                                        onReaction={(
-                                                                            emoji,
-                                                                        ) => {
+                                                                        onReaction={(emoji) => {
                                                                             handleReaction(
                                                                                 msg.id,
-                                                                                emoji,
+                                                                                emoji
                                                                             );
                                                                         }}
-                                                                        isOwnMessage={
-                                                                            isOwn
-                                                                        }
+                                                                        isOwnMessage={isOwn}
                                                                     />
                                                                     {!isWakuChannel &&
                                                                         (() => {
                                                                             const replyCount =
                                                                                 messages.filter(
-                                                                                    (
-                                                                                        m,
-                                                                                    ) =>
+                                                                                    (m) =>
                                                                                         m.reply_to_id ===
-                                                                                        msg.id,
+                                                                                        msg.id
                                                                                 ).length;
                                                                             return replyCount >
                                                                                 0 ? (
@@ -3169,7 +2837,7 @@ export function ChannelChatModal({
                                                                                         type="button"
                                                                                         onClick={() =>
                                                                                             setThreadRootMessage(
-                                                                                                msg,
+                                                                                                msg
                                                                                             )
                                                                                         }
                                                                                         className="text-xs text-zinc-500 hover:text-orange-400 transition-colors flex items-center gap-1"
@@ -3189,30 +2857,25 @@ export function ChannelChatModal({
                                                                                                 d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
                                                                                             />
                                                                                         </svg>
-                                                                                        View
-                                                                                        thread
+                                                                                        View thread
                                                                                         (
-                                                                                        {
-                                                                                            replyCount
-                                                                                        }{" "}
+                                                                                        {replyCount}{" "}
                                                                                         {replyCount ===
                                                                                         1
                                                                                             ? "reply"
                                                                                             : "replies"}
-
                                                                                         )
                                                                                     </button>
                                                                                     <button
                                                                                         type="button"
                                                                                         onClick={() =>
                                                                                             setThreadRootMessage(
-                                                                                                msg,
+                                                                                                msg
                                                                                             )
                                                                                         }
                                                                                         className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
                                                                                     >
-                                                                                        Reply
-                                                                                        in
+                                                                                        Reply in
                                                                                         thread
                                                                                     </button>
                                                                                 </div>
@@ -3222,9 +2885,7 @@ export function ChannelChatModal({
                                                             </div>
                                                         )}
                                                         <p className="text-[10px] text-zinc-600 mt-1 px-1">
-                                                            {formatTime(
-                                                                msg.created_at,
-                                                            )}
+                                                            {formatTime(msg.created_at)}
                                                             {msg.is_edited && (
                                                                 <span className="ml-1 italic">
                                                                     (edited)
@@ -3234,9 +2895,7 @@ export function ChannelChatModal({
                                                     </div>
 
                                                     {/* Spacer for own messages (to match avatar space) */}
-                                                    {isOwn && (
-                                                        <div className="w-8 flex-shrink-0" />
-                                                    )}
+                                                    {isOwn && <div className="w-8 flex-shrink-0" />}
                                                 </motion.div>
                                             </div>
                                         );
@@ -3249,15 +2908,13 @@ export function ChannelChatModal({
                                         <div className="animate-spin rounded-full h-6 w-6 border-2 border-zinc-600 border-t-orange-500" />
                                     </div>
                                 )}
-                                {!isLoadingMore &&
-                                    hasMore &&
-                                    messages.length > 0 && (
-                                        <div className="flex justify-center py-2">
-                                            <span className="text-xs text-zinc-500">
-                                                Scroll up to load more
-                                            </span>
-                                        </div>
-                                    )}
+                                {!isLoadingMore && hasMore && messages.length > 0 && (
+                                    <div className="flex justify-center py-2">
+                                        <span className="text-xs text-zinc-500">
+                                            Scroll up to load more
+                                        </span>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
@@ -3272,9 +2929,7 @@ export function ChannelChatModal({
                                     {replyingTo.sender_address.toLowerCase() ===
                                     userAddress.toLowerCase()
                                         ? "yourself"
-                                        : formatSender(
-                                              replyingTo.sender_address,
-                                          )}
+                                        : formatSender(replyingTo.sender_address)}
                                 </p>
                                 <p className="text-xs text-zinc-400 truncate">
                                     {replyingTo.content}
@@ -3320,8 +2975,7 @@ export function ChannelChatModal({
                         {typingUsers.length > 0 && (
                             <TypingIndicator
                                 users={typingUsers.map(
-                                    (u) =>
-                                        u.name || `${u.address.slice(0, 6)}...`,
+                                    (u) => u.name || `${u.address.slice(0, 6)}...`
                                 )}
                                 className="border-t border-zinc-800/50"
                             />
@@ -3330,14 +2984,11 @@ export function ChannelChatModal({
 
                     {/* Input - with safe area padding for bottom */}
                     <div
-                        className={`border-t border-zinc-800 ${
-                            isFullscreen ? "px-4 pt-4" : "p-4"
-                        }`}
+                        className={`border-t border-zinc-800 ${isFullscreen ? "px-4 pt-4" : "p-4"}`}
                         style={
                             isFullscreen
                                 ? {
-                                      paddingBottom:
-                                          "max(env(safe-area-inset-bottom), 16px)",
+                                      paddingBottom: "max(env(safe-area-inset-bottom), 16px)",
                                   }
                                 : undefined
                         }
@@ -3368,20 +3019,17 @@ export function ChannelChatModal({
                         <div className="flex items-center gap-2">
                             {/* Consolidated attachment menu */}
                             <ChatAttachmentMenu
-                                onImageUpload={() =>
-                                    fileInputRef.current?.click()
-                                }
+                                onImageUpload={() => fileInputRef.current?.click()}
                                 onPixelArt={() => setShowPixelArt(true)}
                                 onGif={handleSendGif}
-                                onPoll={
-                                    canCreatePoll
-                                        ? () => setShowPollCreator(true)
-                                        : undefined
-                                }
+                                onPoll={canCreatePoll ? () => setShowPollCreator(true) : undefined}
                                 showPoll={canCreatePoll}
                                 isUploading={isUploading || isUploadingPixelArt}
                                 chatRules={chatRules}
-                                isModerator={moderation.permissions.isAdmin || moderation.permissions.isModerator}
+                                isModerator={
+                                    moderation.permissions.isAdmin ||
+                                    moderation.permissions.isModerator
+                                }
                             />
                             <MentionInput
                                 inputRef={inputRef}
@@ -3393,16 +3041,10 @@ export function ChannelChatModal({
                                         val,
                                         replyingTo?.id,
                                         replyingTo
-                                            ? (replyingTo.content?.slice(
-                                                  0,
-                                                  80,
-                                              ) ?? "")
-                                            : undefined,
+                                            ? (replyingTo.content?.slice(0, 80) ?? "")
+                                            : undefined
                                     );
-                                    if (
-                                        isWakuChannel &&
-                                        wakuMessages.clearError
-                                    )
+                                    if (isWakuChannel && wakuMessages.clearError)
                                         wakuMessages.clearError();
                                     if (val.trim()) setTyping();
                                 }}
@@ -3458,9 +3100,7 @@ export function ChannelChatModal({
                             style={{
                                 left: Math.min(
                                     userPopupPosition.x,
-                                    typeof window !== "undefined"
-                                        ? window.innerWidth - 290
-                                        : 0,
+                                    typeof window !== "undefined" ? window.innerWidth - 290 : 0
                                 ),
                                 top: userPopupPosition.y,
                             }}
@@ -3479,10 +3119,7 @@ export function ChannelChatModal({
                                                 />
                                             ) : (
                                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center text-white font-bold">
-                                                    {(
-                                                        userInfo?.name ||
-                                                        selectedUser
-                                                    )
+                                                    {(userInfo?.name || selectedUser)
                                                         .slice(0, 2)
                                                         .toUpperCase()}
                                                 </div>
@@ -3492,10 +3129,8 @@ export function ChannelChatModal({
                                                     {userInfo?.name ||
                                                         `${selectedUser.slice(
                                                             0,
-                                                            6,
-                                                        )}...${selectedUser.slice(
-                                                            -4,
-                                                        )}`}
+                                                            6
+                                                        )}...${selectedUser.slice(-4)}`}
                                                 </p>
                                                 <p className="text-zinc-500 text-xs truncate font-mono">
                                                     {selectedUser.slice(0, 10)}
@@ -3510,12 +3145,8 @@ export function ChannelChatModal({
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            onOpenDM(
-                                                                selectedUser,
-                                                            );
-                                                            setSelectedUser(
-                                                                null,
-                                                            );
+                                                            onOpenDM(selectedUser);
+                                                            setSelectedUser(null);
                                                         }}
                                                         className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg font-medium transition-colors mb-2"
                                                     >
@@ -3555,19 +3186,11 @@ export function ChannelChatModal({
                                         ) : (
                                             onAddFriend && (
                                                 <button
-                                                    onClick={() =>
-                                                        handleAddFriend(
-                                                            selectedUser,
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        addingFriend ===
-                                                        selectedUser
-                                                    }
+                                                    onClick={() => handleAddFriend(selectedUser)}
+                                                    disabled={addingFriend === selectedUser}
                                                     className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                                                 >
-                                                    {addingFriend ===
-                                                    selectedUser ? (
+                                                    {addingFriend === selectedUser ? (
                                                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                                     ) : (
                                                         <>
@@ -3580,9 +3203,7 @@ export function ChannelChatModal({
                                                                 <path
                                                                     strokeLinecap="round"
                                                                     strokeLinejoin="round"
-                                                                    strokeWidth={
-                                                                        2
-                                                                    }
+                                                                    strokeWidth={2}
                                                                     d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
                                                                 />
                                                             </svg>
@@ -3599,18 +3220,14 @@ export function ChannelChatModal({
                                                 userAddress?.toLowerCase() &&
                                             (() => {
                                                 const isMuted =
-                                                    moderation.isUserMuted(
-                                                        selectedUser,
-                                                    );
+                                                    moderation.isUserMuted(selectedUser);
                                                 return isMuted ? (
                                                     <button
                                                         onClick={async () => {
                                                             await moderation.unmuteUser(
-                                                                selectedUser,
+                                                                selectedUser
                                                             );
-                                                            setSelectedUser(
-                                                                null,
-                                                            );
+                                                            setSelectedUser(null);
                                                         }}
                                                         className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-sm transition-colors"
                                                     >
@@ -3633,22 +3250,14 @@ export function ChannelChatModal({
                                                     <button
                                                         onClick={() => {
                                                             const uInfo =
-                                                                getUserInfo?.(
-                                                                    selectedUser,
-                                                                );
+                                                                getUserInfo?.(selectedUser);
                                                             setMuteTarget({
-                                                                address:
-                                                                    selectedUser,
+                                                                address: selectedUser,
                                                                 name:
                                                                     uInfo?.name ||
-                                                                    selectedUser.slice(
-                                                                        0,
-                                                                        10,
-                                                                    ),
+                                                                    selectedUser.slice(0, 10),
                                                             });
-                                                            setSelectedUser(
-                                                                null,
-                                                            );
+                                                            setSelectedUser(null);
                                                         }}
                                                         className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
                                                     >
@@ -3676,24 +3285,15 @@ export function ChannelChatModal({
                                                 );
                                             })()}
 
-                                        {(isAdmin ||
-                                            moderation.permissions.canMute) &&
+                                        {(isAdmin || moderation.permissions.canMute) &&
                                             selectedUser.toLowerCase() !==
                                                 userAddress?.toLowerCase() && (
                                                 <button
-                                                    onClick={() =>
-                                                        handleBanUser(
-                                                            selectedUser,
-                                                        )
-                                                    }
-                                                    disabled={
-                                                        banningUser ===
-                                                        selectedUser
-                                                    }
+                                                    onClick={() => handleBanUser(selectedUser)}
+                                                    disabled={banningUser === selectedUser}
                                                     className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors disabled:opacity-50"
                                                 >
-                                                    {banningUser ===
-                                                    selectedUser ? (
+                                                    {banningUser === selectedUser ? (
                                                         <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
                                                     ) : (
                                                         <svg
@@ -3716,9 +3316,7 @@ export function ChannelChatModal({
 
                                         <button
                                             onClick={() => {
-                                                navigator.clipboard.writeText(
-                                                    selectedUser,
-                                                );
+                                                navigator.clipboard.writeText(selectedUser);
                                                 setSelectedUser(null);
                                             }}
                                             className="w-full flex items-center gap-2 px-3 py-2 mt-1 hover:bg-zinc-700 text-zinc-400 rounded-lg text-sm transition-colors"
@@ -3781,15 +3379,9 @@ export function ChannelChatModal({
                         options,
                         allowsMultiple,
                         endsAt,
-                        isAnonymous,
+                        isAnonymous
                     ) => {
-                        await createPoll(
-                            question,
-                            options,
-                            allowsMultiple,
-                            endsAt,
-                            isAnonymous,
-                        );
+                        await createPoll(question, options, allowsMultiple, endsAt, isAnonymous);
                     }}
                 />
 
@@ -3802,26 +3394,20 @@ export function ChannelChatModal({
                             ? {
                                   id: forwardingMessage.id,
                                   content: forwardingMessage.content,
-                                  senderName: formatSender(
-                                      forwardingMessage.sender_address,
-                                  ),
-                                  senderAddress:
-                                      forwardingMessage.sender_address,
+                                  senderName: formatSender(forwardingMessage.sender_address),
+                                  senderAddress: forwardingMessage.sender_address,
                               }
                             : null
                     }
                     onForward={async (targetId, targetType) => {
                         if (!forwardingMessage) return false;
                         const forwardedContent = `↩️ Forwarded from ${formatSender(
-                            forwardingMessage.sender_address,
+                            forwardingMessage.sender_address
                         )}:\n\n"${forwardingMessage.content}"`;
                         if (targetType === "global" && onForwardToGlobal) {
                             return onForwardToGlobal(forwardedContent);
                         }
-                        if (
-                            targetType === "channel" &&
-                            targetId === channel.id
-                        ) {
+                        if (targetType === "channel" && targetId === channel.id) {
                             await sendMessage(forwardedContent, "text");
                             return true;
                         }
@@ -3864,18 +3450,12 @@ export function ChannelChatModal({
                     config={selectedMessageConfig}
                     callbacks={{
                         onReaction: selectedMessageConfig
-                            ? (emoji) =>
-                                  handleReaction(
-                                      selectedMessageConfig.messageId,
-                                      emoji,
-                                  )
+                            ? (emoji) => handleReaction(selectedMessageConfig.messageId, emoji)
                             : undefined,
                         onReply: selectedMessageConfig
                             ? () => {
                                   const msg = messages.find(
-                                      (m) =>
-                                          m.id ===
-                                          selectedMessageConfig.messageId,
+                                      (m) => m.id === selectedMessageConfig.messageId
                                   );
                                   if (msg) setReplyingTo(msg);
                               }
@@ -3884,7 +3464,7 @@ export function ChannelChatModal({
                             ? () => {
                                   if (selectedMessageConfig.messageContent) {
                                       navigator.clipboard.writeText(
-                                          selectedMessageConfig.messageContent,
+                                          selectedMessageConfig.messageContent
                                       );
                                   }
                               }
@@ -3892,9 +3472,7 @@ export function ChannelChatModal({
                         onForward: selectedMessageConfig
                             ? () => {
                                   const msg = messages.find(
-                                      (m) =>
-                                          m.id ===
-                                          selectedMessageConfig.messageId,
+                                      (m) => m.id === selectedMessageConfig.messageId
                                   );
                                   if (msg) setForwardingMessage(msg);
                               }
@@ -3903,43 +3481,27 @@ export function ChannelChatModal({
                             selectedMessageConfig?.isPinned === false && isAdmin
                                 ? () =>
                                       handlePinMessage(
-                                          selectedMessageConfig?.messageId ||
-                                              "",
-                                          false,
+                                          selectedMessageConfig?.messageId || "",
+                                          false
                                       )
                                 : undefined,
                         onUnpin:
                             selectedMessageConfig?.isPinned && isAdmin
                                 ? () =>
-                                      handlePinMessage(
-                                          selectedMessageConfig?.messageId ||
-                                              "",
-                                          true,
-                                      )
+                                      handlePinMessage(selectedMessageConfig?.messageId || "", true)
                                 : undefined,
                         onEdit: selectedMessageConfig?.canEdit
-                            ? () =>
-                                  setEditingMessage(
-                                      selectedMessageConfig?.messageId || null,
-                                  )
+                            ? () => setEditingMessage(selectedMessageConfig?.messageId || null)
                             : undefined,
                         onDelete:
-                            selectedMessageConfig?.isOwn ||
-                            selectedMessageConfig?.canDelete
-                                ? () =>
-                                      deleteMessage(
-                                          selectedMessageConfig?.messageId ||
-                                              "",
-                                      )
+                            selectedMessageConfig?.isOwn || selectedMessageConfig?.canDelete
+                                ? () => deleteMessage(selectedMessageConfig?.messageId || "")
                                 : undefined,
                         onStar:
-                            selectedMessageConfig &&
-                            !selectedMessageConfig.isStarred
+                            selectedMessageConfig && !selectedMessageConfig.isStarred
                                 ? () => {
                                       const msg = messages.find(
-                                          (m) =>
-                                              m.id ===
-                                              selectedMessageConfig.messageId,
+                                          (m) => m.id === selectedMessageConfig.messageId
                                       );
                                       if (msg) {
                                           toggleStar({
@@ -3955,17 +3517,13 @@ export function ChannelChatModal({
                                   }
                                 : undefined,
                         onUnstar: selectedMessageConfig?.isStarred
-                            ? () =>
-                                  unstarMessage(selectedMessageConfig.messageId)
+                            ? () => unstarMessage(selectedMessageConfig.messageId)
                             : undefined,
                         onReport:
-                            selectedMessageConfig &&
-                            !selectedMessageConfig.isOwn
+                            selectedMessageConfig && !selectedMessageConfig.isOwn
                                 ? () => {
                                       const msg = messages.find(
-                                          (m) =>
-                                              m.id ===
-                                              selectedMessageConfig.messageId,
+                                          (m) => m.id === selectedMessageConfig.messageId
                                       );
                                       if (msg) {
                                           // TODO: Implement report modal
@@ -3973,21 +3531,16 @@ export function ChannelChatModal({
                                               "Report message:",
                                               msg.id,
                                               "from",
-                                              msg.sender_address,
+                                              msg.sender_address
                                           );
-                                          alert(
-                                              "Report functionality coming soon",
-                                          );
+                                          toast("Report functionality coming soon");
                                       }
                                   }
                                 : undefined,
                         onView:
-                            selectedMessageConfig?.hasMedia &&
-                            selectedMessageConfig?.mediaUrl
+                            selectedMessageConfig?.hasMedia && selectedMessageConfig?.mediaUrl
                                 ? () => {
-                                      setPreviewImage(
-                                          selectedMessageConfig.mediaUrl || "",
-                                      );
+                                      setPreviewImage(selectedMessageConfig.mediaUrl || "");
                                   }
                                 : undefined,
                     }}

@@ -2,9 +2,16 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { toast } from "sonner";
 
 // Maximum recording duration in seconds (5 minutes)
 const MAX_RECORDING_DURATION = 5 * 60;
+
+// Pre-computed waveform bar heights to avoid Math.random() during render
+const WAVEFORM_HEIGHTS = [
+    18, 12, 22, 14, 20, 10, 24, 16, 19, 11, 23, 15, 21, 13, 17, 9, 22, 14, 20, 12, 24, 16, 18, 10,
+    21, 13, 19, 11, 23, 15,
+];
 
 type VoiceRecorderProps = {
     onSend: (audioBlob: Blob, duration: number) => void;
@@ -13,7 +20,12 @@ type VoiceRecorderProps = {
     maxDuration?: number; // optional max duration in seconds
 };
 
-export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECORDING_DURATION }: VoiceRecorderProps) {
+export function VoiceRecorder({
+    onSend,
+    onCancel,
+    isOpen,
+    maxDuration = MAX_RECORDING_DURATION,
+}: VoiceRecorderProps) {
     const [isRecording, setIsRecording] = useState(false);
     const [duration, setDuration] = useState(0);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -36,7 +48,8 @@ export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECO
         };
     }, [audioUrl]);
 
-    // Reset state when modal closes
+    // Reset state when modal closes — intentional cleanup on prop change
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (!isOpen) {
             setIsRecording(false);
@@ -50,6 +63,7 @@ export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECO
             audioChunksRef.current = [];
         }
     }, [isOpen, audioUrl]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const startRecording = useCallback(async () => {
         try {
@@ -86,7 +100,7 @@ export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECO
             }, 1000);
         } catch (err) {
             console.error("Failed to start recording:", err);
-            alert("Could not access microphone. Please grant permission.");
+            toast.error("Could not access microphone. Please grant permission.");
         }
     }, []);
 
@@ -102,11 +116,13 @@ export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECO
     }, []);
 
     // Auto-stop recording when max duration is reached
+    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (isRecording && duration >= maxDuration) {
             stopRecording();
         }
     }, [isRecording, duration, maxDuration, stopRecording]);
+    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleSend = useCallback(() => {
         if (audioBlob) {
@@ -172,16 +188,20 @@ export function VoiceRecorder({ onSend, onCancel, isOpen, maxDuration = MAX_RECO
 
                         {/* Waveform / Duration Display */}
                         <div className="flex-1 flex items-center gap-3">
-                                {isRecording ? (
+                            {isRecording ? (
                                 <>
                                     {/* Recording indicator */}
                                     <div className="flex items-center gap-2">
                                         <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                                        <span className={`text-sm font-medium ${
-                                            duration >= maxDuration - 30 ? "text-yellow-400" : "text-red-400"
-                                        }`}>
-                                            {duration >= maxDuration - 30 
-                                                ? `${maxDuration - duration}s left` 
+                                        <span
+                                            className={`text-sm font-medium ${
+                                                duration >= maxDuration - 30
+                                                    ? "text-yellow-400"
+                                                    : "text-red-400"
+                                            }`}
+                                        >
+                                            {duration >= maxDuration - 30
+                                                ? `${maxDuration - duration}s left`
                                                 : "Recording"}
                                         </span>
                                     </div>
@@ -365,8 +385,7 @@ export function VoiceMessage({ audioUrl, duration, isOwn }: VoiceMessageProps) {
             <div className="flex-1">
                 {/* Waveform visualization */}
                 <div className="flex items-center gap-0.5 h-6">
-                    {Array.from({ length: 30 }).map((_, i) => {
-                        const height = Math.random() * 16 + 8;
+                    {WAVEFORM_HEIGHTS.map((height, i) => {
                         const isActive = i / 30 <= progress;
                         return (
                             <div
@@ -377,19 +396,15 @@ export function VoiceMessage({ audioUrl, duration, isOwn }: VoiceMessageProps) {
                                             ? "bg-white"
                                             : "bg-[#FF5500]"
                                         : isOwn
-                                        ? "bg-white/30"
-                                        : "bg-zinc-600"
+                                          ? "bg-white/30"
+                                          : "bg-zinc-600"
                                 }`}
                                 style={{ height: `${height}px` }}
                             />
                         );
                     })}
                 </div>
-                <span
-                    className={`text-xs ${
-                        isOwn ? "text-white/70" : "text-zinc-500"
-                    }`}
-                >
+                <span className={`text-xs ${isOwn ? "text-white/70" : "text-zinc-500"}`}>
                     {formatDuration(duration)}
                 </span>
             </div>
@@ -399,9 +414,7 @@ export function VoiceMessage({ audioUrl, duration, isOwn }: VoiceMessageProps) {
                 src={audioUrl}
                 onTimeUpdate={() => {
                     if (audioRef.current) {
-                        setProgress(
-                            audioRef.current.currentTime / audioRef.current.duration
-                        );
+                        setProgress(audioRef.current.currentTime / audioRef.current.duration);
                     }
                 }}
                 onEnded={() => {
@@ -422,12 +435,12 @@ type EncryptedVoiceMessageProps = {
     onDecryptError?: (error: Error) => void;
 };
 
-export function EncryptedVoiceMessage({ 
-    encryptedUrl, 
-    duration, 
-    isOwn, 
+export function EncryptedVoiceMessage({
+    encryptedUrl,
+    duration,
+    isOwn,
     encryptionKey,
-    onDecryptError 
+    onDecryptError,
 }: EncryptedVoiceMessageProps) {
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -473,7 +486,7 @@ export function EncryptedVoiceMessage({
             const { fetchAndDecryptVoice } = await import("@/lib/audioEncryption");
             const blobUrl = await fetchAndDecryptVoice(encryptedUrl, encryptionKey);
             setDecryptedUrl(blobUrl);
-            
+
             // Wait for the audio element to update then play
             setTimeout(() => {
                 audioRef.current?.play();
@@ -516,7 +529,7 @@ export function EncryptedVoiceMessage({
                 const { fetchAndDecryptVoice } = await import("@/lib/audioEncryption");
                 const blobUrl = await fetchAndDecryptVoice(encryptedUrl, encryptionKey);
                 setDecryptedUrl(blobUrl);
-                
+
                 // Download after decryption
                 const filename = `voice-memo-${Date.now()}.webm`;
                 const a = document.createElement("a");
@@ -532,9 +545,9 @@ export function EncryptedVoiceMessage({
             }
             return;
         }
-        
+
         if (!decryptedUrl) return;
-        
+
         const filename = `voice-memo-${Date.now()}.webm`;
         const a = document.createElement("a");
         a.href = decryptedUrl;
@@ -559,18 +572,34 @@ export function EncryptedVoiceMessage({
                     decryptError
                         ? "bg-red-500/30 text-red-400"
                         : isOwn
-                        ? "bg-white/20 hover:bg-white/30 text-white"
-                        : "bg-[#FF5500] hover:bg-[#E04D00] text-white"
-                } ${(isDecrypting || !encryptionKey) ? "opacity-50 cursor-not-allowed" : ""}`}
+                          ? "bg-white/20 hover:bg-white/30 text-white"
+                          : "bg-[#FF5500] hover:bg-[#E04D00] text-white"
+                } ${isDecrypting || !encryptionKey ? "opacity-50 cursor-not-allowed" : ""}`}
             >
                 {isDecrypting ? (
                     <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                        />
+                        <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
                     </svg>
                 ) : decryptError ? (
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                        />
                     </svg>
                 ) : isPlaying ? (
                     <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -596,12 +625,12 @@ export function EncryptedVoiceMessage({
                                     decryptError
                                         ? "bg-red-500/30"
                                         : isActive
-                                        ? isOwn
-                                            ? "bg-white"
-                                            : "bg-[#FF5500]"
-                                        : isOwn
-                                        ? "bg-white/30"
-                                        : "bg-zinc-600"
+                                          ? isOwn
+                                              ? "bg-white"
+                                              : "bg-[#FF5500]"
+                                          : isOwn
+                                            ? "bg-white/30"
+                                            : "bg-zinc-600"
                                 }`}
                                 style={{ height: `${height}px` }}
                             />
@@ -613,18 +642,21 @@ export function EncryptedVoiceMessage({
                         {formatDuration(duration)}
                     </span>
                     {!decryptedUrl && !decryptError && (
-                        <svg 
-                            className={`w-3 h-3 ${isOwn ? "text-white/50" : "text-zinc-500"}`} 
-                            fill="none" 
-                            viewBox="0 0 24 24" 
+                        <svg
+                            className={`w-3 h-3 ${isOwn ? "text-white/50" : "text-zinc-500"}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
                             stroke="currentColor"
                         >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                            />
                         </svg>
                     )}
-                    {decryptError && (
-                        <span className="text-xs text-red-400">Decrypt failed</span>
-                    )}
+                    {decryptError && <span className="text-xs text-red-400">Decrypt failed</span>}
                 </div>
             </div>
 
@@ -636,11 +668,16 @@ export function EncryptedVoiceMessage({
                     isOwn
                         ? "bg-white/10 hover:bg-white/20 text-white/70 hover:text-white"
                         : "bg-zinc-700/50 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200"
-                } ${(isDecrypting || !encryptionKey) ? "opacity-50 cursor-not-allowed" : ""}`}
+                } ${isDecrypting || !encryptionKey ? "opacity-50 cursor-not-allowed" : ""}`}
                 title="Download voice memo"
             >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                    />
                 </svg>
             </button>
 
@@ -666,5 +703,3 @@ export function EncryptedVoiceMessage({
         </div>
     );
 }
-
-

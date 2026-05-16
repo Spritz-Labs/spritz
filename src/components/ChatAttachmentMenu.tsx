@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { toast as sonnerToast } from "sonner";
 import { GifPicker } from "./GifPicker";
 import { type LocationData } from "./LocationMessage";
 
@@ -105,7 +106,12 @@ export function ChatAttachmentMenu({
     const effectivePoll = pollsAllowed && showPoll ? onPoll : undefined;
     const effectiveLocation = locationAllowed && showLocation ? onLocation : undefined;
     const effectiveVoice = voiceAllowed && showVoice ? onVoice : undefined;
-    const actionCount = [effectiveImageUpload, effectivePixelArt, effectiveGif, effectivePoll].filter(Boolean).length;
+    const actionCount = [
+        effectiveImageUpload,
+        effectivePixelArt,
+        effectiveGif,
+        effectivePoll,
+    ].filter(Boolean).length;
 
     return (
         <div ref={menuRef} className={`relative ${className}`}>
@@ -114,8 +120,8 @@ export function ChatAttachmentMenu({
                 onClick={() => setIsExpanded(!isExpanded)}
                 disabled={disabled || isUploading}
                 className={`p-3 rounded-xl transition-all duration-200 select-none ${
-                    isExpanded 
-                        ? "bg-[#FF5500] text-white rotate-45" 
+                    isExpanded
+                        ? "bg-[#FF5500] text-white rotate-45"
                         : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                 title="Attachments"
@@ -124,7 +130,12 @@ export function ChatAttachmentMenu({
                     <div className="w-5 h-5 border-2 border-zinc-500 border-t-white rounded-full animate-spin" />
                 ) : (
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M12 4v16m8-8H4"
+                        />
                     </svg>
                 )}
             </button>
@@ -145,19 +156,33 @@ export function ChatAttachmentMenu({
                                     onClick={() => handleAction(effectiveImageUpload)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
-                                    <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    <svg
+                                        className="w-5 h-5 text-blue-400"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                        />
                                     </svg>
                                     <span>Photo</span>
                                 </button>
                             )}
-                            
+
                             {effectivePixelArt && (
                                 <button
                                     onClick={() => handleAction(effectivePixelArt)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
-                                    <svg className="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="currentColor">
+                                    <svg
+                                        className="w-5 h-5 text-purple-400"
+                                        viewBox="0 0 24 24"
+                                        fill="currentColor"
+                                    >
                                         <rect x="4" y="4" width="4" height="4" />
                                         <rect x="8" y="4" width="4" height="4" opacity="0.7" />
                                         <rect x="12" y="4" width="4" height="4" />
@@ -171,7 +196,7 @@ export function ChatAttachmentMenu({
                                     <span>Pixel Art</span>
                                 </button>
                             )}
-                            
+
                             {effectiveGif && (
                                 <button
                                     onClick={() => {
@@ -186,17 +211,19 @@ export function ChatAttachmentMenu({
                                     <span>GIF</span>
                                 </button>
                             )}
-                            
+
                             {effectivePoll && (
                                 <button
                                     onClick={() => handleAction(effectivePoll)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
-                                    <span className="w-5 h-5 flex items-center justify-center text-amber-400">🗳️</span>
+                                    <span className="w-5 h-5 flex items-center justify-center text-amber-400">
+                                        🗳️
+                                    </span>
                                     <span>Poll</span>
                                 </button>
                             )}
-                            
+
                             {effectiveLocation && onLocation && (
                                 <button
                                     onClick={() => {
@@ -211,7 +238,7 @@ export function ChatAttachmentMenu({
                                                         accuracy: position.coords.accuracy,
                                                         timestamp: position.timestamp,
                                                     };
-                                                    
+
                                                     // Try reverse geocoding
                                                     try {
                                                         const res = await fetch(
@@ -219,40 +246,71 @@ export function ChatAttachmentMenu({
                                                         );
                                                         const data = await res.json();
                                                         if (data.display_name) {
-                                                            locationData.address = data.display_name;
+                                                            locationData.address =
+                                                                data.display_name;
                                                             if (data.address) {
-                                                                const { road, city, town, village, suburb } = data.address;
-                                                                locationData.name = [road, city || town || village || suburb].filter(Boolean).join(", ");
+                                                                const {
+                                                                    road,
+                                                                    city,
+                                                                    town,
+                                                                    village,
+                                                                    suburb,
+                                                                } = data.address;
+                                                                locationData.name = [
+                                                                    road,
+                                                                    city ||
+                                                                        town ||
+                                                                        village ||
+                                                                        suburb,
+                                                                ]
+                                                                    .filter(Boolean)
+                                                                    .join(", ");
                                                             }
                                                         }
                                                     } catch {}
-                                                    
+
                                                     onLocation(locationData);
                                                 },
                                                 (error) => {
                                                     console.error("Location error:", error);
-                                                    alert("Could not get your location. Please check permissions.");
+                                                    sonnerToast.error(
+                                                        "Could not get your location. Please check permissions."
+                                                    );
                                                 },
                                                 { enableHighAccuracy: true, timeout: 10000 }
                                             );
                                         } else {
-                                            alert("Geolocation is not supported by your browser");
+                                            sonnerToast.error(
+                                                "Geolocation is not supported by your browser"
+                                            );
                                         }
                                     }}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
-                                    <span className="w-5 h-5 flex items-center justify-center text-red-400">📍</span>
+                                    <span className="w-5 h-5 flex items-center justify-center text-red-400">
+                                        📍
+                                    </span>
                                     <span>Location</span>
                                 </button>
                             )}
-                            
+
                             {effectiveVoice && onVoice && (
                                 <button
                                     onClick={() => handleAction(onVoice)}
                                     className="flex items-center gap-3 px-3 py-2.5 text-left text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white rounded-lg transition-colors"
                                 >
-                                    <svg className="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                    <svg
+                                        className="w-5 h-5 text-orange-400"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth={2}
+                                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
+                                        />
                                     </svg>
                                     <span>Voice Memo</span>
                                 </button>

@@ -82,6 +82,8 @@ import { Leaderboard } from "./Leaderboard";
 import { SpritzLogo } from "./SpritzLogo";
 import { LoggingErrorBoundary } from "./LoggingErrorBoundary";
 import { DailyBonusModal } from "./DailyBonusModal";
+import { MessageNotificationToast } from "./MessageNotificationToast";
+import { DailyBonusCard } from "./DailyBonusCard";
 const AgentsSection = dynamic(() => import("./AgentsSection").then((m) => m.AgentsSection));
 import { useBetaAccess } from "@/hooks/useBetaAccess";
 import Link from "next/link";
@@ -1347,18 +1349,22 @@ function DashboardContent({
 
                 // Find the latest message (by timestamp)
                 let latestTime = 0;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let latestMsg: any = null;
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                messages.forEach((msg: any) => {
-                    const timestamp = msg.sentAtNs
-                        ? Number(BigInt(msg.sentAtNs) / BigInt(1000000)) // Convert nanoseconds to milliseconds
-                        : 0;
-                    if (timestamp > latestTime) {
-                        latestTime = timestamp;
-                        latestMsg = msg;
+                let latestMsg: {
+                    sentAtNs?: string;
+                    content?: string;
+                    senderInboxId?: string;
+                } | null = null;
+                messages.forEach(
+                    (msg: { sentAtNs?: string; content?: string; senderInboxId?: string }) => {
+                        const timestamp = msg.sentAtNs
+                            ? Number(BigInt(msg.sentAtNs) / BigInt(1000000)) // Convert nanoseconds to milliseconds
+                            : 0;
+                        if (timestamp > latestTime) {
+                            latestTime = timestamp;
+                            latestMsg = msg;
+                        }
                     }
-                });
+                );
 
                 if (latestTime === 0) return;
 
@@ -4469,47 +4475,10 @@ function DashboardContent({
 
                                 {/* Daily Bonus Claim Card */}
                                 {dailyBonusAvailable && !dailyBonusClaimed && (
-                                    <div className="mx-1 mt-2 mb-1 sm:mx-4 sm:mt-4 sm:mb-2">
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 rounded-lg sm:rounded-xl p-3 sm:p-4"
-                                        >
-                                            <div className="flex items-center justify-between gap-2 sm:gap-4">
-                                                <div className="flex items-center gap-2 sm:gap-3">
-                                                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center flex-shrink-0">
-                                                        <span className="text-base sm:text-xl">
-                                                            🎁
-                                                        </span>
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-white font-medium text-xs sm:text-sm">
-                                                            Daily Bonus!
-                                                        </p>
-                                                        <p className="text-amber-400/70 text-[10px] sm:text-xs">
-                                                            +3 points today
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    onClick={handleClaimDailyBonus}
-                                                    disabled={isClaimingBonus}
-                                                    className="px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs sm:text-sm font-semibold hover:shadow-lg hover:shadow-orange-500/25 transition-all disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
-                                                >
-                                                    {isClaimingBonus ? (
-                                                        <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    ) : (
-                                                        <>
-                                                            <span className="hidden sm:inline">
-                                                                ✨
-                                                            </span>
-                                                            Claim
-                                                        </>
-                                                    )}
-                                                </button>
-                                            </div>
-                                        </motion.div>
-                                    </div>
+                                    <DailyBonusCard
+                                        isClaiming={isClaimingBonus}
+                                        onClaim={handleClaimDailyBonus}
+                                    />
                                 )}
 
                                 <div className="px-1.5 py-2 sm:px-4 sm:py-4">
@@ -5087,8 +5056,11 @@ function DashboardContent({
                                                             window.matchMedia(
                                                                 "(display-mode: standalone)"
                                                             ).matches ||
-                                                            (window.navigator as any).standalone ===
-                                                                true;
+                                                            (
+                                                                window.navigator as unknown as {
+                                                                    standalone?: boolean;
+                                                                }
+                                                            ).standalone === true;
                                                         if (isStandalone) {
                                                             window.location.href =
                                                                 data.room.joinUrl;
@@ -6529,74 +6501,19 @@ function DashboardContent({
             {/* Welcome message is now sent as a real DM from Kevin */}
 
             {/* Toast Notification for New Messages */}
-            <AnimatePresence>
-                {toast && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 50, x: "-50%" }}
-                        animate={{ opacity: 1, y: 0, x: "-50%" }}
-                        exit={{ opacity: 0, y: 50, x: "-50%" }}
-                        className="fixed bottom-6 left-1/2 z-50"
-                    >
-                        <div
-                            onClick={() => {
-                                // Find the friend and open chat
-                                const friend = friendsListData.find(
-                                    (f) =>
-                                        f.ensName === toast.sender ||
-                                        f.nickname === toast.sender ||
-                                        formatAddress(f.address) === toast.sender
-                                );
-                                if (friend) {
-                                    handleChat(friend);
-                                }
-                                setToast(null);
-                            }}
-                            className="bg-zinc-800 border border-zinc-700 rounded-2xl px-5 py-4 shadow-2xl cursor-pointer hover:bg-zinc-750 transition-colors flex items-center gap-4 max-w-sm"
-                        >
-                            <div className="w-10 h-10 rounded-full bg-[#FF5500] flex items-center justify-center shrink-0">
-                                <svg
-                                    className="w-5 h-5 text-white"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                                    />
-                                </svg>
-                            </div>
-                            <div className="min-w-0">
-                                <p className="text-white font-medium truncate">{toast.sender}</p>
-                                <p className="text-zinc-400 text-sm truncate">{toast.message}</p>
-                            </div>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setToast(null);
-                                }}
-                                className="shrink-0 text-zinc-500 hover:text-white transition-colors"
-                            >
-                                <svg
-                                    className="w-5 h-5"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            </button>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            <MessageNotificationToast
+                toast={toast}
+                onDismiss={() => setToast(null)}
+                onTap={(sender) => {
+                    const friend = friendsListData.find(
+                        (f) =>
+                            f.ensName === sender ||
+                            f.nickname === sender ||
+                            formatAddress(f.address) === sender
+                    );
+                    if (friend) handleChat(friend);
+                }}
+            />
 
             {/* Profile / Go Live Modal (avatar click: Profile tab + Go Live tab) */}
             <ProfileAvatarModal
