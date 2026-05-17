@@ -17,14 +17,13 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const supabase =
-    supabaseUrl && supabaseServiceKey
-        ? createClient(supabaseUrl, supabaseServiceKey)
-        : null;
+    supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null;
 
 export async function POST(request: NextRequest) {
-    // Rate limit: 60 requests per minute for messaging/notifications
     const rateLimitResponse = await checkRateLimit(request, "messaging");
     if (rateLimitResponse) return rateLimitResponse;
+
+    let targetAddress: string | undefined;
 
     try {
         if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
@@ -35,51 +34,86 @@ export async function POST(request: NextRequest) {
         }
 
         if (!supabase) {
-            return NextResponse.json(
-                { error: "Database not configured" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "Database not configured" }, { status: 500 });
         }
 
         const body = await request.json();
-        const { targetAddress, senderAddress, title, body: messageBody, type, callerId, callerName, url } = body;
+        const { senderAddress, title, body: messageBody, type, callerId, callerName, url } = body;
+        targetAddress = body.targetAddress;
 
         if (!targetAddress) {
-            return NextResponse.json(
-                { error: "Target address required" },
-                { status: 400 }
-            );
+            return NextResponse.json({ error: "Target address required" }, { status: 400 });
         }
 
-        // If this is a message notification and we have sender address, look up their name
+        const normalizedTarget = targetAddress.toLowerCase();
+
+        // Check user notification preferences before sending
+        const { data: userPrefs } = await supabase
+            .from("shout_users")
+            .select(
+                "notify_dms, notify_groups, notify_channels, notify_calls, notification_quiet_start, notification_quiet_end"
+            )
+            .eq("wallet_address", normalizedTarget)
+            .maybeSingle();
+
+        if (userPrefs) {
+            // Per-type suppression
+            if (type === "message" && userPrefs.notify_dms === false) {
+                return NextResponse.json({ success: true, suppressed: "notify_dms" });
+            }
+            if (type === "group_message" && userPrefs.notify_groups === false) {
+                return NextResponse.json({ success: true, suppressed: "notify_groups" });
+            }
+            if (type === "channel_message" && userPrefs.notify_channels === false) {
+                return NextResponse.json({ success: true, suppressed: "notify_channels" });
+            }
+            if (type === "incoming_call" && userPrefs.notify_calls === false) {
+                return NextResponse.json({ success: true, suppressed: "notify_calls" });
+            }
+
+            // Quiet hours suppression (skip for calls — those are urgent)
+            if (
+                type !== "incoming_call" &&
+                userPrefs.notification_quiet_start != null &&
+                userPrefs.notification_quiet_end != null
+            ) {
+                const nowHour = new Date().getUTCHours();
+                const start = userPrefs.notification_quiet_start;
+                const end = userPrefs.notification_quiet_end;
+                const inQuiet =
+                    start <= end
+                        ? nowHour >= start && nowHour < end
+                        : nowHour >= start || nowHour < end;
+                if (inQuiet) {
+                    return NextResponse.json({ success: true, suppressed: "quiet_hours" });
+                }
+            }
+        }
+
         let resolvedTitle = title;
         if (type === "message" && senderAddress && supabase) {
             try {
-                // Try to get sender's Spritz username first
                 const { data: usernameData } = await supabase
                     .from("shout_usernames")
                     .select("username")
                     .eq("wallet_address", senderAddress.toLowerCase())
                     .maybeSingle();
-                
+
                 if (usernameData?.username) {
                     resolvedTitle = `Message from ${usernameData.username}`;
                 } else {
-                    // Fall back to shortened address
                     const shortAddr = `${senderAddress.slice(0, 6)}...${senderAddress.slice(-4)}`;
                     resolvedTitle = `Message from ${shortAddr}`;
                 }
             } catch (err) {
                 console.error("[Push API] Error looking up sender name:", err);
-                // Keep the original title
             }
         }
 
-        // Get push subscription for target user
         const { data: subscription, error: dbError } = await supabase
             .from("push_subscriptions")
             .select("*")
-            .eq("user_address", targetAddress.toLowerCase())
+            .eq("user_address", normalizedTarget)
             .single();
 
         if (dbError || !subscription) {
@@ -120,30 +154,16 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         console.error("[Push API] Error sending notification:", error);
 
-        // Handle expired subscriptions
         if (error instanceof webpush.WebPushError && error.statusCode === 410) {
-            // Subscription has expired, remove it
-            const body = await request.json();
-            if (supabase && body.targetAddress) {
+            if (supabase && targetAddress) {
                 await supabase
                     .from("push_subscriptions")
                     .delete()
-                    .eq("user_address", body.targetAddress.toLowerCase());
+                    .eq("user_address", targetAddress.toLowerCase());
             }
-            return NextResponse.json(
-                { error: "Subscription expired" },
-                { status: 410 }
-            );
+            return NextResponse.json({ error: "Subscription expired" }, { status: 410 });
         }
 
-        return NextResponse.json(
-            { error: "Failed to send notification" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to send notification" }, { status: 500 });
     }
 }
-
-
-
-
-

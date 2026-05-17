@@ -66,7 +66,7 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
             setError("GIPHY API key not configured");
             return;
         }
-        
+
         try {
             setLoading(true);
             setError(null);
@@ -149,6 +149,9 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
             {isOpen && (
                 <motion.div
                     ref={containerRef}
+                    role="dialog"
+                    aria-label="GIF picker"
+                    aria-modal="true"
                     initial={{ opacity: 0, y: position === "top" ? 10 : -10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: position === "top" ? 10 : -10, scale: 0.95 }}
@@ -199,21 +202,36 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
                                     className="rounded"
                                     unoptimized
                                 />
-                                <span className="text-[10px] text-zinc-500 font-medium">Powered by GIPHY</span>
+                                <span className="text-[10px] text-zinc-500 font-medium">
+                                    Powered by GIPHY
+                                </span>
                             </a>
                         </div>
                     </div>
 
                     {/* GIF Grid */}
-                    <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: "320px" }}>
+                    <div
+                        className="overflow-y-auto overscroll-contain"
+                        style={{ maxHeight: "320px" }}
+                    >
                         {loading && displayGifs.length === 0 ? (
                             <div className="flex items-center justify-center py-12">
                                 <div className="w-8 h-8 border-2 border-zinc-600 border-t-[#FF5500] rounded-full animate-spin" />
                             </div>
                         ) : error ? (
                             <div className="flex flex-col items-center justify-center py-12 text-zinc-500">
-                                <svg className="w-10 h-10 mb-2 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <svg
+                                    className="w-10 h-10 mb-2 opacity-50"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={1.5}
+                                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
                                 </svg>
                                 <p className="text-sm">{error}</p>
                                 {!GIPHY_API_KEY && (
@@ -222,7 +240,9 @@ export function GifPicker({ isOpen, onClose, onSelect, position = "top" }: GifPi
                                     </p>
                                 )}
                                 <button
-                                    onClick={() => query.trim() ? searchGifs(query) : fetchTrending()}
+                                    onClick={() =>
+                                        query.trim() ? searchGifs(query) : fetchTrending()
+                                    }
                                     className="mt-2 text-xs text-[#FF5500] hover:underline"
                                 >
                                     Try again
