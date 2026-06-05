@@ -23,7 +23,7 @@ const redis =
 const globalApiLimiter = redis
     ? new Ratelimit({
           redis,
-          limiter: Ratelimit.slidingWindow(200, "60 s"),
+          limiter: Ratelimit.slidingWindow(2000, "60 s"),
           analytics: true,
           prefix: "ratelimit:global-api",
       })

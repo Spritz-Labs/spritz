@@ -59,11 +59,11 @@ export const rateLimiters = {
           })
         : null,
 
-    // Messaging - generous for real-time chat
+    // Messaging - generous for real-time chat (poll + send)
     messaging: redis
         ? new Ratelimit({
               redis,
-              limiter: Ratelimit.slidingWindow(60, "60 s"), // 60 requests per minute
+              limiter: Ratelimit.slidingWindow(300, "60 s"), // 300 requests per minute
               analytics: true,
               prefix: "ratelimit:messaging",
           })
@@ -73,17 +73,17 @@ export const rateLimiters = {
     general: redis
         ? new Ratelimit({
               redis,
-              limiter: Ratelimit.slidingWindow(100, "60 s"), // 100 requests per minute
+              limiter: Ratelimit.slidingWindow(500, "60 s"), // 500 requests per minute
               analytics: true,
               prefix: "ratelimit:general",
           })
         : null,
 
-    // Strict - for sensitive operations
+    // Strict - channel create, inbox send, etc. (was 5/min — too low for DM setup)
     strict: redis
         ? new Ratelimit({
               redis,
-              limiter: Ratelimit.slidingWindow(5, "60 s"), // 5 requests per minute
+              limiter: Ratelimit.slidingWindow(120, "60 s"), // 120 requests per minute
               analytics: true,
               prefix: "ratelimit:strict",
           })
@@ -121,21 +121,18 @@ export function getClientIdentifier(request: NextRequest): string {
 export async function checkRateLimit(
     request: NextRequest,
     tier: RateLimitTier = "general",
-    customIdentifier?: string,
+    customIdentifier?: string
 ): Promise<NextResponse | null> {
     const limiter = rateLimiters[tier];
 
     // SEC-008 FIX: Log warning when rate limiting is disabled in production
     if (!limiter) {
         if (process.env.NODE_ENV === "production" && !rateLimitDisabledWarned) {
-            log.warn(
-                "SECURITY: Rate limiting is disabled - Redis not configured",
-                {
-                    tier,
-                    path: request.nextUrl.pathname,
-                    env: process.env.NODE_ENV,
-                },
-            );
+            log.warn("SECURITY: Rate limiting is disabled - Redis not configured", {
+                tier,
+                path: request.nextUrl.pathname,
+                env: process.env.NODE_ENV,
+            });
             rateLimitDisabledWarned = true; // Only warn once per process
         }
         return null;
@@ -144,8 +141,7 @@ export async function checkRateLimit(
     const identifier = customIdentifier || getClientIdentifier(request);
 
     try {
-        const { success, limit, reset, remaining } =
-            await limiter.limit(identifier);
+        const { success, limit, reset, remaining } = await limiter.limit(identifier);
 
         if (!success) {
             const retryAfter = Math.ceil((reset - Date.now()) / 1000);
@@ -171,7 +167,7 @@ export async function checkRateLimit(
                         "X-RateLimit-Reset": reset.toString(),
                         "Retry-After": retryAfter.toString(),
                     },
-                },
+                }
             );
         }
 
@@ -188,16 +184,10 @@ export async function checkRateLimit(
  * Higher-order function to wrap an API handler with rate limiting
  */
 export function withRateLimit(
-    handler: (
-        request: NextRequest,
-        ...args: unknown[]
-    ) => Promise<NextResponse>,
-    tier: RateLimitTier = "general",
+    handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>,
+    tier: RateLimitTier = "general"
 ) {
-    return async (
-        request: NextRequest,
-        ...args: unknown[]
-    ): Promise<NextResponse> => {
+    return async (request: NextRequest, ...args: unknown[]): Promise<NextResponse> => {
         const rateLimitResponse = await checkRateLimit(request, tier);
         if (rateLimitResponse) {
             return rateLimitResponse;
