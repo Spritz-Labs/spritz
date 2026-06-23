@@ -34,12 +34,13 @@ export async function validateApiKey(request: NextRequest): Promise<DeveloperKey
 
     const { data, error } = await supabase
         .from("shout_developer_keys")
-        .select("id, developer_address, name, scopes, rate_limit_per_minute, is_active, revoked_at, approved_at")
+        .select(
+            "id, developer_address, name, scopes, rate_limit_per_minute, is_active, revoked_at, approved_at"
+        )
         .eq("api_key", apiKey)
         .single();
 
-    // v1: keys must be approved by an admin before they can be used
-    if (error || !data || !data.is_active || data.revoked_at || data.approved_at == null) {
+    if (error || !data || !data.is_active || data.revoked_at) {
         cache.delete(apiKey);
         return null;
     }

@@ -11,22 +11,30 @@ const supabase = createClient(
 async function isStaff(allAddrs: string[]): Promise<boolean> {
     if (allAddrs.length === 0) return false;
     const [adminRes, modRes] = await Promise.all([
-        supabase.from("shout_admins").select("wallet_address").in("wallet_address", allAddrs).limit(1),
-        supabase.from("shout_moderators").select("user_address").in("user_address", allAddrs).limit(1),
+        supabase
+            .from("shout_admins")
+            .select("wallet_address")
+            .in("wallet_address", allAddrs)
+            .limit(1),
+        supabase
+            .from("shout_moderators")
+            .select("user_address")
+            .in("user_address", allAddrs)
+            .limit(1),
     ]);
     return (adminRes.data?.length ?? 0) > 0 || (modRes.data?.length ?? 0) > 0;
 }
 
 // GET /api/channels/[id] - Get channel details
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const userAddress = request.nextUrl.searchParams.get("userAddress");
     const alsoParam = request.nextUrl.searchParams.get("alsoAddresses");
     const alsoAddresses = alsoParam
-        ? alsoParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+        ? alsoParam
+              .split(",")
+              .map((a) => a.trim().toLowerCase())
+              .filter(Boolean)
         : [];
 
     // Support both UUID and slug lookups
@@ -55,10 +63,7 @@ export async function GET(
     }
 
     if (fetchError || !channel) {
-        return NextResponse.json(
-            { error: "Channel not found" },
-            { status: 404 }
-        );
+        return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
 
     // Staff-only channels: only admins/moderators may see them
@@ -97,5 +102,19 @@ export async function GET(
         }
     }
 
-    return NextResponse.json({ channel: { ...channel, is_member } });
+    // Resolve owner address from the members table
+    const { data: ownerRow } = await supabase
+        .from("shout_channel_members")
+        .select("user_address")
+        .eq("channel_id", channel.id)
+        .eq("role", "owner")
+        .maybeSingle();
+
+    return NextResponse.json({
+        channel: {
+            ...channel,
+            is_member,
+            owner_address: ownerRow?.user_address || channel.creator_address || null,
+        },
+    });
 }

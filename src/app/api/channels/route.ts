@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthenticatedUser } from "@/lib/session";
+import { getAuthenticatedUser, getValidatedApiKey } from "@/lib/session";
 import { checkRateLimit } from "@/lib/ratelimit";
 import { sanitizeInput, INPUT_LIMITS } from "@/lib/sanitize";
 import { getMembershipLookupAddresses } from "@/lib/ensResolution";
@@ -269,10 +269,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Warn if using unauthenticated fallback
-        if (!session && bodyCreatorAddress) {
+        // Validate and track API key if present
+        const apiKey = await getValidatedApiKey(request);
+
+        if (!session && bodyCreatorAddress && !apiKey) {
             console.warn(
-                "[Channels] Using unauthenticated creatorAddress - migrate to session auth"
+                "[Channels] Using unauthenticated creatorAddress - migrate to session or API key auth"
             );
         }
 
@@ -359,6 +361,7 @@ export async function POST(request: NextRequest) {
             is_official: false,
             member_count: 1,
             messaging_type: messagingType,
+            created_by_api_key_id: apiKey?.id || null,
         };
 
         if (isPoapEventChannel) {

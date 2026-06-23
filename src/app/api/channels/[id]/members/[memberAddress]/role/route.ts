@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAuthenticatedUser, getValidatedApiKey } from "@/lib/session";
-import { getCallerRole, roleRank, isValidRole, type ChannelRole } from "@/lib/channelRoles";
+import {
+    getCallerRole,
+    roleRank,
+    isValidRole,
+    apiKeyOwnsChannel,
+    type ChannelRole,
+} from "@/lib/channelRoles";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -36,20 +42,8 @@ export async function PATCH(
 
         // API key auth: the SDK app has full control over channels it created
         if (apiKey && !session) {
-            const { data: channel } = await supabase
-                .from("shout_public_channels")
-                .select("creator_address")
-                .eq("id", channelId)
-                .single();
-
-            if (!channel) {
-                return NextResponse.json({ error: "Channel not found" }, { status: 404 });
-            }
-
-            // API key holder must be the channel creator (or match the developer address)
-            const devAddr = apiKey.developerAddress.toLowerCase();
-            const creatorAddr = channel.creator_address?.toLowerCase();
-            if (creatorAddr !== devAddr) {
+            const hasPermission = await apiKeyOwnsChannel(channelId, apiKey);
+            if (!hasPermission) {
                 return NextResponse.json(
                     { error: "API key does not have permission on this channel" },
                     { status: 403 }

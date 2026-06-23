@@ -9,16 +9,14 @@ const supabase = createClient(
 export type ChannelMember = {
     user_address: string;
     joined_at: string;
+    role?: string;
     username?: string;
     avatar?: string;
     ens_name?: string;
 };
 
 // GET /api/channels/[id]/members - Get channel members
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const limit = Math.min(parseInt(request.nextUrl.searchParams.get("limit") || "100"), 200); // Max 200 per request
     const offset = parseInt(request.nextUrl.searchParams.get("offset") || "0");
@@ -35,7 +33,10 @@ export async function GET(
                 .order("joined_at", { ascending: false });
 
             if (membershipError) {
-                console.error("[Channel Members] Error fetching global memberships:", membershipError);
+                console.error(
+                    "[Channel Members] Error fetching global memberships:",
+                    membershipError
+                );
                 return NextResponse.json({ error: "Failed to fetch members" }, { status: 500 });
             }
 
@@ -53,21 +54,21 @@ export async function GET(
 
             // Combine membership addresses with message sender addresses
             const membershipAddresses = new Set(
-                memberships?.map(m => m.user_address.toLowerCase()) || []
+                memberships?.map((m) => m.user_address.toLowerCase()) || []
             );
             const messageSenderAddresses = new Set(
-                recentMessages?.map(m => m.sender_address.toLowerCase()) || []
+                recentMessages?.map((m) => m.sender_address.toLowerCase()) || []
             );
 
             // Merge both sets - prioritize membership data for joined_at
             const allAddresses = new Set([...membershipAddresses, ...messageSenderAddresses]);
-            
+
             // Create a map of joined_at times (from membership if available, otherwise from first message)
             const joinedAtMap = new Map<string, string>();
-            memberships?.forEach(m => {
+            memberships?.forEach((m) => {
                 joinedAtMap.set(m.user_address.toLowerCase(), m.joined_at);
             });
-            recentMessages?.forEach(m => {
+            recentMessages?.forEach((m) => {
                 const addr = m.sender_address.toLowerCase();
                 if (!joinedAtMap.has(addr)) {
                     joinedAtMap.set(addr, m.created_at);
@@ -83,7 +84,7 @@ export async function GET(
 
             // Apply pagination
             const paginatedAddresses = sortedAddresses.slice(offset, offset + limit);
-            
+
             // Fetch user info for these addresses (batch if needed - Supabase has limits on IN clause)
             let userInfoMap = new Map();
             if (paginatedAddresses.length > 0) {
@@ -100,18 +101,16 @@ export async function GET(
                         .from("shout_users")
                         .select("wallet_address, username, avatar, ens_name")
                         .in("wallet_address", batch);
-                    
+
                     if (usersInfo) {
                         allUsersInfo.push(...usersInfo);
                     }
                 }
 
-                userInfoMap = new Map(
-                    allUsersInfo.map(u => [u.wallet_address.toLowerCase(), u])
-                );
+                userInfoMap = new Map(allUsersInfo.map((u) => [u.wallet_address.toLowerCase(), u]));
             }
 
-            const members: ChannelMember[] = paginatedAddresses.map(addr => {
+            const members: ChannelMember[] = paginatedAddresses.map((addr) => {
                 const info = userInfoMap.get(addr);
                 return {
                     user_address: addr,
@@ -122,17 +121,21 @@ export async function GET(
                 };
             });
 
-            return NextResponse.json({ 
+            return NextResponse.json({
                 members,
                 total: sortedAddresses.length,
-                hasMore: (offset + limit) < sortedAddresses.length
+                hasMore: offset + limit < sortedAddresses.length,
             });
         }
 
         // For regular channels, get from shout_channel_members
-        const { data: memberships, error, count } = await supabase
+        const {
+            data: memberships,
+            error,
+            count,
+        } = await supabase
             .from("shout_channel_members")
-            .select("user_address, joined_at", { count: "exact" })
+            .select("user_address, joined_at, role", { count: "exact" })
             .eq("channel_id", id)
             .order("joined_at", { ascending: false })
             .range(offset, offset + limit - 1);
@@ -143,8 +146,8 @@ export async function GET(
         }
 
         // Get user info for these addresses (normalize to lowercase for lookup)
-        const addresses = memberships?.map(m => m.user_address.toLowerCase()) || [];
-        
+        const addresses = memberships?.map((m) => m.user_address.toLowerCase()) || [];
+
         // Only fetch user info if we have addresses (batch if needed)
         let userInfoMap = new Map();
         if (addresses.length > 0) {
@@ -161,33 +164,32 @@ export async function GET(
                     .from("shout_users")
                     .select("wallet_address, username, avatar, ens_name")
                     .in("wallet_address", batch);
-                
+
                 if (usersInfo) {
                     allUsersInfo.push(...usersInfo);
                 }
             }
 
-            userInfoMap = new Map(
-                allUsersInfo.map(u => [u.wallet_address.toLowerCase(), u])
-            );
+            userInfoMap = new Map(allUsersInfo.map((u) => [u.wallet_address.toLowerCase(), u]));
         }
 
-        const members: ChannelMember[] = (memberships || []).map(m => {
+        const members: ChannelMember[] = (memberships || []).map((m) => {
             const normalizedAddr = m.user_address.toLowerCase();
             const info = userInfoMap.get(normalizedAddr);
             return {
-                user_address: m.user_address, // Keep original casing for display
+                user_address: m.user_address,
                 joined_at: m.joined_at,
+                role: m.role || "member",
                 username: info?.username || undefined,
                 avatar: info?.avatar || undefined,
                 ens_name: info?.ens_name || undefined,
             };
         });
 
-        return NextResponse.json({ 
+        return NextResponse.json({
             members,
             total: count || 0,
-            hasMore: (offset + limit) < (count || 0)
+            hasMore: offset + limit < (count || 0),
         });
     } catch (e) {
         console.error("[Channel Members] Error:", e);
