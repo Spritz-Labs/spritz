@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getAddress } from "viem";
 import { resolveToAddress } from "@/lib/ensResolution";
+import { getValidatedApiKey } from "@/lib/session";
+import { isValidRole, type ChannelRole } from "@/lib/channelRoles";
 
 const POAP_API_BASE = "https://api.poap.tech";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 function parsePoapList(data: unknown): boolean {
@@ -26,11 +28,9 @@ function parsePoapList(data: unknown): boolean {
 async function addressHoldsPoap(
     address: string,
     eventId: number,
-    apiKey: string,
+    apiKey: string
 ): Promise<boolean> {
-    const url = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
-        address,
-    )}/${eventId}`;
+    const url = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(address)}/${eventId}`;
     const res = await fetch(url, {
         headers: { "X-API-Key": apiKey },
         next: { revalidate: 60 },
@@ -44,9 +44,7 @@ async function addressHoldsPoap(
     }
     if (parsePoapList(data)) return true;
     // Fallback: full scan - POAP API may return different shape for event-specific endpoint
-    const fullUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
-        address,
-    )}`;
+    const fullUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(address)}`;
     const fullRes = await fetch(fullUrl, {
         headers: { "X-API-Key": apiKey },
         next: { revalidate: 60 },
@@ -62,15 +60,9 @@ async function addressHoldsPoap(
         for (const item of Array.isArray(list) ? list : []) {
             const o = item as Record<string, unknown>;
             const ev = o?.event ?? o;
-            const eid =
-                (ev as { id?: number })?.id ??
-                (o as { eventId?: number }).eventId;
+            const eid = (ev as { id?: number })?.id ?? (o as { eventId?: number }).eventId;
             const id =
-                typeof eid === "number"
-                    ? eid
-                    : typeof eid === "string"
-                      ? parseInt(eid, 10)
-                      : NaN;
+                typeof eid === "number" ? eid : typeof eid === "string" ? parseInt(eid, 10) : NaN;
             if (!Number.isNaN(id) && id === eventId) return true;
         }
     } catch {
@@ -80,21 +72,24 @@ async function addressHoldsPoap(
 }
 
 // POST /api/channels/[id]/join - Join a channel (POAP channels require holding the POAP)
-export async function POST(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> },
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
 
     try {
         const body = await request.json();
-        const { userAddress } = body;
+        const { userAddress, role: requestedRole } = body;
 
         if (!userAddress || typeof userAddress !== "string") {
-            return NextResponse.json(
-                { error: "User address is required" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "User address is required" }, { status: 400 });
+        }
+
+        // Determine join role: only API key holders can specify a role
+        let joinRole: ChannelRole = "member";
+        if (requestedRole && isValidRole(requestedRole)) {
+            const apiKey = await getValidatedApiKey(request);
+            if (apiKey) {
+                joinRole = requestedRole as ChannelRole;
+            }
         }
 
         const normalizedAddress = await resolveToAddress(userAddress);
@@ -103,7 +98,7 @@ export async function POST(
                 {
                     error: "Invalid address or ENS name. Could not resolve to an Ethereum address.",
                 },
-                { status: 400 },
+                { status: 400 }
             );
         }
 
@@ -132,10 +127,7 @@ export async function POST(
         }
 
         if (!channel) {
-            return NextResponse.json(
-                { error: "Channel not found" },
-                { status: 404 },
-            );
+            return NextResponse.json({ error: "Channel not found" }, { status: 404 });
         }
 
         // Check if user is banned from this channel
@@ -149,7 +141,7 @@ export async function POST(
         if (banRecord) {
             return NextResponse.json(
                 { error: "You are banned from this channel" },
-                { status: 403 },
+                { status: 403 }
             );
         }
 
@@ -157,8 +149,16 @@ export async function POST(
         if (channel.access_level === "staff") {
             const allAddrs = [normalizedAddress];
             const [adminRes, modRes] = await Promise.all([
-                supabase.from("shout_admins").select("wallet_address").in("wallet_address", allAddrs).limit(1),
-                supabase.from("shout_moderators").select("user_address").in("user_address", allAddrs).limit(1),
+                supabase
+                    .from("shout_admins")
+                    .select("wallet_address")
+                    .in("wallet_address", allAddrs)
+                    .limit(1),
+                supabase
+                    .from("shout_moderators")
+                    .select("user_address")
+                    .in("user_address", allAddrs)
+                    .limit(1),
             ]);
             const isStaff = (adminRes.data?.length ?? 0) > 0 || (modRes.data?.length ?? 0) > 0;
             if (!isStaff) {
@@ -189,7 +189,7 @@ export async function POST(
                     {
                         error: "POAP verification is not configured. You need this POAP to join this channel.",
                     },
-                    { status: 403 },
+                    { status: 403 }
                 );
             }
 
@@ -197,9 +197,7 @@ export async function POST(
             const addressesToCheck: string[] = [normalizedAddress];
             const lookupKeys = [normalizedAddress];
             const originalTrimmed =
-                typeof userAddress === "string"
-                    ? userAddress.trim().toLowerCase()
-                    : "";
+                typeof userAddress === "string" ? userAddress.trim().toLowerCase() : "";
             if (
                 originalTrimmed &&
                 originalTrimmed !== normalizedAddress &&
@@ -241,7 +239,7 @@ export async function POST(
                         (await addressHoldsPoap(
                             getAddress(addr as `0x${string}`),
                             poapEventId,
-                            apiKey,
+                            apiKey
                         )));
                 if (holds) {
                     hasPoap = true;
@@ -254,7 +252,7 @@ export async function POST(
                     {
                         error: "You need this POAP to join this channel. Hold the POAP in your wallet to join.",
                     },
-                    { status: 403 },
+                    { status: 403 }
                 );
             }
         }
@@ -267,7 +265,7 @@ export async function POST(
                     {
                         error: "POAP verification is not configured. You need a POAP from this collection to join.",
                     },
-                    { status: 403 },
+                    { status: 403 }
                 );
             }
             const { PoapCompass } = await import("@poap-xyz/poap-sdk");
@@ -276,10 +274,7 @@ export async function POST(
             const collectionsClient = new CollectionsClient(compass);
             const collection = await collectionsClient.get(poapCollectionId);
             if (!collection) {
-                return NextResponse.json(
-                    { error: "Collection not found" },
-                    { status: 500 },
-                );
+                return NextResponse.json({ error: "Collection not found" }, { status: 500 });
             }
             let dropIds: number[] = [];
             try {
@@ -289,9 +284,7 @@ export async function POST(
             }
             const addressesToCheckCol: string[] = [normalizedAddress];
             const originalTrimmed =
-                typeof userAddress === "string"
-                    ? userAddress.trim().toLowerCase()
-                    : "";
+                typeof userAddress === "string" ? userAddress.trim().toLowerCase() : "";
             if (
                 originalTrimmed &&
                 originalTrimmed !== normalizedAddress &&
@@ -317,9 +310,7 @@ export async function POST(
             }
             const userEventIds = new Set<number>();
             for (const addr of addressesToCheckCol) {
-                const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(
-                    addr,
-                )}`;
+                const scanUrl = `${POAP_API_BASE}/actions/scan/${encodeURIComponent(addr)}`;
                 const scanRes = await fetch(scanUrl, {
                     headers: { "X-API-Key": apiKey },
                     next: { revalidate: 60 },
@@ -348,7 +339,7 @@ export async function POST(
                     {
                         error: "You need at least one POAP from this collection to join. Hold a POAP in the collection in your wallet to join.",
                     },
-                    { status: 403 },
+                    { status: 403 }
                 );
             }
         }
@@ -381,24 +372,20 @@ export async function POST(
         if (existing) {
             return NextResponse.json(
                 { error: "Already a member of this channel" },
-                { status: 400 },
+                { status: 400 }
             );
         }
 
         // Join the channel
-        const { error: joinError } = await supabase
-            .from("shout_channel_members")
-            .insert({
-                channel_id: channelUuid,
-                user_address: normalizedAddress,
-            });
+        const { error: joinError } = await supabase.from("shout_channel_members").insert({
+            channel_id: channelUuid,
+            user_address: normalizedAddress,
+            role: joinRole,
+        });
 
         if (joinError) {
             console.error("[Channels API] Error joining channel:", joinError);
-            return NextResponse.json(
-                { error: "Failed to join channel" },
-                { status: 500 },
-            );
+            return NextResponse.json({ error: "Failed to join channel" }, { status: 500 });
         }
 
         // member_count is updated by DB trigger on shout_channel_members INSERT
@@ -406,9 +393,6 @@ export async function POST(
         return NextResponse.json({ success: true, channelName: channel.name });
     } catch (e) {
         console.error("[Channels API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to process request" },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
     }
 }
