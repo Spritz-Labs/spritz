@@ -102,19 +102,26 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         }
     }
 
-    // Resolve owner address from the members table
-    const { data: ownerRow } = await supabase
+    // Resolve owner address from the members table (prefer designated owner over creator)
+    const { data: ownerRows } = await supabase
         .from("shout_channel_members")
         .select("user_address")
         .eq("channel_id", channel.id)
-        .eq("role", "owner")
-        .maybeSingle();
+        .eq("role", "owner");
+
+    let ownerAddress = channel.creator_address || null;
+    if (ownerRows && ownerRows.length > 0) {
+        const nonCreatorOwner = ownerRows.find(
+            (r) => r.user_address.toLowerCase() !== channel.creator_address?.toLowerCase()
+        );
+        ownerAddress = nonCreatorOwner?.user_address || ownerRows[0].user_address;
+    }
 
     return NextResponse.json({
         channel: {
             ...channel,
             is_member,
-            owner_address: ownerRow?.user_address || channel.creator_address || null,
+            owner_address: ownerAddress,
         },
     });
 }
