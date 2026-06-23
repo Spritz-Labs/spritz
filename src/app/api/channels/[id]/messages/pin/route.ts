@@ -1,50 +1,60 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getAuthenticatedUser } from "@/lib/session";
+import { getAuthenticatedUser, getValidatedApiKey } from "@/lib/session";
+import { getCallerRole, roleRank, apiKeyOwnsChannel, type ChannelRole } from "@/lib/channelRoles";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// Check if a user is an admin
-async function isAdmin(address: string): Promise<boolean> {
-    const { data } = await supabase
+// Check if a user can pin (global admin, or channel owner/admin)
+async function canPin(address: string, channelId: string): Promise<boolean> {
+    const { data: admin } = await supabase
         .from("shout_admins")
         .select("id")
-        .eq("wallet_address", address.toLowerCase())
+        .eq("wallet_address", address)
         .single();
-    
-    return !!data;
+
+    if (admin) return true;
+
+    const memberRole = await getCallerRole(channelId, address);
+    return !!memberRole && roleRank(memberRole) >= roleRank("admin" as ChannelRole);
 }
 
-// POST /api/channels/[id]/messages/pin - Pin or unpin a message (admin only)
-export async function POST(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+// POST /api/channels/[id]/messages/pin - Pin or unpin a message
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id: channelId } = await params;
 
     try {
-        // Get authenticated user from session
         const session = await getAuthenticatedUser(request);
-        
-        if (!session?.userAddress) {
-            return NextResponse.json(
-                { error: "Authentication required" },
-                { status: 401 }
-            );
+        const apiKey = !session ? await getValidatedApiKey(request) : null;
+
+        if (!session?.userAddress && !apiKey) {
+            return NextResponse.json({ error: "Authentication required" }, { status: 401 });
         }
 
-        const normalizedAddress = session.userAddress.toLowerCase();
+        // API key auth: can pin in channels it created
+        let normalizedAddress: string;
+        if (apiKey && !session) {
+            const hasPermission = await apiKeyOwnsChannel(channelId, apiKey);
+            if (!hasPermission) {
+                return NextResponse.json(
+                    { error: "API key does not have permission on this channel" },
+                    { status: 403 }
+                );
+            }
+            normalizedAddress = apiKey.developerAddress.toLowerCase();
+        } else {
+            normalizedAddress = session!.userAddress.toLowerCase();
 
-        // Check if user is an admin
-        const adminCheck = await isAdmin(normalizedAddress);
-        if (!adminCheck) {
-            return NextResponse.json(
-                { error: "Only admins can pin messages" },
-                { status: 403 }
-            );
+            const allowed = await canPin(normalizedAddress, channelId);
+            if (!allowed) {
+                return NextResponse.json(
+                    { error: "Only owners and admins can pin messages" },
+                    { status: 403 }
+                );
+            }
         }
 
         const body = await request.json();
@@ -92,13 +102,12 @@ export async function POST(
 
         if (updateError) {
             console.error("[Channels API] Error updating pin status:", updateError);
-            return NextResponse.json(
-                { error: "Failed to update pin status" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "Failed to update pin status" }, { status: 500 });
         }
 
-        console.log(`[Channels] Message ${messageId} ${pin ? "pinned" : "unpinned"} by ${normalizedAddress}`);
+        console.log(
+            `[Channels] Message ${messageId} ${pin ? "pinned" : "unpinned"} by ${normalizedAddress}`
+        );
 
         return NextResponse.json({
             success: true,
@@ -108,18 +117,12 @@ export async function POST(
         });
     } catch (e) {
         console.error("[Channels API] Pin error:", e);
-        return NextResponse.json(
-            { error: "Failed to process pin request" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to process pin request" }, { status: 500 });
     }
 }
 
 // GET /api/channels/[id]/messages/pin - Get all pinned messages for a channel
-export async function GET(
-    request: NextRequest,
-    { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id: channelId } = await params;
 
     try {
@@ -132,10 +135,7 @@ export async function GET(
 
         if (error) {
             console.error("[Channels API] Error fetching pinned messages:", error);
-            return NextResponse.json(
-                { error: "Failed to fetch pinned messages" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "Failed to fetch pinned messages" }, { status: 500 });
         }
 
         return NextResponse.json({
@@ -143,9 +143,6 @@ export async function GET(
         });
     } catch (e) {
         console.error("[Channels API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to process request" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
     }
 }
