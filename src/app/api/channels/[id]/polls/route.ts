@@ -69,11 +69,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const userAddress = searchParams.get("userAddress")?.toLowerCase();
 
     try {
-        // Check if user can create polls (API key always can for its channels)
+        // Check if user can create polls (API key OR user role)
         let canCreatePoll = false;
         const apiKey = await getValidatedApiKey(request);
-        if (apiKey) {
-            canCreatePoll = await apiKeyOwnsChannel(id, apiKey);
+        if (apiKey && (await apiKeyOwnsChannel(id, apiKey))) {
+            canCreatePoll = true;
         } else if (userAddress) {
             canCreatePoll = await canCreatePollCheck(userAddress, id);
         }
@@ -177,100 +177,46 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             return NextResponse.json({ error: "Maximum 10 options allowed" }, { status: 400 });
         }
 
-        // API key auth: can create polls on channels it created
+        // Determine if caller is authorized (API key OR user role)
         const apiKey = await getValidatedApiKey(request);
-        if (apiKey) {
-            const hasPermission = await apiKeyOwnsChannel(id, apiKey);
-            if (!hasPermission) {
+        const apiKeyOwns = apiKey ? await apiKeyOwnsChannel(id, apiKey) : false;
+        let creatorAddr: string;
+
+        if (apiKeyOwns) {
+            creatorAddr = userAddress?.toLowerCase() || apiKey!.developerAddress.toLowerCase();
+        } else {
+            if (!userAddress) {
+                return NextResponse.json({ error: "User address is required" }, { status: 400 });
+            }
+
+            creatorAddr = (await resolveToAddress(userAddress)) ?? userAddress.toLowerCase();
+
+            const canCreate = await canCreatePollCheck(creatorAddr, id);
+            if (!canCreate) {
                 return NextResponse.json(
-                    { error: "API key does not have permission on this channel" },
+                    { error: "Only owners, admins, and moderators can create polls" },
                     { status: 403 }
                 );
             }
 
-            // For API key requests, use provided userAddress as creator or fall back to key's developer address
-            const creatorAddr = userAddress?.toLowerCase() || apiKey.developerAddress.toLowerCase();
+            // Verify user is a member of the channel
+            const lookupAddrs = await getMembershipLookupAddresses(userAddress);
+            const { data: membership } =
+                lookupAddrs.length > 0
+                    ? await supabase
+                          .from("shout_channel_members")
+                          .select("id")
+                          .eq("channel_id", id)
+                          .in("user_address", lookupAddrs)
+                          .maybeSingle()
+                    : { data: null };
 
-            const { data: poll, error } = await supabase
-                .from("shout_channel_polls")
-                .insert({
-                    channel_id: id,
-                    creator_address: creatorAddr,
-                    question: question.trim(),
-                    options: options.map((o: string) => o.trim()),
-                    allows_multiple: allowsMultiple,
-                    ends_at: endsAt,
-                    is_anonymous: isAnonymous,
-                })
-                .select()
-                .single();
-
-            if (error) {
-                console.error("[Polls API] API key poll creation failed:", error);
-                return NextResponse.json({ error: "Failed to create poll" }, { status: 500 });
+            if (!membership) {
+                return NextResponse.json(
+                    { error: "You must be a member of this channel to create polls" },
+                    { status: 403 }
+                );
             }
-
-            const pollResponse: Poll = {
-                id: poll.id,
-                channel_id: poll.channel_id,
-                creator_address: poll.creator_address,
-                question: poll.question,
-                options: poll.options,
-                allows_multiple: poll.allows_multiple,
-                ends_at: poll.ends_at,
-                is_anonymous: poll.is_anonymous,
-                is_closed: poll.is_closed,
-                created_at: poll.created_at,
-                votes: poll.options.map((_: string, i: number) => ({
-                    option_index: i,
-                    count: 0,
-                    voters: [],
-                })),
-                user_votes: [],
-                total_votes: 0,
-            };
-
-            return NextResponse.json({ poll: pollResponse });
-        }
-
-        // Session-based auth
-        if (!userAddress) {
-            return NextResponse.json({ error: "User address is required" }, { status: 400 });
-        }
-
-        const normalizedAddress =
-            (await resolveToAddress(userAddress)) ?? userAddress.toLowerCase();
-
-        // Check if user can create polls (owner, admin, moderator)
-        const canCreate = await canCreatePollCheck(normalizedAddress, id);
-        if (!canCreate) {
-            return NextResponse.json(
-                {
-                    error: "Only owners, admins, and moderators can create polls",
-                },
-                { status: 403 }
-            );
-        }
-
-        // Verify user is a member of the channel (resolve ENS so we find rows stored by 0x)
-        const lookupAddrs = await getMembershipLookupAddresses(userAddress);
-        const { data: membership } =
-            lookupAddrs.length > 0
-                ? await supabase
-                      .from("shout_channel_members")
-                      .select("id")
-                      .eq("channel_id", id)
-                      .in("user_address", lookupAddrs)
-                      .maybeSingle()
-                : { data: null };
-
-        if (!membership) {
-            return NextResponse.json(
-                {
-                    error: "You must be a member of this channel to create polls",
-                },
-                { status: 403 }
-            );
         }
 
         // Create the poll
@@ -278,7 +224,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             .from("shout_channel_polls")
             .insert({
                 channel_id: id,
-                creator_address: normalizedAddress,
+                creator_address: creatorAddr,
                 question: question.trim(),
                 options: options.map((o: string) => o.trim()),
                 allows_multiple: allowsMultiple,
