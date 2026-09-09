@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAuthWithCsrf } from "@/lib/session";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,23 +31,12 @@ export async function PATCH(
 ) {
     const { pollId } = await params;
     try {
+        const session = await requireAuthWithCsrf(request);
+        if (session instanceof NextResponse) return session;
+
         const body = await request.json();
-        const {
-            userAddress,
-            question,
-            options,
-            allowsMultiple,
-            endsAt,
-            isAnonymous,
-            isClosed,
-        } = body;
-        if (!userAddress) {
-            return NextResponse.json(
-                { error: "User address is required" },
-                { status: 400 }
-            );
-        }
-        const canManage = await canManageAlphaPolls(userAddress);
+        const { question, options, allowsMultiple, endsAt, isAnonymous, isClosed } = body;
+        const canManage = await canManageAlphaPolls(session.userAddress);
         if (!canManage) {
             return NextResponse.json(
                 { error: "Only admins and moderators can update polls" },
@@ -59,10 +49,7 @@ export async function PATCH(
             .eq("id", pollId)
             .single();
         if (!existing) {
-            return NextResponse.json(
-                { error: "Poll not found" },
-                { status: 404 }
-            );
+            return NextResponse.json({ error: "Poll not found" }, { status: 404 });
         }
         const updates: Record<string, unknown> = {
             updated_at: new Date().toISOString(),
@@ -71,15 +58,11 @@ export async function PATCH(
         if (options !== undefined) {
             const arr = Array.isArray(options) ? options : [];
             if (arr.length < 2 || arr.length > 10) {
-                return NextResponse.json(
-                    { error: "Options must be 2–10 items" },
-                    { status: 400 }
-                );
+                return NextResponse.json({ error: "Options must be 2–10 items" }, { status: 400 });
             }
             updates.options = arr.map((o: string) => String(o).trim());
         }
-        if (allowsMultiple !== undefined)
-            updates.allows_multiple = !!allowsMultiple;
+        if (allowsMultiple !== undefined) updates.allows_multiple = !!allowsMultiple;
         if (endsAt !== undefined)
             updates.ends_at = endsAt === null || endsAt === "" ? null : endsAt;
         if (isAnonymous !== undefined) updates.is_anonymous = !!isAnonymous;
@@ -92,18 +75,12 @@ export async function PATCH(
             .single();
         if (error) {
             console.error("[Alpha Polls API] Error updating poll:", error);
-            return NextResponse.json(
-                { error: "Failed to update poll" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "Failed to update poll" }, { status: 500 });
         }
         return NextResponse.json({ poll });
     } catch (e) {
         console.error("[Alpha Polls API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to update poll" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to update poll" }, { status: 500 });
     }
 }
 
@@ -114,38 +91,24 @@ export async function DELETE(
 ) {
     const { pollId } = await params;
     try {
-        const { searchParams } = new URL(request.url);
-        const userAddress = searchParams.get("userAddress")?.toLowerCase();
-        if (!userAddress) {
-            return NextResponse.json(
-                { error: "User address is required" },
-                { status: 400 }
-            );
-        }
-        const canManage = await canManageAlphaPolls(userAddress);
+        const session = await requireAuthWithCsrf(request);
+        if (session instanceof NextResponse) return session;
+
+        const canManage = await canManageAlphaPolls(session.userAddress);
         if (!canManage) {
             return NextResponse.json(
                 { error: "Only admins and moderators can delete polls" },
                 { status: 403 }
             );
         }
-        const { error } = await supabase
-            .from("shout_alpha_polls")
-            .delete()
-            .eq("id", pollId);
+        const { error } = await supabase.from("shout_alpha_polls").delete().eq("id", pollId);
         if (error) {
             console.error("[Alpha Polls API] Error deleting poll:", error);
-            return NextResponse.json(
-                { error: "Failed to delete poll" },
-                { status: 500 }
-            );
+            return NextResponse.json({ error: "Failed to delete poll" }, { status: 500 });
         }
         return NextResponse.json({ success: true });
     } catch (e) {
         console.error("[Alpha Polls API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to delete poll" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to delete poll" }, { status: 500 });
     }
 }

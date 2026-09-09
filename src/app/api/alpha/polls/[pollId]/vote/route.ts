@@ -1,35 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAuthWithCsrf } from "@/lib/session";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ pollId: string }> },
+    { params }: { params: Promise<{ pollId: string }> }
 ) {
     const { pollId } = await params;
 
     try {
+        const session = await requireAuthWithCsrf(request);
+        if (session instanceof NextResponse) return session;
+
         const body = await request.json();
-        const { userAddress, optionIndex } = body;
+        const { optionIndex } = body;
 
-        if (!userAddress) {
-            return NextResponse.json(
-                { error: "User address is required" },
-                { status: 400 },
-            );
-        }
         if (optionIndex === undefined || optionIndex === null) {
-            return NextResponse.json(
-                { error: "Option index is required" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "Option index is required" }, { status: 400 });
         }
 
-        const normalizedAddress = (userAddress as string).toLowerCase();
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         const { data: membership } = await supabase
             .from("shout_alpha_membership")
@@ -41,7 +36,7 @@ export async function POST(
         if (!membership) {
             return NextResponse.json(
                 { error: "You must be a member of Alpha to vote" },
-                { status: 403 },
+                { status: 403 }
             );
         }
 
@@ -52,30 +47,18 @@ export async function POST(
             .single();
 
         if (pollError || !poll) {
-            return NextResponse.json(
-                { error: "Poll not found" },
-                { status: 404 },
-            );
+            return NextResponse.json({ error: "Poll not found" }, { status: 404 });
         }
         if (poll.is_closed) {
-            return NextResponse.json(
-                { error: "This poll is closed" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "This poll is closed" }, { status: 400 });
         }
         if (poll.ends_at && new Date(poll.ends_at) < new Date()) {
-            return NextResponse.json(
-                { error: "This poll has ended" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "This poll has ended" }, { status: 400 });
         }
 
         const options = (poll.options as string[]) || [];
         if (optionIndex < 0 || optionIndex >= options.length) {
-            return NextResponse.json(
-                { error: "Invalid option index" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "Invalid option index" }, { status: 400 });
         }
 
         const { data: existingVotes } = await supabase
@@ -84,11 +67,7 @@ export async function POST(
             .eq("poll_id", pollId)
             .eq("user_address", normalizedAddress);
 
-        if (
-            !poll.allows_multiple &&
-            existingVotes &&
-            existingVotes.length > 0
-        ) {
+        if (!poll.allows_multiple && existingVotes && existingVotes.length > 0) {
             if (existingVotes.some((v) => v.option_index === optionIndex)) {
                 const { error: deleteError } = await supabase
                     .from("shout_alpha_poll_votes")
@@ -97,10 +76,7 @@ export async function POST(
                     .eq("user_address", normalizedAddress)
                     .eq("option_index", optionIndex);
                 if (deleteError) {
-                    return NextResponse.json(
-                        { error: "Failed to remove vote" },
-                        { status: 500 },
-                    );
+                    return NextResponse.json({ error: "Failed to remove vote" }, { status: 500 });
                 }
                 return NextResponse.json({ success: true, action: "removed" });
             }
@@ -111,10 +87,7 @@ export async function POST(
                 .eq("user_address", normalizedAddress);
         }
 
-        if (
-            poll.allows_multiple &&
-            existingVotes?.some((v) => v.option_index === optionIndex)
-        ) {
+        if (poll.allows_multiple && existingVotes?.some((v) => v.option_index === optionIndex)) {
             const { error: deleteError } = await supabase
                 .from("shout_alpha_poll_votes")
                 .delete()
@@ -122,28 +95,20 @@ export async function POST(
                 .eq("user_address", normalizedAddress)
                 .eq("option_index", optionIndex);
             if (deleteError) {
-                return NextResponse.json(
-                    { error: "Failed to remove vote" },
-                    { status: 500 },
-                );
+                return NextResponse.json({ error: "Failed to remove vote" }, { status: 500 });
             }
             return NextResponse.json({ success: true, action: "removed" });
         }
 
-        const { error: voteError } = await supabase
-            .from("shout_alpha_poll_votes")
-            .insert({
-                poll_id: pollId,
-                user_address: normalizedAddress,
-                option_index: optionIndex,
-            });
+        const { error: voteError } = await supabase.from("shout_alpha_poll_votes").insert({
+            poll_id: pollId,
+            user_address: normalizedAddress,
+            option_index: optionIndex,
+        });
 
         if (voteError) {
             console.error("[Alpha Polls API] Error voting:", voteError);
-            return NextResponse.json(
-                { error: "Failed to vote" },
-                { status: 500 },
-            );
+            return NextResponse.json({ error: "Failed to vote" }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, action: "added" });

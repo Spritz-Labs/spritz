@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getAuthenticatedUser, requireAuthWithCsrf } from "@/lib/session";
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
 export type AlphaPoll = {
@@ -33,14 +34,14 @@ async function canCreateAlphaPoll(userAddress: string): Promise<boolean> {
 
 // GET /api/alpha/polls
 export async function GET(request: NextRequest) {
-    const { searchParams } = new URL(request.url);
-    const userAddress = searchParams.get("userAddress")?.toLowerCase();
+    const session = await getAuthenticatedUser(request);
+    if (!session?.userAddress) {
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+    const userAddress = session.userAddress.toLowerCase();
 
     try {
-        let canCreatePoll = false;
-        if (userAddress) {
-            canCreatePoll = await canCreateAlphaPoll(userAddress);
-        }
+        const canCreatePoll = await canCreateAlphaPoll(userAddress);
 
         const { data: polls, error } = await supabase
             .from("shout_alpha_polls")
@@ -49,10 +50,7 @@ export async function GET(request: NextRequest) {
 
         if (error) {
             console.error("[Alpha Polls API] Error fetching polls:", error);
-            return NextResponse.json(
-                { error: "Failed to fetch polls" },
-                { status: 500 },
-            );
+            return NextResponse.json({ error: "Failed to fetch polls" }, { status: 500 });
         }
 
         const pollIds = (polls || []).map((p) => p.id);
@@ -80,7 +78,7 @@ export async function GET(request: NextRequest) {
                         acc[v.poll_id].push(v.option_index);
                         return acc;
                     },
-                    {} as Record<string, number[]>,
+                    {} as Record<string, number[]>
                 );
         }
 
@@ -95,15 +93,11 @@ export async function GET(request: NextRequest) {
                 )?.filter((v) => v.poll_id === poll.id) || [];
             const options = (poll.options as string[]) || [];
             const voteCounts = options.map((_, index) => {
-                const optionVotes = pollVotes.filter(
-                    (v) => v.option_index === index,
-                );
+                const optionVotes = pollVotes.filter((v) => v.option_index === index);
                 return {
                     option_index: index,
                     count: optionVotes.length,
-                    voters: poll.is_anonymous
-                        ? []
-                        : optionVotes.map((v) => v.user_address),
+                    voters: poll.is_anonymous ? [] : optionVotes.map((v) => v.user_address),
                 };
             });
             return {
@@ -125,19 +119,18 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ polls: pollsWithVotes, canCreatePoll });
     } catch (e) {
         console.error("[Alpha Polls API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to fetch polls" },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "Failed to fetch polls" }, { status: 500 });
     }
 }
 
 // POST /api/alpha/polls
 export async function POST(request: NextRequest) {
     try {
+        const session = await requireAuthWithCsrf(request);
+        if (session instanceof NextResponse) return session;
+
         const body = await request.json();
         const {
-            userAddress,
             question,
             options,
             allowsMultiple = false,
@@ -145,38 +138,23 @@ export async function POST(request: NextRequest) {
             isAnonymous = false,
         } = body;
 
-        if (!userAddress) {
-            return NextResponse.json(
-                { error: "User address is required" },
-                { status: 400 },
-            );
-        }
         if (!question?.trim()) {
-            return NextResponse.json(
-                { error: "Question is required" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "Question is required" }, { status: 400 });
         }
         if (!options || !Array.isArray(options) || options.length < 2) {
-            return NextResponse.json(
-                { error: "At least 2 options are required" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "At least 2 options are required" }, { status: 400 });
         }
         if (options.length > 10) {
-            return NextResponse.json(
-                { error: "Maximum 10 options allowed" },
-                { status: 400 },
-            );
+            return NextResponse.json({ error: "Maximum 10 options allowed" }, { status: 400 });
         }
 
-        const normalizedAddress = (userAddress as string).toLowerCase();
+        const normalizedAddress = session.userAddress.toLowerCase();
 
         const canCreate = await canCreateAlphaPoll(normalizedAddress);
         if (!canCreate) {
             return NextResponse.json(
                 { error: "You must be a member of Alpha to create polls" },
-                { status: 403 },
+                { status: 403 }
             );
         }
 
@@ -195,10 +173,7 @@ export async function POST(request: NextRequest) {
 
         if (error) {
             console.error("[Alpha Polls API] Error creating poll:", error);
-            return NextResponse.json(
-                { error: "Failed to create poll" },
-                { status: 500 },
-            );
+            return NextResponse.json({ error: "Failed to create poll" }, { status: 500 });
         }
 
         const pollResponse: AlphaPoll = {
@@ -223,9 +198,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ poll: pollResponse });
     } catch (e) {
         console.error("[Alpha Polls API] Error:", e);
-        return NextResponse.json(
-            { error: "Failed to create poll" },
-            { status: 500 },
-        );
+        return NextResponse.json({ error: "Failed to create poll" }, { status: 500 });
     }
 }
