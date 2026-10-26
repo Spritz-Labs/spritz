@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/lib/session";
 import { SUPPORTED_CHAINS, type SupportedChain } from "@/config/chains";
-import { 
-    fetchBalances, 
-    GRAPH_NETWORK_NAMES, 
+import {
+    fetchBalances,
+    GRAPH_NETWORK_NAMES,
     type TokenBalance,
+    type BalanceSource,
     clearBalanceCache,
 } from "@/lib/graphTokenApi";
 
@@ -15,7 +16,7 @@ export type ChainBalance = {
     nativeBalance: TokenBalance | null;
     tokens: TokenBalance[];
     totalUsd: number;
-    source: "graph" | "blockscout" | "rpc";
+    source: BalanceSource;
     error?: string;
 };
 
@@ -38,23 +39,22 @@ const CHAIN_DISPLAY_ORDER = [
 ];
 
 // Fetch balances for a single chain
-async function fetchChainBalances(
-    address: string,
-    chain: SupportedChain
-): Promise<ChainBalance> {
+async function fetchChainBalances(address: string, chain: SupportedChain): Promise<ChainBalance> {
     try {
         const network = GRAPH_NETWORK_NAMES[chain.id];
         const { balances, totalUsd, source } = await fetchBalances(
-            address, 
-            chain.id, 
+            address,
+            chain.id,
             network || chain.network
         );
 
         // Separate native and token balances
-        const nativeBalance = balances.find(b => b.tokenType === "native") || null;
-        const tokens = balances.filter(b => b.tokenType === "erc20");
+        const nativeBalance = balances.find((b) => b.tokenType === "native") || null;
+        const tokens = balances.filter((b) => b.tokenType === "erc20");
 
-        console.log(`[Wallet] ${chain.name} (${source}): $${totalUsd.toFixed(2)} (native: ${nativeBalance?.balanceFormatted || 0} ${chain.symbol}, tokens: ${tokens.length})`);
+        console.log(
+            `[Wallet] ${chain.name} (${source}): $${totalUsd.toFixed(2)} (native: ${nativeBalance?.balanceFormatted || 0} ${chain.symbol}, tokens: ${tokens.length})`
+        );
 
         return {
             chain,
@@ -80,10 +80,7 @@ async function fetchChainBalances(
 export async function GET(request: NextRequest) {
     const session = await getAuthenticatedUser(request);
     if (!session) {
-        return NextResponse.json(
-            { error: "Authentication required" },
-            { status: 401 }
-        );
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
@@ -91,17 +88,11 @@ export async function GET(request: NextRequest) {
     const refresh = searchParams.get("refresh") === "true";
 
     if (!addressParam) {
-        return NextResponse.json(
-            { error: "Address required" },
-            { status: 400 }
-        );
+        return NextResponse.json({ error: "Address required" }, { status: 400 });
     }
 
     if (!/^0x[a-fA-F0-9]{40}$/.test(addressParam)) {
-        return NextResponse.json(
-            { error: "Invalid address format" },
-            { status: 400 }
-        );
+        return NextResponse.json({ error: "Invalid address format" }, { status: 400 });
     }
 
     const address = addressParam;
@@ -115,7 +106,7 @@ export async function GET(request: NextRequest) {
     // Optional: filter to specific chains
     const chainsParam = searchParams.get("chains");
     const requestedChains = chainsParam
-        ? chainsParam.split(",").filter(c => c in SUPPORTED_CHAINS)
+        ? chainsParam.split(",").filter((c) => c in SUPPORTED_CHAINS)
         : Object.keys(SUPPORTED_CHAINS);
 
     // Sort chains by preferred display order
@@ -129,7 +120,9 @@ export async function GET(request: NextRequest) {
     });
 
     try {
-        console.log(`[Wallet] Fetching balances for ${address.slice(0, 10)}... on ${sortedChains.length} chains (Graph Token API + fallbacks)`);
+        console.log(
+            `[Wallet] Fetching balances for ${address.slice(0, 10)}... on ${sortedChains.length} chains (Graph Token API + fallbacks)`
+        );
 
         const chainPromises = sortedChains.map((chainKey) =>
             fetchChainBalances(address, SUPPORTED_CHAINS[chainKey])
@@ -151,10 +144,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(response);
     } catch (error) {
         console.error("[Wallet] Error fetching balances:", error);
-        return NextResponse.json(
-            { error: "Failed to fetch wallet balances" },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Failed to fetch wallet balances" }, { status: 500 });
     }
 }
 
@@ -162,10 +152,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
     const session = await getAuthenticatedUser(request);
     if (!session) {
-        return NextResponse.json(
-            { error: "Authentication required" },
-            { status: 401 }
-        );
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const body = await request.json();
@@ -173,7 +160,9 @@ export async function POST(request: NextRequest) {
 
     if (address) {
         clearBalanceCache(address, chainId);
-        console.log(`[Wallet] Cache cleared for ${address.slice(0, 10)}... chain: ${chainId || "all"}`);
+        console.log(
+            `[Wallet] Cache cleared for ${address.slice(0, 10)}... chain: ${chainId || "all"}`
+        );
     }
 
     return NextResponse.json({ success: true });

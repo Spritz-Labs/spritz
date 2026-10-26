@@ -1,13 +1,14 @@
 /**
  * The Graph Token API - Balance fetching service
- * 
+ *
  * Uses The Graph's Token API for fast, indexed balance queries with
  * Blockscout as a fallback for chains not supported by The Graph.
- * 
+ *
  * API Docs: https://thegraph.com/docs/en/token-api/
  */
 
 import { getTokenLogo, NATIVE_TOKEN_LOGOS } from "@/config/tokenLogos";
+import { ALCHEMY_NETWORKS, getAlchemyRpcUrl, getAlchemyPricesUrl } from "@/lib/alchemy";
 
 const GRAPH_TOKEN_API_KEY = process.env.GRAPH_TOKEN_API_KEY;
 const GRAPH_BALANCES_URL = "https://token-api.thegraph.com/v1/evm/balances";
@@ -34,16 +35,17 @@ export const GRAPH_NETWORK_NAMES: Record<number, string> = {
 };
 
 // Native token info by chain
-export const NATIVE_TOKEN_INFO: Record<number, { symbol: string; name: string; decimals: number }> = {
-    1: { symbol: "ETH", name: "Ethereum", decimals: 18 },
-    8453: { symbol: "ETH", name: "Ethereum", decimals: 18 },
-    42161: { symbol: "ETH", name: "Ethereum", decimals: 18 },
-    10: { symbol: "ETH", name: "Ethereum", decimals: 18 },
-    137: { symbol: "MATIC", name: "Polygon", decimals: 18 },
-    56: { symbol: "BNB", name: "BNB", decimals: 18 },
-    43114: { symbol: "AVAX", name: "Avalanche", decimals: 18 },
-    130: { symbol: "ETH", name: "Ethereum", decimals: 18 },
-};
+export const NATIVE_TOKEN_INFO: Record<number, { symbol: string; name: string; decimals: number }> =
+    {
+        1: { symbol: "ETH", name: "Ethereum", decimals: 18 },
+        8453: { symbol: "ETH", name: "Ethereum", decimals: 18 },
+        42161: { symbol: "ETH", name: "Ethereum", decimals: 18 },
+        10: { symbol: "ETH", name: "Ethereum", decimals: 18 },
+        137: { symbol: "MATIC", name: "Polygon", decimals: 18 },
+        56: { symbol: "BNB", name: "BNB", decimals: 18 },
+        43114: { symbol: "AVAX", name: "Avalanche", decimals: 18 },
+        130: { symbol: "ETH", name: "Ethereum", decimals: 18 },
+    };
 
 // Trusted tokens by chain (lowercase addresses)
 // Only show these tokens to filter out scam/spam tokens
@@ -130,6 +132,8 @@ export const RPC_URLS: Record<number, string> = {
     130: getRpcUrl(130),
 };
 
+export type BalanceSource = "graph" | "alchemy" | "blockscout" | "rpc";
+
 export type TokenBalance = {
     contractAddress: string;
     symbol: string;
@@ -161,10 +165,10 @@ export async function fetchBalances(
     address: string,
     chainId: number,
     networkName?: string
-): Promise<{ balances: TokenBalance[]; totalUsd: number; source: "graph" | "blockscout" | "rpc" }> {
+): Promise<{ balances: TokenBalance[]; totalUsd: number; source: BalanceSource }> {
     const cacheKey = `${address.toLowerCase()}-${chainId}`;
     const cached = balanceCache.get(cacheKey);
-    
+
     // Return cached data if still valid
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
         console.log(`[GraphTokenAPI] Cache hit for ${address.slice(0, 10)}... on chain ${chainId}`);
@@ -172,7 +176,7 @@ export async function fetchBalances(
     }
 
     const network = networkName || GRAPH_NETWORK_NAMES[chainId];
-    
+
     // Try The Graph Token API first
     if (GRAPH_TOKEN_API_KEY && network) {
         try {
@@ -188,6 +192,23 @@ export async function fetchBalances(
             }
         } catch (error) {
             console.error(`[GraphTokenAPI] Graph API failed for chain ${chainId}:`, error);
+        }
+    }
+
+    // Fallback to Alchemy (Blockscout's index can miss token balances entirely)
+    if (getAlchemyRpcUrl(chainId)) {
+        try {
+            const result = await fetchFromAlchemy(address, chainId);
+            if (result.balances.length > 0 || result.totalUsd > 0) {
+                balanceCache.set(cacheKey, {
+                    data: result.balances,
+                    totalUsd: result.totalUsd,
+                    timestamp: Date.now(),
+                });
+                return { ...result, source: "alchemy" };
+            }
+        } catch (error) {
+            console.error(`[GraphTokenAPI] Alchemy failed for chain ${chainId}:`, error);
         }
     }
 
@@ -231,17 +252,14 @@ async function fetchFromGraph(
     network: string
 ): Promise<{ balances: TokenBalance[]; totalUsd: number }> {
     console.log(`[GraphTokenAPI] Fetching from Graph for ${address.slice(0, 10)}... on ${network}`);
-    
-    const response = await fetch(
-        `${GRAPH_BALANCES_URL}?network=${network}&address=${address}`,
-        {
-            headers: {
-                "Authorization": `Bearer ${GRAPH_TOKEN_API_KEY}`,
-                "Accept": "application/json",
-            },
-            cache: "no-store",
-        }
-    );
+
+    const response = await fetch(`${GRAPH_BALANCES_URL}?network=${network}&address=${address}`, {
+        headers: {
+            Authorization: `Bearer ${GRAPH_TOKEN_API_KEY}`,
+            Accept: "application/json",
+        },
+        cache: "no-store",
+    });
 
     if (!response.ok) {
         const errorText = await response.text();
@@ -250,17 +268,22 @@ async function fetchFromGraph(
 
     const data = await response.json();
     const graphBalances: GraphBalance[] = data.data || [];
-    
+
     console.log(`[GraphTokenAPI] Graph returned ${graphBalances.length} balances`);
 
     const balances: TokenBalance[] = [];
     let totalUsd = 0;
     const trustedSet = TRUSTED_TOKENS[chainId] || new Set();
-    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || { symbol: "ETH", name: "Native", decimals: 18 };
+    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || {
+        symbol: "ETH",
+        name: "Native",
+        decimals: 18,
+    };
 
     for (const item of graphBalances) {
-        const isNative = item.contract.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
-        
+        const isNative =
+            item.contract.toLowerCase() === "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+
         // Filter untrusted tokens (except native)
         if (!isNative && !trustedSet.has(item.contract.toLowerCase())) {
             continue;
@@ -268,7 +291,7 @@ async function fetchFromGraph(
 
         const decimals = item.decimals || 18;
         const balanceFormatted = Number(BigInt(item.amount)) / Math.pow(10, decimals);
-        
+
         // Skip zero balances
         if (balanceFormatted <= 0) continue;
 
@@ -291,7 +314,7 @@ async function fetchFromGraph(
             balanceFormatted: balanceFormatted.toString(),
             balanceUsd,
             tokenType: isNative ? "native" : "erc20",
-            logoUrl: isNative 
+            logoUrl: isNative
                 ? NATIVE_TOKEN_LOGOS[nativeInfo.symbol]
                 : getTokenLogo(item.symbol, item.contract, network),
         };
@@ -310,7 +333,9 @@ async function fetchFromGraph(
         return (b.balanceUsd || 0) - (a.balanceUsd || 0);
     });
 
-    console.log(`[GraphTokenAPI] Processed ${balances.length} balances, total: $${totalUsd.toFixed(2)}`);
+    console.log(
+        `[GraphTokenAPI] Processed ${balances.length} balances, total: $${totalUsd.toFixed(2)}`
+    );
     return { balances, totalUsd };
 }
 
@@ -326,7 +351,9 @@ async function fetchFromBlockscout(
         throw new Error(`No Blockscout URL for chain ${chainId}`);
     }
 
-    console.log(`[GraphTokenAPI] Fetching from Blockscout for ${address.slice(0, 10)}... on chain ${chainId}`);
+    console.log(
+        `[GraphTokenAPI] Fetching from Blockscout for ${address.slice(0, 10)}... on chain ${chainId}`
+    );
 
     const [addressResponse, tokensResponse] = await Promise.all([
         fetch(`${blockscoutUrl}/api/v2/addresses/${address}`, {
@@ -341,7 +368,11 @@ async function fetchFromBlockscout(
 
     const balances: TokenBalance[] = [];
     let totalUsd = 0;
-    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || { symbol: "ETH", name: "Native", decimals: 18 };
+    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || {
+        symbol: "ETH",
+        name: "Native",
+        decimals: 18,
+    };
     const trustedSet = TRUSTED_TOKENS[chainId] || new Set();
 
     // Process native balance
@@ -352,7 +383,9 @@ async function fetchFromBlockscout(
 
         if (balanceWei > BigInt(0)) {
             const balanceFormatted = Number(balanceWei) / 1e18;
-            const exchangeRate = addressData.exchange_rate ? parseFloat(addressData.exchange_rate) : null;
+            const exchangeRate = addressData.exchange_rate
+                ? parseFloat(addressData.exchange_rate)
+                : null;
             const balanceUsd = exchangeRate ? balanceFormatted * exchangeRate : null;
 
             balances.push({
@@ -429,7 +462,180 @@ async function fetchFromBlockscout(
         return (b.balanceUsd || 0) - (a.balanceUsd || 0);
     });
 
-    console.log(`[GraphTokenAPI] Blockscout: ${balances.length} balances, total: $${totalUsd.toFixed(2)}`);
+    console.log(
+        `[GraphTokenAPI] Blockscout: ${balances.length} balances, total: $${totalUsd.toFixed(2)}`
+    );
+    return { balances, totalUsd };
+}
+
+const ALCHEMY_TIMEOUT_MS = 8000;
+
+async function alchemyPost<T>(url: string, body: unknown): Promise<T> {
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(ALCHEMY_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+        throw new Error(`Alchemy HTTP ${response.status}`);
+    }
+    return response.json() as Promise<T>;
+}
+
+type RpcResponse<T> = { id: number; result?: T; error?: { message: string } };
+
+/**
+ * Fetch balances from Alchemy. Only trusted tokens are returned (same policy
+ * as the Blockscout fallback), priced via the Alchemy Prices API.
+ */
+async function fetchFromAlchemy(
+    address: string,
+    chainId: number
+): Promise<{ balances: TokenBalance[]; totalUsd: number }> {
+    const rpcUrl = getAlchemyRpcUrl(chainId)!;
+    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || {
+        symbol: "ETH",
+        name: "Native",
+        decimals: 18,
+    };
+    const trustedContracts = [...(TRUSTED_TOKENS[chainId] || [])];
+
+    // alchemy_getTokenBalances rejects an empty contract list, so skip it on
+    // chains with no trusted tokens
+    const batch = await alchemyPost<RpcResponse<unknown>[]>(rpcUrl, [
+        { jsonrpc: "2.0", id: 0, method: "eth_getBalance", params: [address, "latest"] },
+        ...(trustedContracts.length
+            ? [
+                  {
+                      jsonrpc: "2.0",
+                      id: 1,
+                      method: "alchemy_getTokenBalances",
+                      params: [address, trustedContracts],
+                  },
+              ]
+            : []),
+    ]);
+    const nativeRes = batch.find((r) => r.id === 0) as RpcResponse<string> | undefined;
+    const tokensRes = batch.find((r) => r.id === 1) as
+        | RpcResponse<{ tokenBalances: { contractAddress: string; tokenBalance: string | null }[] }>
+        | undefined;
+    if (!nativeRes) throw new Error("Alchemy: missing eth_getBalance response");
+    if (nativeRes.error) throw new Error(`Alchemy: ${nativeRes.error.message}`);
+    if (tokensRes?.error) throw new Error(`Alchemy: ${tokensRes.error.message}`);
+
+    const held = (tokensRes?.result?.tokenBalances || []).filter(
+        (t) => t.tokenBalance && BigInt(t.tokenBalance) > BigInt(0)
+    );
+
+    // Token metadata (symbol/decimals) for held tokens, in one batch
+    const metadata = held.length
+        ? await alchemyPost<
+              RpcResponse<{
+                  symbol: string | null;
+                  name: string | null;
+                  decimals: number | null;
+                  logo: string | null;
+              }>[]
+          >(
+              rpcUrl,
+              held.map((t, id) => ({
+                  jsonrpc: "2.0",
+                  id,
+                  method: "alchemy_getTokenMetadata",
+                  params: [t.contractAddress],
+              }))
+          )
+        : [];
+    const metaById = new Map(metadata.map((m) => [m.id, m.result]));
+
+    // Prices are best-effort: a failed lookup just leaves balanceUsd null
+    const prices = new Map<string, number>();
+    try {
+        const network = ALCHEMY_NETWORKS[chainId];
+        const [byAddress, bySymbol] = await Promise.all([
+            held.length
+                ? alchemyPost<{ data: { address: string; prices: { value: string }[] }[] }>(
+                      getAlchemyPricesUrl("/tokens/by-address")!,
+                      { addresses: held.map((t) => ({ network, address: t.contractAddress })) }
+                  )
+                : Promise.resolve({ data: [] }),
+            fetch(getAlchemyPricesUrl(`/tokens/by-symbol?symbols=${nativeInfo.symbol}`)!, {
+                cache: "no-store",
+                signal: AbortSignal.timeout(ALCHEMY_TIMEOUT_MS),
+            }).then(
+                (r) =>
+                    r.json() as Promise<{ data: { symbol: string; prices: { value: string }[] }[] }>
+            ),
+        ]);
+        for (const p of byAddress.data) {
+            if (p.prices?.[0]) prices.set(p.address.toLowerCase(), parseFloat(p.prices[0].value));
+        }
+        const nativePrice = bySymbol.data?.[0]?.prices?.[0];
+        if (nativePrice) prices.set("native", parseFloat(nativePrice.value));
+    } catch (error) {
+        console.error(`[GraphTokenAPI] Alchemy prices failed for chain ${chainId}:`, error);
+    }
+
+    const balances: TokenBalance[] = [];
+    let totalUsd = 0;
+
+    const nativeWei = BigInt(nativeRes.result || "0x0");
+    if (nativeWei > BigInt(0)) {
+        const balanceFormatted = Number(nativeWei) / 1e18;
+        const price = prices.get("native");
+        const balanceUsd = price !== undefined ? balanceFormatted * price : null;
+        balances.push({
+            contractAddress: "native",
+            symbol: nativeInfo.symbol,
+            name: nativeInfo.name,
+            decimals: 18,
+            balance: nativeWei.toString(),
+            balanceFormatted: balanceFormatted.toString(),
+            balanceUsd,
+            tokenType: "native",
+            logoUrl: NATIVE_TOKEN_LOGOS[nativeInfo.symbol],
+        });
+        if (balanceUsd) totalUsd += balanceUsd;
+    }
+
+    held.forEach((t, i) => {
+        const meta = metaById.get(i);
+        const symbol = meta?.symbol || "";
+        const decimals = meta?.decimals ?? 18;
+        const raw = BigInt(t.tokenBalance!);
+        const balanceFormatted = Number(raw) / Math.pow(10, decimals);
+        const contract = t.contractAddress.toLowerCase();
+
+        let balanceUsd: number | null = null;
+        const price = prices.get(contract);
+        if (price !== undefined) {
+            balanceUsd = balanceFormatted * price;
+        } else if (["USDC", "USDT", "DAI", "BUSD"].includes(symbol.toUpperCase())) {
+            balanceUsd = balanceFormatted;
+        }
+
+        balances.push({
+            contractAddress: contract,
+            symbol,
+            name: meta?.name || symbol,
+            decimals,
+            balance: raw.toString(),
+            balanceFormatted: balanceFormatted.toString(),
+            balanceUsd,
+            tokenType: "erc20",
+            logoUrl: meta?.logo || getTokenLogo(symbol, contract, ""),
+        });
+        if (balanceUsd) totalUsd += balanceUsd;
+    });
+
+    balances.sort((a, b) => {
+        if (a.tokenType === "native" && b.tokenType !== "native") return -1;
+        if (b.tokenType === "native" && a.tokenType !== "native") return 1;
+        return (b.balanceUsd || 0) - (a.balanceUsd || 0);
+    });
+
     return { balances, totalUsd };
 }
 
@@ -445,7 +651,9 @@ async function fetchNativeBalanceRpc(
         throw new Error(`No RPC URL for chain ${chainId}`);
     }
 
-    console.log(`[GraphTokenAPI] Fetching native balance via RPC for ${address.slice(0, 10)}... on chain ${chainId}`);
+    console.log(
+        `[GraphTokenAPI] Fetching native balance via RPC for ${address.slice(0, 10)}... on chain ${chainId}`
+    );
 
     const response = await fetch(rpcUrl, {
         method: "POST",
@@ -470,10 +678,14 @@ async function fetchNativeBalanceRpc(
 
     const rawBalance = BigInt(data.result || "0").toString();
     const balanceFormatted = Number(BigInt(rawBalance)) / 1e18;
-    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || { symbol: "ETH", name: "Native", decimals: 18 };
+    const nativeInfo = NATIVE_TOKEN_INFO[chainId] || {
+        symbol: "ETH",
+        name: "Native",
+        decimals: 18,
+    };
 
     const balances: TokenBalance[] = [];
-    let totalUsd = 0;
+    const totalUsd = 0;
 
     if (balanceFormatted > 0) {
         // Note: No USD price available via RPC
